@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userprefs
+.vs/
+.idea/
+
+# Вывод расчётов
+out/
+
+# Личные заметки и локальные настройки
+Github.txt
+.claude/settings.local.json
