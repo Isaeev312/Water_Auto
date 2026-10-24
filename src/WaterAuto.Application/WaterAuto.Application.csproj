@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WaterAuto.Core\WaterAuto.Core.csproj" />
+    <ProjectReference Include="..\WaterAuto.Calc\WaterAuto.Calc.csproj" />
+    <ProjectReference Include="..\WaterAuto.Norms\WaterAuto.Norms.csproj" />
+    <ProjectReference Include="..\WaterAuto.Catalog\WaterAuto.Catalog.csproj" />
+    <ProjectReference Include="..\WaterAuto.Import\WaterAuto.Import.csproj" />
+    <ProjectReference Include="..\WaterAuto.Export\WaterAuto.Export.csproj" />
+    <ProjectReference Include="..\WaterAuto.Reports\WaterAuto.Reports.csproj" />
+  </ItemGroup>
+
+</Project>

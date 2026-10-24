@@ -1,0 +1,20 @@
+{
+  "solution": {
+    "path": "WaterAuto.sln",
+    "projects": [
+      "src\\WaterAuto.Application\\WaterAuto.Application.csproj",
+      "src\\WaterAuto.Calc\\WaterAuto.Calc.csproj",
+      "src\\WaterAuto.Catalog\\WaterAuto.Catalog.csproj",
+      "src\\WaterAuto.Cli\\WaterAuto.Cli.csproj",
+      "src\\WaterAuto.Core\\WaterAuto.Core.csproj",
+      "src\\WaterAuto.Export\\WaterAuto.Export.csproj",
+      "src\\WaterAuto.Import\\WaterAuto.Import.csproj",
+      "src\\WaterAuto.Norms\\WaterAuto.Norms.csproj",
+      "src\\WaterAuto.Reports\\WaterAuto.Reports.csproj",
+      "tests\\WaterAuto.Architecture.Tests\\WaterAuto.Architecture.Tests.csproj",
+      "tests\\WaterAuto.Calc.Tests\\WaterAuto.Calc.Tests.csproj",
+      "tests\\WaterAuto.Import.Tests\\WaterAuto.Import.Tests.csproj",
+      "tools\\ValidateData\\ValidateData.csproj"
+    ]
+  }
+}

@@ -1,0 +1,237 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "clause": "табл. 6.1",
+  "title": "Параметры водяных и пенных АУП по группам помещений",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx (папка литературы, 01_Нормативы_РФ). Числа сверены с редакцией 2020 г. (СП 485.1311500.2020.docx) — совпадают. Единицы с верхними индексами взяты из редакции 2020 г.: в docx с изменениями индексы утеряны.",
+  "verified": false,
+  "footnotes": {
+    "*": "Q_water, Q_foam, S и maxSpacing приведены для спринклерных и спринклерно-дренчерных АУП.",
+    "notes": "Примечания 1–10 к таблице (поправки по высоте, уменьшение расхода при меньшей площади и др.) в данные не перенесены; см. текст СП."
+  },
+  "records": [
+    {
+      "id": "sp485.t6_1.group1",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": 0.08,
+        "i_foam": null,
+        "Q_water": 10,
+        "Q_foam": null,
+        "S": 60,
+        "t_min": 30,
+        "maxSpacing": 3.5
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "1"
+      },
+      "note": "i_foam, Q_foam: в таблице «-»."
+    },
+    {
+      "id": "sp485.t6_1.group2",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": 0.12,
+        "i_foam": 0.08,
+        "Q_water": 30,
+        "Q_foam": 20,
+        "S": 120,
+        "t_min": 60,
+        "maxSpacing": 3.5
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "2"
+      }
+    },
+    {
+      "id": "sp485.t6_1.group3",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": 0.24,
+        "i_foam": 0.12,
+        "Q_water": 60,
+        "Q_foam": 30,
+        "S": 120,
+        "t_min": 60,
+        "maxSpacing": 3.5
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "3"
+      }
+    },
+    {
+      "id": "sp485.t6_1.group4_1",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": 0.3,
+        "i_foam": 0.15,
+        "Q_water": 110,
+        "Q_foam": 55,
+        "S": 180,
+        "t_min": 60,
+        "maxSpacing": 3.5
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "4.1"
+      }
+    },
+    {
+      "id": "sp485.t6_1.group4_2",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": null,
+        "i_foam": 0.17,
+        "Q_water": null,
+        "Q_foam": 65,
+        "S": 180,
+        "t_min": 60,
+        "maxSpacing": 3
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "4.2"
+      },
+      "note": "i_water, Q_water: в таблице «-»."
+    },
+    {
+      "id": "sp485.t6_1.group5",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": null,
+        "i_foam": null,
+        "Q_water": null,
+        "Q_foam": null,
+        "S": 90,
+        "t_min": 60,
+        "maxSpacing": 3
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "5"
+      },
+      "refs": {
+        "i_water": "табл. 6.2",
+        "i_foam": "табл. 6.2",
+        "Q_water": "табл. 6.2",
+        "Q_foam": "табл. 6.2"
+      }
+    },
+    {
+      "id": "sp485.t6_1.group6",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": null,
+        "i_foam": null,
+        "Q_water": null,
+        "Q_foam": null,
+        "S": 90,
+        "t_min": 60,
+        "maxSpacing": 3
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "6"
+      },
+      "refs": {
+        "i_water": "табл. 6.2",
+        "i_foam": "табл. 6.2",
+        "Q_water": "табл. 6.2",
+        "Q_foam": "табл. 6.2"
+      }
+    },
+    {
+      "id": "sp485.t6_1.group7",
+      "clause": "табл. 6.1",
+      "values": {
+        "i_water": null,
+        "i_foam": null,
+        "Q_water": null,
+        "Q_foam": null,
+        "S": 90,
+        "t_min": null,
+        "maxSpacing": 3
+      },
+      "units": {
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с",
+        "S": "м²",
+        "t_min": "мин",
+        "maxSpacing": "м"
+      },
+      "attrs": {
+        "group": "7"
+      },
+      "refs": {
+        "i_water": "табл. 6.2",
+        "i_foam": "табл. 6.2",
+        "Q_water": "табл. 6.2",
+        "Q_foam": "табл. 6.2"
+      },
+      "note": "t_min: в таблице «-»."
+    }
+  ]
+}

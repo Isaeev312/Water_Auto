@@ -1,0 +1,16 @@
+name: Вопрос по норме
+description: Пункт допускает разные трактовки или в данных норм нет нужного значения
+labels: [question, norms]
+body:
+  - type: input
+    id: clause
+    attributes: { label: Пункт нормы, description: Документ, редакция, пункт или таблица }
+    validations: { required: true }
+  - type: textarea
+    id: options
+    attributes: { label: Варианты трактовки, description: Каждый вариант — с последствиями для расчёта }
+    validations: { required: true }
+  - type: input
+    id: owner
+    attributes: { label: Кто решает }
+    validations: { required: true }

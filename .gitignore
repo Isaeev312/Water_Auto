@@ -17,3 +17,7 @@ out/
 # Личные заметки и локальные настройки
 Github.txt
 .claude/settings.local.json
+
+# Результаты тестов
+TestResults/
+*.trx

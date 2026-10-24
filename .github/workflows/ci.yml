@@ -1,0 +1,31 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { lfs: true }
+      # SDK — из global.json; среда выполнения 8.0 нужна тестам (net8.0).
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 8.0.x
+      - run: dotnet restore WaterAuto.Core.slnf
+      - run: dotnet build WaterAuto.Core.slnf -c Release --no-restore
+      - run: dotnet test WaterAuto.Core.slnf -c Release --no-build --logger trx
+      - name: validate json
+        run: dotnet run --project tools/ValidateData -c Release --no-build -- data/
+
+  app:
+    runs-on: windows-latest
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { global-json-file: global.json }
+      - run: dotnet build WaterAuto.sln -c Release
