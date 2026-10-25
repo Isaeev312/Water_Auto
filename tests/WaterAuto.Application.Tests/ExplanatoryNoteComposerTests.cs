@@ -75,12 +75,11 @@ public class ExplanatoryNoteComposerTests
             ("5", "Гидравлический расчёт"),
             ("6", "Насосная установка"),
             ("7", "Запас воды"),
-            ("8", "Спецификация"),
-            ("9", "Взаимодействие со смежными системами"),
-            ("10", "Принцип действия установки"),
-            ("11", "Узел управления"),
-            ("12", "Монтаж и испытания"),
-            ("13", "Эксплуатация и техническое обслуживание"),
+            ("8", "Взаимодействие со смежными системами"),
+            ("9", "Принцип действия установки"),
+            ("10", "Узел управления"),
+            ("11", "Монтаж и испытания"),
+            ("12", "Эксплуатация и техническое обслуживание"),
             ("", "Заключение"),
         ]);
     }
@@ -88,7 +87,7 @@ public class ExplanatoryNoteComposerTests
     [Fact]
     public void Interfaces_cite_SP_7()
     {
-        var text = AllText(Compose().Sections.Single(s => s.Number == "9"));
+        var text = AllText(Compose().Sections.Single(s => s.Number == "8"));
         text.ShouldContain("СП 7.13130.2013, п. 6.24");
         text.ShouldContain("п. 7.3 «а»");
     }
@@ -111,9 +110,7 @@ public class ExplanatoryNoteComposerTests
         var note = Compose();
         AllText(note.Sections.Single(s => s.Number == "3")).ShouldContain("54");
         AllText(note.Sections.Single(s => s.Number == "4")).ShouldContain("DN");
-        var spec = AllText(note.Sections.Single(s => s.Number == "8"));
-        spec.ShouldContain("54");
-        spec.ShouldContain("запас");
+        note.Sections.ShouldNotContain(s => s.Heading == "Спецификация", "спецификация — отдельный документ, в ПЗ не повторяется");
     }
 
     [Fact]

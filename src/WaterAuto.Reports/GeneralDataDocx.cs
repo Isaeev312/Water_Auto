@@ -24,7 +24,7 @@ public sealed record GeneralData(
 /// <summary>
 /// Лист «Общие данные по рабочим чертежам» основного комплекта (ГОСТ Р 21.101) в docx A3 альбомный:
 /// ведомость рабочих чертежей (форма 1), ведомость ссылочных и прилагаемых документов (форма 2), основные показатели,
-/// общие указания. Шрифт — GOST Common (ГОСТ 2.304, тип А), как на чертежах; место под основную надпись оставлено внизу.
+/// общие указания. Шрифт — GOST Common (ГОСТ 2.304, тип А), как на чертежах; рамка и основная надпись по форме 3 (<see cref="GostFrame"/>).
 /// </summary>
 public static class GeneralDataDocx
 {
@@ -32,7 +32,7 @@ public static class GeneralDataDocx
     private const string Size = "24";
     private static readonly string[] ReferencesCaption = ["", "Ссылочные документы", ""];
 
-    public static void Write(string path, GeneralData data)
+    public static void Write(string path, GeneralData data, TitleBlock? stamp = null)
     {
         ArgumentNullException.ThrowIfNull(data);
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
@@ -56,11 +56,17 @@ public static class GeneralDataDocx
             new ParagraphProperties(new Indentation { FirstLine = Mm(12.5) }, new Justification { Val = JustificationValues.Both }),
             new Run(new Text($"{k + 1} {t}") { Space = SpaceProcessingModeValues.Preserve }))));
 
-        // A3 альбомный; поля: слева 20 мм под подшивку, внизу — под основную надпись (форма 3, 55 мм) и рамку.
-        body.Append(new SectionProperties(
+        // A3 альбомный; поля: внутри рамки (20 мм слева, 5 мм с остальных сторон), внизу — над основной надписью (форма 3, 55 мм).
+        var section = new SectionProperties(
             new PageSize { Width = (UInt32Value)(uint)Twips(420), Height = (UInt32Value)(uint)Twips(297), Orient = PageOrientationValues.Landscape },
             new PageMargin { Left = (UInt32Value)(uint)Twips(25), Right = (UInt32Value)(uint)Twips(10), Top = Twips(10), Bottom = Twips(65), Header = 0, Footer = 0, Gutter = 0 },
-            new Columns { ColumnCount = 2, Space = Mm(10) }));
+            new Columns { ColumnCount = 2, Space = Mm(10) });
+        body.Append(section);
+        if (stamp is not null)
+        {
+            GostFrame.Apply(main, section, 420, 297, stamp, StampForm.Form3, StampForm.Form3);
+        }
+
         main.Document.Save();
     }
 

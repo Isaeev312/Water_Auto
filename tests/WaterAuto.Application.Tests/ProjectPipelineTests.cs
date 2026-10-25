@@ -89,13 +89,13 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile,
-            ProjectPipeline.SpecificationFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
+            ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);
         result.Design!.PumpHead.Meters.ShouldBeGreaterThan(0);
 
         DwgReader.Read(result.Files[0]).Entities.Count(e => e.Layer.Name == "ПТ_ОРОСИТЕЛИ").ShouldBeGreaterThan(0);
-        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
         var text = note.MainDocumentPart!.Document.Body!.InnerText;
         text.ShouldContain("Тестовая автостоянка");
         text.ShouldContain("Б.30");
@@ -114,7 +114,7 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Design!.Hydrants.ShouldNotBeNull();
         result.Design.PumpFlow.LitersPerSecond.ShouldBeGreaterThan(plain.PumpFlow.LitersPerSecond + 5);
-        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
         note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("СН КР 40-04:2025");
     }
 
@@ -125,7 +125,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Project(k: 0));
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Issues.ShouldContain(i => i.Code == "sprinkler.chosen");
-        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
         note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("Подбор оросителя");
     }
 
@@ -157,7 +157,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Project(ring: true));
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Design!.Ring.ShouldNotBeNull();
-        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
         note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("Б.1.2.16.1");
     }
 

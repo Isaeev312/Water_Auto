@@ -27,6 +27,7 @@ public static class ProjectPipeline
     public const string SpecificationFile = "specification.xlsx";
     public const string NoteFile = "note.docx";
     public const string GeneralDataFile = "general_data.docx";
+    public const string SpecificationDocxFile = "specification.docx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -218,6 +219,7 @@ public static class ProjectPipeline
         Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation)));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов")));
+        Write(outDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов")));
 
         var literature = registryPath is not null && File.Exists(registryPath)
             ? LiteratureRegistry.Parse(new StringReader(File.ReadAllText(registryPath)))
@@ -256,12 +258,22 @@ public static class ProjectPipeline
             new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
-        Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general));
+        Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }));
         files.Add(WriteIssues(outDir, issues));
         return new PipelineResult(true, files, issues, worst);
     }
 
     // «Отвод» → «отводы» для перечня стандартов фасонных частей в ПЗ.
+    // Основная надпись (ГОСТ Р 21.101) из раздела title проекта: обозначение — шифр и марка документа.
+    private static TitleBlock Stamp(ProjectFile project, string mark, string name)
+    {
+        var t = project.Title;
+        IReadOnlyList<TitleSignature> signatures = t.Signatures.Count > 0
+            ? [.. t.Signatures.Select(s => new TitleSignature(s.Role, s.Name))]
+            : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
+        return new TitleBlock($"{t.Code}-{mark}", project.Name, t.Building, name, t.Stage, t.Organization, signatures);
+    }
+
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
 
     // Цвет колбы в данных — прилагательное мужского рода («красный»); в спецификации — «колба красная».

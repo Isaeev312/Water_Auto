@@ -221,7 +221,22 @@ public sealed record ProjectTitle
     public string Supervisor { get; init; } = "[ФИО]";
 
     public string CityYear { get; init; } = "[Город, год]";
+
+    /// <summary>Базовое обозначение (шифр) проекта для основной надписи; к нему добавляются марки «ПТ», «ПТ.СО».</summary>
+    public string Code { get; init; } = "[Шифр]";
+
+    /// <summary>Стадия (графа 6 основной надписи): «П» — проектная документация, «Р» — рабочая.</summary>
+    public string Stage { get; init; } = "Р";
+
+    /// <summary>Наименование здания (сооружения) — графа 3 основной надписи.</summary>
+    public string Building { get; init; } = "[Наименование здания]";
+
+    /// <summary>Подписи основной надписи (должность, фамилия); пусто — разработчик и руководитель с титульного листа, «Н. контр.».</summary>
+    public IReadOnlyList<ProjectSignature> Signatures { get; init; } = [];
 }
+
+/// <summary>Подпись в основной надписи: должность и фамилия.</summary>
+public sealed record ProjectSignature(string Role, string Name);
 
 /// <summary>Лист основного комплекта: номер, наименование, примечание.</summary>
 public sealed record ProjectSheet(string Sheet, string Name, string Note = "");
