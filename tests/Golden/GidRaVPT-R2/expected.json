@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "status": "pending",
+  "statusReason": "режим совместимости с ГидРаВПТ 2.9.6: трубы на Q/0,95 — смысл множителя не выяснен (docs/open_questions.md)",
+  "checks": [
+    {
+      "what": "Kt",
+      "pipe": "B1-12",
+      "value": 11.238334,
+      "unit": "л²/с²",
+      "tol": 1e-06,
+      "source": "л. 9",
+      "note": "ВГП 42,3×4,0 нет в табл. Б.2 → формула Б.8 по внутреннему диаметру 34,3 мм"
+    },
+    {
+      "what": "Kt",
+      "pipe": "B2-12",
+      "value": 16.5,
+      "unit": "л²/с²",
+      "tol": 0,
+      "source": "л. 10",
+      "note": "ВГП 42,3×2,8 есть в табл. Б.2"
+    },
+    {
+      "what": "q",
+      "node": "B1-S1",
+      "value": 2.038,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 9"
+    },
+    {
+      "what": "q",
+      "node": "B1-S2",
+      "value": 2.089,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 9"
+    },
+    {
+      "what": "q",
+      "node": "B1-S3",
+      "value": 2.271,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 9"
+    },
+    {
+      "what": "P",
+      "node": "B1-S2",
+      "value": 0.197,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 9"
+    },
+    {
+      "what": "P",
+      "node": "B1-S3",
+      "value": 0.233,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 9"
+    },
+    {
+      "what": "dP",
+      "pipe": "B1-12",
+      "value": 0.009458,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 9"
+    },
+    {
+      "what": "dP",
+      "pipe": "B1-23",
+      "value": 0.035925,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 9"
+    },
+    {
+      "what": "dP",
+      "pipe": "B1-34",
+      "value": 0.074236,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 9"
+    },
+    {
+      "what": "Q",
+      "pipe": "B2-34",
+      "value": 7.114,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 10",
+      "note": "Q в. испр. ветви 2"
+    },
+    {
+      "what": "Q",
+      "pipe": "B3-34",
+      "value": 6.65,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 10"
+    },
+    {
+      "what": "Q",
+      "pipe": "B4-34",
+      "value": 7.119,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 10"
+    },
+    {
+      "what": "Q",
+      "pipe": "B5-34",
+      "value": 6.668,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 11"
+    },
+    {
+      "what": "Q",
+      "pipe": "B6-34",
+      "value": 7.147,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 11"
+    },
+    {
+      "what": "dP",
+      "pipe": "6.1",
+      "value": 0.007685,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 11"
+    },
+    {
+      "what": "dP",
+      "pipe": "7.1",
+      "value": 0.008849,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 12"
+    },
+    {
+      "what": "dP",
+      "pipe": "8.1",
+      "value": 0.029148,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 12"
+    },
+    {
+      "what": "dP",
+      "pipe": "9.1",
+      "value": 0.006348,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 12"
+    },
+    {
+      "what": "P",
+      "node": "F5",
+      "value": 0.353,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 11",
+      "note": "P в конце 6.1 с переходом на отметку 0"
+    },
+    {
+      "what": "P",
+      "node": "UU",
+      "value": 0.383,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 12",
+      "note": "P в конце 9.1 (пересчёт: 0,382708)"
+    },
+    {
+      "what": "P",
+      "node": "PK6",
+      "value": 0.369,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 11"
+    },
+    {
+      "what": "q",
+      "node": "PK6",
+      "value": 4.993,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 11"
+    },
+    {
+      "what": "P",
+      "node": "PK7",
+      "value": 0.377,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 12"
+    },
+    {
+      "what": "q",
+      "node": "PK7",
+      "value": 5.052,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 12"
+    },
+    {
+      "what": "Qc",
+      "value": 51.139,
+      "unit": "л/с",
+      "tol": 0.0005,
+      "source": "л. 8, 9, 13"
+    },
+    {
+      "what": "Puu",
+      "value": 0.0153877,
+      "unit": "МПа",
+      "tol": 1e-07,
+      "source": "л. 9"
+    },
+    {
+      "what": "Psection",
+      "value": 0.433,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 9, 13",
+      "note": "пересчёт: 0,432837"
+    },
+    {
+      "what": "Psupply",
+      "pipe": "S1",
+      "value": 0.438094,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 13"
+    },
+    {
+      "what": "Psupply",
+      "pipe": "S2",
+      "value": 0.44335,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 13"
+    },
+    {
+      "what": "PwithLocal",
+      "value": 0.445453,
+      "unit": "МПа",
+      "tol": 1e-06,
+      "source": "л. 13"
+    },
+    {
+      "what": "Ppump",
+      "value": 0.013,
+      "unit": "МПа",
+      "tol": 0.0005,
+      "source": "л. 15",
+      "note": "пересчёт: 0,013453; метры вод. ст. не сравнивать — в отчёте разный перевод"
+    }
+  ]
+}

@@ -1,0 +1,1794 @@
+{
+  "$schema": "../schemas/sprinklers.schema.json",
+  "schemaVersion": 1,
+  "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026 (файл заказчика «Каталог Спецавтоматика Бийск 2026.pdf»; pN — страница PDF, «раздел 1-1-x» — код в подвале страницы)",
+  "notes": [
+    "K в каталоге — «дм³/(с×10×МПа^0,5)», это K в q = 10·K·√P (q — л/с, P — МПа).",
+    "Средняя интенсивность — при высоте установки 2,5 м (если не указано иное), допуск ±5 % по каталогу; защищаемая площадь 12 м².",
+    "Номинальные температуры 57/68/79/93/141/182 °C — время срабатывания не более 300/300/330/380/600/600 с.",
+    "Все значения перенесены из каталога и не сверены с паспортами (verified: false); таблицы с перепутанными в тексте столбцами сверены по изображениям страниц p12, p24, p31, p37, p64.",
+    "K моделей СВН/СВВ-10, -12, -15 (0,35 / 0,47 / 0,77) совпадают с картами орошения П6.4 пособия Мешмана 2002 (p155–p158); эпюры П6.4 не перенесены: скан читается неуверенно."
+  ],
+  "sprinklers": [
+    {
+      "id": "sa.svn-10",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВН-10",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.35,
+      "K_lpm": 66,
+      "orifice_mm": 10.5,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.07,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.12,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svv-10",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВВ-10",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.35,
+      "K_lpm": 66,
+      "orifice_mm": 10.5,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.07,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.12,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svn-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВН-К80",
+      "designation": "СВО0-РНо0,42-R1/2/Р57.В3-«СВН-К80»",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.078,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svv-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВВ-К80",
+      "designation": "СВО0-РВо0,42-R1/2/Р57.В3-«СВВ-К80»",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.078,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.dvn-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ДВН-К80",
+      "kind": "drencher",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.078,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12–13",
+      "verified": false,
+      "note": "интенсивность — как у спринклерного аналога (та же таблица)"
+    },
+    {
+      "id": "sa.dvv-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ДВВ-К80",
+      "kind": "drencher",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.078,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12–13",
+      "verified": false,
+      "note": "интенсивность — как у спринклерного аналога (та же таблица)"
+    },
+    {
+      "id": "sa.svn-12",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВН-12",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.47,
+      "K_lpm": 89,
+      "orifice_mm": 12.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.09,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.15,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svv-12",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВВ-12",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.47,
+      "K_lpm": 89,
+      "orifice_mm": 12.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.09,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.15,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svn-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВН-К115",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.165,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svv-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВВ-К115",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.165,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.dvn-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ДВН-К115",
+      "kind": "drencher",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.165,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12–13",
+      "verified": false,
+      "note": "интенсивность — как у спринклерного аналога (та же таблица)"
+    },
+    {
+      "id": "sa.dvv-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ДВВ-К115",
+      "kind": "drencher",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.165,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12–13",
+      "verified": false,
+      "note": "интенсивность — как у спринклерного аналога (та же таблица)"
+    },
+    {
+      "id": "sa.svn-15",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВН-15",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.77,
+      "K_lpm": 146,
+      "orifice_mm": 15.2,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.214,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svv-15",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВВ-15",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.77,
+      "K_lpm": 146,
+      "orifice_mm": 15.2,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.15,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.24,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svn-k160",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВН-К160",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.84,
+      "K_lpm": 160,
+      "orifice_mm": 15.94,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.16,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.25,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.svv-k160",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВВ-К160",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.84,
+      "K_lpm": 160,
+      "orifice_mm": 15.94,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.16,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.25,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-2, p12",
+      "verified": false
+    },
+    {
+      "id": "sa.ssp-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "SSP-K80",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.6,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.059,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.101,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.081,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.113,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-4, p24–25",
+      "verified": false,
+      "note": "SSP — плоская розетка (вниз), SSU — вогнутая (вверх); цифра SIN «5» — стандартное, «3» — быстрое срабатывание"
+    },
+    {
+      "id": "sa.ssu-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "SSU-K80",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.6,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.059,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.101,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.081,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.113,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-4, p24–25",
+      "verified": false,
+      "note": "SSP — плоская розетка (вниз), SSU — вогнутая (вверх); цифра SIN «5» — стандартное, «3» — быстрое срабатывание"
+    },
+    {
+      "id": "sa.ssp-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "SSP-K115",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.6,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.087,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.149,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.117,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.163,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-4, p24–25",
+      "verified": false,
+      "note": "SSP — плоская розетка (вниз), SSU — вогнутая (вверх); цифра SIN «5» — стандартное, «3» — быстрое срабатывание"
+    },
+    {
+      "id": "sa.ssu-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "SSU-K115",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.6,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.087,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.149,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.117,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.163,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-4, p24–25",
+      "verified": false,
+      "note": "SSP — плоская розетка (вниз), SSU — вогнутая (вверх); цифра SIN «5» — стандартное, «3» — быстрое срабатывание"
+    },
+    {
+      "id": "sa.suu-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУУ-К80",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "any",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.065,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.085,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.125,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-3, p19",
+      "verified": false
+    },
+    {
+      "id": "sa.suu-12",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУУ-12",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "any",
+      "K": 0.47,
+      "K_lpm": 89,
+      "orifice_mm": 12.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.08,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.15,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.115,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.155,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-3, p19",
+      "verified": false
+    },
+    {
+      "id": "sa.suu-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУУ-К115",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "any",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.095,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.175,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.14,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.19,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-3, p19",
+      "verified": false
+    },
+    {
+      "id": "sa.suu-15",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУУ-15",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "any",
+      "K": 0.77,
+      "K_lpm": 146,
+      "orifice_mm": 15.2,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.125,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.216,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.195,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.23,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-3, p19",
+      "verified": false
+    },
+    {
+      "id": "sa.suu-k160",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУУ-К160",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "any",
+      "K": 0.84,
+      "K_lpm": 160,
+      "orifice_mm": 15.94,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.145,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.245,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.21,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.24,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-3, p19",
+      "verified": false
+    },
+    {
+      "id": "sa.svu-10m",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВУ-10М",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "any",
+      "K": 0.35,
+      "K_lpm": 66.3,
+      "orifice_mm": 10.5,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.056,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.115,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "> 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-1, p9",
+      "verified": false
+    },
+    {
+      "id": "sa.sun-k200",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУН-К200",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "down",
+      "K": 1.05,
+      "K_lpm": 200,
+      "orifice_mm": 17.7,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R3/4",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.2,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.38,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.3,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.45,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "< 50",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-5, p31",
+      "verified": false,
+      "note": "K = 1,05 ± 5 %"
+    },
+    {
+      "id": "sa.suv-k200",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУВ-К200",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "up",
+      "K": 1.05,
+      "K_lpm": 200,
+      "orifice_mm": 17.7,
+      "tempC": [
+        57,
+        68,
+        79,
+        93,
+        141,
+        182
+      ],
+      "thread": "R3/4",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.18,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.36,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.25,
+          "medium": "foam",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.35,
+          "medium": "foam",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "< 50",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-5, p31",
+      "verified": false,
+      "note": "K = 1,05 ± 5 %"
+    },
+    {
+      "id": "sa.sobr-17-n",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СОБР-17-Н",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "esfr",
+      "deflector": "down",
+      "K": 1.28,
+      "K_lpm": 242,
+      "orifice_mm": 19.5,
+      "tempC": [
+        68,
+        93,
+        141
+      ],
+      "thread": "R3/4",
+      "pMin": 0.1,
+      "pMax": 1.2,
+      "area_m2": 9.6,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.32,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.52,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.48,
+          "medium": "foam",
+          "height_m": 3.0
+        },
+        {
+          "P": 0.3,
+          "i": 0.68,
+          "medium": "foam",
+          "height_m": 3.0
+        }
+      ],
+      "rti": "< 45",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-7, p37",
+      "verified": false,
+      "note": "склады с высотой складирования до 12,2 м без внутристеллажных оросителей (СП 241) и помещения высотой до 20 м (СП 485) — по заявлению производителя"
+    },
+    {
+      "id": "sa.sobr-17-v",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СОБР-17-В",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "esfr",
+      "deflector": "up",
+      "K": 1.28,
+      "K_lpm": 242,
+      "orifice_mm": 19.5,
+      "tempC": [
+        68,
+        93,
+        141
+      ],
+      "thread": "R3/4",
+      "pMin": 0.1,
+      "pMax": 1.2,
+      "area_m2": 9.6,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.38,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.65,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.5,
+          "medium": "foam",
+          "height_m": 3.0
+        },
+        {
+          "P": 0.3,
+          "i": 0.7,
+          "medium": "foam",
+          "height_m": 3.0
+        }
+      ],
+      "rti": "< 45",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-7, p37",
+      "verified": false,
+      "note": "склады с высотой складирования до 12,2 м без внутристеллажных оросителей (СП 241) и помещения высотой до 20 м (СП 485) — по заявлению производителя"
+    },
+    {
+      "id": "sa.sobr-25-n",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СОБР-25-Н",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "esfr",
+      "deflector": "down",
+      "K": 1.91,
+      "K_lpm": 362,
+      "orifice_mm": 24.0,
+      "tempC": [
+        68,
+        93,
+        141
+      ],
+      "thread": "R1",
+      "pMin": 0.1,
+      "pMax": 1.2,
+      "area_m2": 9.6,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.42,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.75,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.7,
+          "medium": "foam",
+          "height_m": 3.0
+        },
+        {
+          "P": 0.3,
+          "i": 1.0,
+          "medium": "foam",
+          "height_m": 3.0
+        }
+      ],
+      "rti": "< 45",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-7, p37",
+      "verified": false,
+      "note": "склады с высотой складирования до 12,2 м без внутристеллажных оросителей (СП 241) и помещения высотой до 20 м (СП 485) — по заявлению производителя"
+    },
+    {
+      "id": "sa.sobr-25-v",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СОБР-25-В",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "esfr",
+      "deflector": "up",
+      "K": 1.91,
+      "K_lpm": 362,
+      "orifice_mm": 24.0,
+      "tempC": [
+        68,
+        93,
+        141
+      ],
+      "thread": "R1",
+      "pMin": 0.1,
+      "pMax": 1.2,
+      "area_m2": 9.6,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.6,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 1.0,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.15,
+          "i": 0.7,
+          "medium": "foam",
+          "height_m": 3.0
+        },
+        {
+          "P": 0.3,
+          "i": 1.0,
+          "medium": "foam",
+          "height_m": 3.0
+        }
+      ],
+      "rti": "< 45",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-7, p37",
+      "verified": false,
+      "note": "склады с высотой складирования до 12,2 м без внутристеллажных оросителей (СП 241) и помещения высотой до 20 м (СП 485) — по заявлению производителя"
+    },
+    {
+      "id": "sa.svk-k80",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВК-К80",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "concealed",
+      "K": 0.42,
+      "K_lpm": 80,
+      "orifice_mm": 11.1,
+      "tempC": [
+        57,
+        68
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.078,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.13,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "< 50 (колба Ø3×20)",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-6, p34",
+      "verified": false,
+      "note": "температура срабатывания крышки 50 / 60 °C"
+    },
+    {
+      "id": "sa.svk-k115",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СВК-К115",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "general",
+      "deflector": "concealed",
+      "K": 0.6,
+      "K_lpm": 115,
+      "orifice_mm": 13.3,
+      "tempC": [
+        57,
+        68
+      ],
+      "thread": "R1/2",
+      "pMin": 0.05,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5
+        },
+        {
+          "P": 0.3,
+          "i": 0.165,
+          "medium": "water",
+          "height_m": 2.5
+        }
+      ],
+      "rti": "< 50 (колба Ø3×20)",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-6, p34",
+      "verified": false,
+      "note": "температура срабатывания крышки 50 / 60 °C"
+    },
+    {
+      "id": "sa.sug-10",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУГ-10",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "horizontal",
+      "K": 0.35,
+      "K_lpm": 66.3,
+      "orifice_mm": 10.5,
+      "tempC": [
+        57,
+        68,
+        79,
+        93
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.056,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "первая строка ячейки"
+        },
+        {
+          "P": 0.3,
+          "i": 0.092,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "первая строка ячейки"
+        },
+        {
+          "P": 0.1,
+          "i": 0.074,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "вторая строка ячейки; смысл в каталоге не указан"
+        },
+        {
+          "P": 0.3,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "вторая строка ячейки; смысл в каталоге не указан"
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-15, p64",
+      "verified": false,
+      "note": "площадь — прямоугольник 4 × 3 м; что означает вторая строка интенсивности, каталог не поясняет"
+    },
+    {
+      "id": "sa.sug-12",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "СУГ-12",
+      "kind": "sprinkler",
+      "medium": "universal",
+      "purpose": "general",
+      "deflector": "horizontal",
+      "K": 0.47,
+      "K_lpm": 89.1,
+      "orifice_mm": 12.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.0,
+      "area_m2": 12,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.075,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "первая строка ячейки"
+        },
+        {
+          "P": 0.3,
+          "i": 0.126,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "первая строка ячейки"
+        },
+        {
+          "P": 0.1,
+          "i": 0.1,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "вторая строка ячейки; смысл в каталоге не указан"
+        },
+        {
+          "P": 0.3,
+          "i": 0.14,
+          "medium": "water",
+          "height_m": 2.5,
+          "note": "вторая строка ячейки; смысл в каталоге не указан"
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-15, p64",
+      "verified": false,
+      "note": "площадь — прямоугольник 4 × 3 м; что означает вторая строка интенсивности, каталог не поясняет"
+    },
+    {
+      "id": "sa.ssn-12",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ССН-12",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "rack",
+      "deflector": "down",
+      "K": 0.47,
+      "orifice_mm": 12.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.0,
+      "area_m2": 3.0,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.3
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-16, p67",
+      "verified": false,
+      "note": "интенсивность дана при высоте 0,05 м (ССН) / 0,145 м (ССВ) над мерными банками; со стандартной 2,5 м не сравнивать; K-фактор в л/(мин·бар^0,5) не указан"
+    },
+    {
+      "id": "sa.ssv-12",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ССВ-12",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "rack",
+      "deflector": "up",
+      "K": 0.47,
+      "orifice_mm": 12.1,
+      "tempC": [
+        57,
+        68,
+        79,
+        93
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.0,
+      "area_m2": 3.0,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.3
+        }
+      ],
+      "rti": "колба Ø3 мм: < 50; колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-16, p67",
+      "verified": false,
+      "note": "интенсивность дана при высоте 0,05 м (ССН) / 0,145 м (ССВ) над мерными банками; со стандартной 2,5 м не сравнивать; K-фактор в л/(мин·бар^0,5) не указан"
+    },
+    {
+      "id": "sa.ssn-15",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ССН-15",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "rack",
+      "deflector": "down",
+      "K": 0.8,
+      "orifice_mm": 15.2,
+      "tempC": [
+        57,
+        68,
+        79,
+        93
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.0,
+      "area_m2": 5.3,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.4
+        },
+        {
+          "P": 0.2,
+          "i": 0.5
+        }
+      ],
+      "rti": "колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-16, p67",
+      "verified": false,
+      "note": "интенсивность дана при высоте 0,05 м (ССН) / 0,145 м (ССВ) над мерными банками; со стандартной 2,5 м не сравнивать; K-фактор в л/(мин·бар^0,5) не указан"
+    },
+    {
+      "id": "sa.ssv-15",
+      "maker": "ЗАО «ПО «Спецавтоматика» (Бийск)",
+      "model": "ССВ-15",
+      "kind": "sprinkler",
+      "medium": "water",
+      "purpose": "rack",
+      "deflector": "up",
+      "K": 0.8,
+      "orifice_mm": 15.2,
+      "tempC": [
+        57,
+        68,
+        79,
+        93
+      ],
+      "thread": "R1/2",
+      "pMin": 0.1,
+      "pMax": 1.0,
+      "area_m2": 5.3,
+      "intensity": [
+        {
+          "P": 0.1,
+          "i": 0.4
+        },
+        {
+          "P": 0.2,
+          "i": 0.5
+        }
+      ],
+      "rti": "колба Ø5 мм: ≥ 80",
+      "source": "Каталог продукции ЗАО «ПО «Спецавтоматика» 2026, раздел 1-1-16, p67",
+      "verified": false,
+      "note": "интенсивность дана при высоте 0,05 м (ССН) / 0,145 м (ССВ) над мерными банками; со стандартной 2,5 м не сравнивать; K-фактор в л/(мин·бар^0,5) не указан"
+    }
+  ]
+}

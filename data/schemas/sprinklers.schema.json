@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/sprinklers.schema.json",
+  "title": "Каталог оросителей",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sprinklers"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "source": { "type": "string", "description": "Документ производителя, из которого перенесены данные." },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "sprinklers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/sprinkler" }
+    }
+  },
+  "$defs": {
+    "sprinkler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "maker", "model", "kind", "K", "pMin", "pMax", "source", "verified"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(\\.[a-z0-9-]+)+$", "description": "Постоянный ID; на него ссылаются проекты." },
+        "maker": { "type": "string" },
+        "model": { "type": "string" },
+        "designation": { "type": "string", "description": "Обозначение по ГОСТ Р 51043 (пример для заказа)." },
+        "kind": { "enum": ["sprinkler", "drencher"] },
+        "medium": { "enum": ["water", "universal"], "description": "universal — вода и раствор пенообразователя." },
+        "purpose": { "enum": ["general", "esfr", "rack"], "description": "общего назначения, быстродействующий повышенной производительности, стеллажный." },
+        "deflector": { "enum": ["down", "up", "any", "horizontal", "concealed"] },
+        "K": { "type": "number", "exclusiveMinimum": 0, "description": "q = 10·K·√P: q — л/с, P — МПа; л/(с·МПа^0,5). В каталогах — «дм³/(с×10×МПа^0,5)»." },
+        "K_lpm": { "type": "number", "exclusiveMinimum": 0, "description": "K-фактор, л/(мин·бар^0,5)." },
+        "K_us": { "type": "number", "exclusiveMinimum": 0, "description": "K-фактор, gpm/psi^0,5." },
+        "orifice_mm": { "type": "number", "exclusiveMinimum": 0 },
+        "tempC": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+        "thread": { "type": "string" },
+        "pMin": { "type": "number", "exclusiveMinimum": 0, "description": "МПа" },
+        "pMax": { "type": "number", "exclusiveMinimum": 0, "description": "МПа" },
+        "area_m2": { "type": "number", "exclusiveMinimum": 0, "description": "Защищаемая площадь по данным производителя." },
+        "intensity": {
+          "type": "array",
+          "description": "Средняя интенсивность орошения, л/(с·м²), при давлении P, МПа, по данным производителя.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["P", "i"],
+            "properties": {
+              "P": { "type": "number" },
+              "i": { "type": "number" },
+              "medium": { "enum": ["water", "foam"] },
+              "height_m": { "type": "number", "description": "Высота установки, при которой дана интенсивность." },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "rti": { "type": "string", "description": "Коэффициент тепловой инерционности, (м·с)^0,5, как в каталоге." },
+        "source": { "type": "string" },
+        "verified": { "type": "boolean", "description": "Сверено ли с паспортом изделия." },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
