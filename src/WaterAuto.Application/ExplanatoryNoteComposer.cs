@@ -127,6 +127,10 @@ public static class ExplanatoryNoteComposer
         ]);
     }
 
+    /// <summary>Ссылка на норму: «п. 6.2.21», но «табл. Б.4» без «п.».</summary>
+    public static string ClauseRef(string clause) =>
+        clause.StartsWith("табл.", StringComparison.Ordinal) || clause.StartsWith("прил.", StringComparison.Ordinal) ? clause : $"п. {clause}";
+
     private static string F(double v, string format = "0.###") => v.ToString(format, Ru);
 
     private static NoteSection Hydraulics(NoteInputs i, INormsProvider norms)
@@ -345,7 +349,7 @@ public static class ExplanatoryNoteComposer
         }
 
         yield return new NoteParagraph("Замечания программы, требующие решения проектировщика:");
-        yield return new NoteList(issues.Select(x => x.Clause is null ? x.Message : $"{x.Message} (п. {x.Clause})").ToList());
+        yield return new NoteList(issues.Select(x => x.Clause is null ? x.Message : $"{x.Message} ({ClauseRef(x.Clause)})").ToList());
     }
 
     private static string Role(RouteSegmentRole role) => role switch

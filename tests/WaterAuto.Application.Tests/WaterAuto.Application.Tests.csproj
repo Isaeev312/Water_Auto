@@ -12,6 +12,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Shouldly" />
     <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="ACadSharp" />
   </ItemGroup>
 
   <ItemGroup>

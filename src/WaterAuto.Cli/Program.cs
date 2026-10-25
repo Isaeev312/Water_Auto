@@ -1,12 +1,100 @@
-// Консоль для тестов и пакетного расчёта. На этапе 0 команд расчёта ещё нет.
-const string Usage = "Использование: WaterAuto.Cli calc <проект.waproj> --out <папка>";
+// Консоль для расчёта по проекту и для тестов.
+//   calc <проект.waproj> --out <папка> [--data <папка data>]  — сквозной расчёт: план, аксонометрия, спецификация, записка
+//   new <проект.waproj> --drawing <чертёж.dwg|dxf>              — заготовка файла проекта с исходными данными
+using System.Text;
+using WaterAuto.Application;
 
-if (args.Length == 0 || args[0] is "-h" or "--help")
+Console.OutputEncoding = Encoding.UTF8;
+const string Usage = """
+    Использование:
+      WaterAuto.Cli calc <проект.waproj> --out <папка> [--data <папка data>]
+      WaterAuto.Cli new <проект.waproj> --drawing <чертёж.dwg|dxf>
+    """;
+
+if (args.Length < 2 || args[0] is "-h" or "--help")
 {
     Console.WriteLine(Usage);
-    return 0;
+    return args.Length == 0 || args[0] is "-h" or "--help" ? 0 : 2;
 }
 
-Console.Error.WriteLine($"Команда «{args[0]}» пока не реализована (этап 0).");
-Console.Error.WriteLine(Usage);
-return 2;
+string? Option(string name)
+{
+    var i = Array.IndexOf(args, name);
+    return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+}
+
+switch (args[0])
+{
+    case "calc":
+    {
+        var project = Path.GetFullPath(args[1]);
+        var output = Option("--out") ?? Path.Combine(Path.GetDirectoryName(project)!, "out");
+        var root = Option("--data") is { } data ? Path.GetDirectoryName(Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar))! : FindRoot(project);
+        if (root is null)
+        {
+            Console.Error.WriteLine("Не найдена папка data/norms: укажите --data <путь к папке data>.");
+            return 2;
+        }
+
+        var result = ProjectPipeline.Run(project, output, Path.Combine(root, "data", "norms"), Path.Combine(root, "docs", "literature_registry.csv"));
+        foreach (var level in new[] { WaterAuto.Core.IssueLevel.Error, WaterAuto.Core.IssueLevel.Warning })
+        {
+            var count = result.Issues.Count(i => i.Level == level);
+            if (count > 0)
+            {
+                Console.WriteLine($"{(level == WaterAuto.Core.IssueLevel.Error ? "Ошибок" : "Предупреждений")}: {count}");
+            }
+        }
+
+        if (result.Design is { } d)
+        {
+            Console.WriteLine($"Расход насоса {d.PumpFlow}, напор {d.PumpHead}, запас воды {d.WaterVolume:0.0} м³.");
+        }
+
+        Console.WriteLine(result.Success ? "Готово:" : "Расчёт остановлен, замечания:");
+        foreach (var file in result.Files)
+        {
+            Console.WriteLine($"  {file}");
+        }
+
+        return result.Success ? 0 : 1;
+    }
+
+    case "new":
+    {
+        var path = Path.GetFullPath(args[1]);
+        if (File.Exists(path))
+        {
+            Console.Error.WriteLine($"Файл уже есть: {path}");
+            return 2;
+        }
+
+        var drawing = Option("--drawing") ?? "plan.dwg";
+        var relative = Path.GetRelativePath(Path.GetDirectoryName(path)!, Path.GetFullPath(drawing));
+        File.WriteAllText(path, ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(path), Drawing = relative }), new UTF8Encoding(false));
+        Console.WriteLine($"Создан {path}. Заполните design: sprinklerK (по паспорту оросителя), dictatingAboveAxis, supplyLength, supplyDn, inletPressure (по ТУ), designVelocity.");
+        return 0;
+    }
+
+    default:
+        Console.Error.WriteLine($"Неизвестная команда «{args[0]}».");
+        Console.Error.WriteLine(Usage);
+        return 2;
+}
+
+// Корень репозитория или установки: папка, в которой есть data/norms, — вверх от проекта, затем от программы.
+static string? FindRoot(string project)
+{
+    foreach (var start in new[] { Path.GetDirectoryName(project)!, AppContext.BaseDirectory })
+    {
+        for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "data", "norms")))
+            {
+                return dir.FullName;
+            }
+        }
+    }
+
+    return null;
+}
