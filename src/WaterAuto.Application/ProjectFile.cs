@@ -70,6 +70,9 @@ public sealed record ProjectDesign
 
     public string PipeStandard { get; init; } = "ГОСТ 3262";
 
+    /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
+    public double? FloorElevation { get; init; }
+
     /// <summary>Отметка трубопроводов для аксонометрии, м.</summary>
     public double PipeElevation { get; init; }
 

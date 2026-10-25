@@ -277,16 +277,50 @@ public class SprinklerLayoutTests
     }
 
     [Fact]
-    public void Wide_ducts_are_reported_until_6_2_14_is_implemented()
+    public void Sprinklers_are_added_under_wide_ducts()
     {
+        // 6.2.14: короб шире 0,75 м на высоте не менее 0,7 м от пола — дополнительные оросители под ним.
         var wide = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-0.9));
         var narrow = new Duct("D2", Rect(2000, 5000, 12000, 5500), new Length(-0.9));
         var plan = Plan(Rect(0, 0, 30000, 20000), ducts: [wide, narrow]);
-        var issue = SprinklerLayouter.Layout(plan, Rules()).Issues.ShouldHaveSingleItem();
-        issue.Code.ShouldBe("layout.duct");
-        issue.Level.ShouldBe(IssueLevel.Warning);
+        var rules = Rules();
+        var layout = SprinklerLayouter.Layout(plan, rules, floorElevation: new Length(-4.0));
+
+        var under = layout.Sprinklers.Where(s => s.UnderObstacleId is not null).ToList();
+        under.ShouldNotBeEmpty();
+        under.ShouldAllBe(s => s.UnderObstacleId == "D1" && wide.Outline.Contains(s.Location) && s.RoomId == "R1");
+        var xs = under.Select(s => s.Location.XMm).Order().ToList();
+        (xs[0] - 2000).ShouldBeLessThanOrEqualTo(rules.MaxWallDistance.Millimeters + 0.5);
+        (12000 - xs[^1]).ShouldBeLessThanOrEqualTo(rules.MaxWallDistance.Millimeters + 0.5);
+        xs.Zip(xs.Skip(1), (a, b) => b - a).ShouldAllBe(d => d <= rules.MaxSpacing.Millimeters + 0.5);
+
+        // Раскладка на перекрытии не меняется: 54 оросителя.
+        layout.Sprinklers.Count(s => s.UnderObstacleId is null).ShouldBe(54);
+        var issue = layout.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("layout.ductSprinklers");
+        issue.Level.ShouldBe(IssueLevel.Info);
         issue.ElementId.ShouldBe("D1");
         issue.Clause.ShouldBe("6.2.14");
+    }
+
+    [Fact]
+    public void Duct_lower_than_the_limit_above_the_floor_gets_no_sprinklers()
+    {
+        // Низ короба на 0,5 м выше пола (< 0,7 м) — 6.2.14 не требует оросителей под ним.
+        var low = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-3.5));
+        var plan = Plan(Rect(0, 0, 30000, 20000), ducts: [low]);
+        var layout = SprinklerLayouter.Layout(plan, Rules(), floorElevation: new Length(-4.0));
+        layout.Sprinklers.ShouldNotContain(s => s.UnderObstacleId != null);
+        layout.Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Without_floor_elevation_ducts_get_sprinklers_and_the_note_says_so()
+    {
+        var wide = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-0.9));
+        var layout = SprinklerLayouter.Layout(Plan(Rect(0, 0, 30000, 20000), ducts: [wide]), Rules());
+        layout.Sprinklers.ShouldContain(s => s.UnderObstacleId == "D1");
+        layout.Issues.ShouldHaveSingleItem().Message.ShouldContain("отметка пола не задана");
     }
 
     [Fact]

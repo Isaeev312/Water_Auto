@@ -107,6 +107,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Помещение делится на прямоугольные зоны; линии оросителей подбираются так, чтобы расстояние между оросителями не превышало нормы и было не меньше наименьшего, а до стен — не больше предела п. 6.2.21. Колонны обходятся сдвигом линий. Из двух направлений деления выбирается вариант с меньшим числом оросителей."),
             new NoteParagraph($"Всего установлено оросителей — {i.Layout.Sprinklers.Count} шт., зон раскладки — {i.Layout.Zones.Count}."),
             .. Beams(i),
+            .. Ducts(i),
             new NoteTable("Таблица 2 — Оросители по помещениям", ["Помещение", "Площадь, м²", "Оросителей, шт.", "Площадь на ороситель, м²"], rows),
             .. Remarks(i.Layout.Issues),
         ]);
@@ -121,6 +122,18 @@ public static class ExplanatoryNoteComposer
         }
 
         yield return new NoteParagraph(string.Create(Ru, $"*Принято:* балки высотой более {i.Rules.BeamHeightLimit.Meters:0.##} м ({high} шт.) делят перекрытие на поля, оросители размещаются между балками (п. 6.2.10). У граней балок расстояние до грани — не более предела п. 6.2.21, а расстояние между оросителями через балку — не более нормативного; трубопроводы проходят под балками."));
+    }
+
+    private static IEnumerable<NoteBlock> Ducts(NoteInputs i)
+    {
+        var under = i.Layout.Sprinklers.Where(s => s.UnderObstacleId is not null).ToList();
+        if (under.Count == 0)
+        {
+            yield break;
+        }
+
+        var ducts = under.Select(s => s.UnderObstacleId).Distinct().Count();
+        yield return new NoteParagraph(string.Create(Ru, $"Под воздуховодами (площадками, оборудованием) шириной более {i.Rules.DuctMinWidth.Meters:0.##} м ({ducts} шт.) дополнительно установлено **{under.Count}** оросителей (п. 6.2.14); расстояние от термочувствительного элемента до плоскости воздуховода — по п. 6.2.11. *Принято:* такие воздуховоды препятствуют орошению защищаемой поверхности."));
     }
 
     private static NoteSection Routing(NoteInputs i)

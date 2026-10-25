@@ -10,8 +10,11 @@ public enum ConstructionClass
     Unrated,
 }
 
-/// <summary>Ороситель раскладки; ID — «ID помещения.S номер».</summary>
-public sealed record PlacedSprinkler(string Id, string RoomId, PlanPoint Location);
+/// <summary>
+/// Ороситель раскладки; ID — «ID помещения.S номер». UnderObstacleId — ID короба (площадки, оборудования),
+/// под которым ороситель установлен дополнительно по п. 6.2.14; null — ороситель под перекрытием.
+/// </summary>
+public sealed record PlacedSprinkler(string Id, string RoomId, PlanPoint Location, string? UnderObstacleId = null);
 
 /// <summary>
 /// Прямоугольная зона раскладки: часть помещения со своей сеткой (ARCHITECTURE §6, этап 2).

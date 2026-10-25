@@ -19,7 +19,7 @@ internal static class LayoutChecks
 
         foreach (var room in plan.Rooms)
         {
-            var points = layout.Sprinklers.Where(p => p.RoomId == room.Id).Select(p => p.Location).ToList();
+            var points = layout.Sprinklers.Where(p => p.RoomId == room.Id && p.UnderObstacleId is null).Select(p => p.Location).ToList();
             var walls = room.Contour.Edges().Concat(plan.NoSprinklerZones.SelectMany(z => z.Outline.Edges())).Concat((extraWalls ?? []).SelectMany(w => w.Edges())).ToList();
             foreach (var p in points)
             {
