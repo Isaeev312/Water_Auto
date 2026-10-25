@@ -169,7 +169,7 @@ public static class ProjectPipeline
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
             sprinklerSupplier),
-            design.FittingStandard.Length > 0 ? design.FittingStandard : null,
+            design.FittingStandards.Count > 0 ? design.FittingStandards : null,
             SteelDensity(normsDir),
             pipeSizes);
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
@@ -241,7 +241,7 @@ public static class ProjectPipeline
                 literature,
                 ids,
                 selection,
-                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}.",
+                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части — {string.Join(", ", design.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}.",
                 supports,
                 temperature.Choice,
                 design.MaxAmbientTemperature,
@@ -251,6 +251,13 @@ public static class ProjectPipeline
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
         return new PipelineResult(true, files, issues, worst);
+    }
+
+    // «Отвод» → «отводы» для перечня стандартов фасонных частей в ПЗ.
+    private static string Plural(string noun)
+    {
+        var lower = noun.ToLower(CultureInfo.GetCultureInfo("ru-RU"));
+        return lower + ("кгхжшчщ".Contains(lower[^1], StringComparison.Ordinal) ? "и" : "ы");
     }
 
     // Цвет колбы в данных — прилагательное мужского рода («красный»); в спецификации — «колба красная».

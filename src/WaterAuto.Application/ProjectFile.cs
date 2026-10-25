@@ -81,8 +81,13 @@ public sealed record ProjectDesign
 
     public int PipeStandardLargeFromDn { get; init; } = 50;
 
-    /// <summary>Стандарт приварных деталей трубопроводов (отводы, тройники, переходы).</summary>
-    public string FittingStandard { get; init; } = "ГОСТ 17375-2001";
+    /// <summary>Стандарты приварных деталей трубопроводов по типу: начало наименования → обозначение.</summary>
+    public Dictionary<string, string> FittingStandards { get; init; } = new()
+    {
+        ["Отвод"] = "ГОСТ 17375-2001",
+        ["Тройник"] = "ГОСТ 17376-2001",
+        ["Переход"] = "ГОСТ 17378-2001",
+    };
 
     /// <summary>Длина резьбовой шпильки подвеса (от перекрытия до хомута), мм.</summary>
     public double HangerRodLength { get; init; } = 300;

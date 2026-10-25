@@ -104,17 +104,19 @@ public class MaterialTakeoffTests
     }
 
     [Fact]
-    public void Fittings_carry_the_GOST_17375_designation()
+    public void Fittings_carry_the_standard_of_their_type()
     {
         var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
         var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
         var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
         var layout = SprinklerLayouter.Layout(plan, rules);
         var route = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3)).Routes[0];
-        var takeoff = MaterialTakeoffBuilder.Build([route], layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель", "СВВ-12"), "ГОСТ 17375-2001");
-        var fittings = takeoff.Items.Where(i => i.Group == TakeoffGroup.Fittings && !i.Name.StartsWith("Крестовина", StringComparison.Ordinal)).ToList();
-        fittings.ShouldNotBeEmpty();
-        fittings.ShouldAllBe(i => i.Designation == "ГОСТ 17375-2001");
+        var takeoff = MaterialTakeoffBuilder.Build([route], layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель", "СВВ-12"), new Dictionary<string, string> { ["Отвод"] = "ГОСТ 17375-2001", ["Тройник"] = "ГОСТ 17376-2001", ["Переход"] = "ГОСТ 17378-2001" });
+        var fittings = takeoff.Items.Where(i => i.Group == TakeoffGroup.Fittings).ToList();
+        fittings.Where(i => i.Name.StartsWith("Отвод", StringComparison.Ordinal)).ShouldAllBe(i => i.Designation == "ГОСТ 17375-2001");
+        fittings.Where(i => i.Name.StartsWith("Тройник", StringComparison.Ordinal)).ShouldAllBe(i => i.Designation == "ГОСТ 17376-2001");
+        fittings.Where(i => i.Name.StartsWith("Переход", StringComparison.Ordinal)).ShouldAllBe(i => i.Designation == "ГОСТ 17378-2001");
+        fittings.Where(i => i.Name.StartsWith("Крестовина", StringComparison.Ordinal)).ShouldAllBe(i => i.Designation == null);
     }
 
     [Fact]
