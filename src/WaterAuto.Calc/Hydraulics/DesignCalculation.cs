@@ -20,6 +20,9 @@ public sealed record DesignSettings(
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
 
+/// <summary>Кандидат в диктующие: ороситель в конце ветви и давление насоса при зоне вокруг него.</summary>
+public sealed record ZoneCandidate(string SprinklerId, Pressure PumpPressure);
+
 public sealed record DesignResult(
     string DictatingSprinklerId,
     double DictatingFactor,
@@ -56,11 +59,12 @@ public sealed record DesignResult(
     double? DesignVelocity,
     double DischargeCoefficient,
     double FirstSegmentDiameterMm,
-    IReadOnlyList<Issue> Issues);
+    IReadOnlyList<Issue> Issues,
+    IReadOnlyList<ZoneCandidate> Candidates);
 
 /// <summary>
 /// Проектный расчёт спринклерной АУП по приложению Б СП 485 (ADR 0008):
-/// диктующий ороситель — самый удалённый от ввода по трассе; расход и давление у него — Б.1 с верхним множителем (В-08);
+/// диктующий ороситель — тот конец ветви, при зоне вокруг которого давление насоса наибольшее (перебор, В-01); расход и давление у него — Б.1 с верхним множителем (В-08);
 /// диктующая зона — N = ⌈S / (l·b)⌉ ближайших к нему оросителей (Б.2, Б.3; форма зоны — В-01);
 /// сеть — последовательный расчёт (Б.4–Б.23) с местными потерями 20 % на всех участках от диктующего оросителя
 /// до насоса, включая узел управления (Б.1.3.13; В-02, В-03); расход насоса — Б.24–Б.26; давление — Б.30 с Z = H/100;
@@ -75,6 +79,25 @@ public static class DesignCalculation
         ArgumentNullException.ThrowIfNull(norms);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(settings);
+
+        // Кандидаты — концы ветвей (из них не выходит участок); при равенстве давлений берётся более удалённый по трассе.
+        var byTo = route.Segments.ToDictionary(x => x.To);
+        double PathLength(string id) => byTo.TryGetValue(id, out var seg) ? seg.Length.Meters + PathLength(seg.From) : 0;
+        var feeding = route.Segments.Select(x => x.From).ToHashSet();
+        var sprinklers = route.Nodes.Where(n => n.Kind == RouteNodeKind.Sprinkler).ToList();
+        var ends = sprinklers.Where(n => !feeding.Contains(n.Id)).ToList();
+        var results = (ends.Count > 0 ? ends : sprinklers)
+            .OrderByDescending(n => PathLength(n.Id))
+            .Select(n => RunFor(route, norms, rules, settings, parameters, n.Id))
+            .ToList();
+        var worst = results.Aggregate((a, x) => x.PumpPressure.Mpa > a.PumpPressure.Mpa + 1e-12 ? x : a);
+        var candidates = results.Select(x => new ZoneCandidate(x.DictatingSprinklerId, x.PumpPressure)).OrderByDescending(x => x.PumpPressure.Mpa).ToList();
+        candidates.Remove(candidates.First(x => x.SprinklerId == worst.DictatingSprinklerId));
+        return worst with { Candidates = [new ZoneCandidate(worst.DictatingSprinklerId, worst.PumpPressure), .. candidates] };
+    }
+
+    private static DesignResult RunFor(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters, string dictatingId)
+    {
         var issues = new List<Issue>();
         var table = norms.Find(rules.NormIds[0])!;
         parameters ??= FireParameters.Resolve(norms, table.Attributes["group"], null, null).Parameters
@@ -102,7 +125,7 @@ public static class DesignCalculation
         var byTo = route.Segments.ToDictionary(x => x.To);
         var sprinklers = route.Nodes.Where(n => n.Kind == RouteNodeKind.Sprinkler).ToList();
         double PathLength(string id) => byTo.TryGetValue(id, out var seg) ? seg.Length.Meters + PathLength(seg.From) : 0;
-        var dictating = sprinklers.MaxBy(n => PathLength(n.Id))!;
+        var dictating = nodes[dictatingId];
 
         // Б.3: условная площадь на ороситель l·b по сетке у диктующего оросителя.
         var (l, b) = Spacing(dictating, sprinklers);
@@ -216,7 +239,8 @@ public static class DesignCalculation
             settings.DesignVelocity,
             mu,
             settings.DesignVelocity is { } dv ? DiameterMm(q1, mu, dv) : 0,
-            issues);
+            issues,
+            []);
     }
 
     /// <summary>Б.5: d = 1000·√(4Q / (π·μ·V)), Q — л/с, мм.</summary>

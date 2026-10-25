@@ -30,6 +30,39 @@ public class DesignCalculationTests
     }
 
     [Fact]
+    public void Worst_zone_is_chosen_by_pump_pressure_among_branch_ends()
+    {
+        var r = Calculate();
+        r.Candidates.Count.ShouldBeGreaterThan(1);
+        r.Candidates[0].SprinklerId.ShouldBe(r.DictatingSprinklerId);
+        r.Candidates[0].PumpPressure.Mpa.ShouldBe(r.PumpPressure.Mpa, 1e-12);
+        r.Candidates.Select(c => c.PumpPressure.Mpa).ShouldBeInOrder(SortDirection.Descending);
+    }
+
+    [Fact]
+    public void A_nearer_branch_end_with_a_thin_pipe_becomes_dictating()
+    {
+        // Ветвь у ввода с трубой DN15 даёт большее давление насоса, чем самый удалённый ороситель.
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var layout = SprinklerLayouter.Layout(plan, Rules);
+        var route = PipeRouter.Route(plan, layout, Norms, Rules, new Pressure(0.3)).Routes[0];
+        var farthest = DesignCalculation.Run(route, Norms, Rules, Settings).DictatingSprinklerId;
+        var ends = route.Nodes.Where(x => x.Kind == RouteNodeKind.Sprinkler && route.Segments.All(s => s.From != x.Id)).Select(x => x.Id).ToList();
+        var near = ends.First(x => x != farthest);
+        var parents = route.Segments.ToDictionary(s => s.To);
+        var thin = new HashSet<string>();
+        for (var id = near; parents.TryGetValue(id, out var s) && route.Nodes.First(x => x.Id == s.From).Kind == RouteNodeKind.Sprinkler; id = s.From)
+        {
+            thin.Add(s.Id);
+        }
+
+        thin.Add(parents[near].Id);
+        var changed = route with { Segments = route.Segments.Select(s => thin.Contains(s.Id) ? s with { Dn = 15 } : s).ToList() };
+        DesignCalculation.Run(changed, Norms, Rules, Settings).DictatingSprinklerId.ShouldBe(near);
+    }
+
+    [Fact]
     public void Dictating_flow_and_pressure_follow_B1_with_the_upper_factor()
     {
         // q = 1,5 · 0,12 · 12 = 2,16 л/с; p = (q / 10K)² = (2,16 / 4,7)² = 0,2112 МПа.
