@@ -1,4 +1,3 @@
-using System.Globalization;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
@@ -40,10 +39,10 @@ public static class PlanDxfWriter
         ArgumentNullException.ThrowIfNull(style);
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
-        var sprinklers = AddLayer(doc, SprinklerLayer, 1);
-        var pipes = AddLayer(doc, PipeLayer, 4);
-        var segments = AddLayer(doc, SegmentLayer, 7);
-        var marks = AddLayer(doc, IssueLayer, 6);
+        var sprinklers = DxfDrawing.AddLayer(doc, SprinklerLayer, 1);
+        var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4);
+        var segments = DxfDrawing.AddLayer(doc, SegmentLayer, 7);
+        var marks = DxfDrawing.AddLayer(doc, IssueLayer, 6);
 
         var block = new BlockRecord(SprinklerBlock);
         block.Entities.Add(new Circle(XYZ.Zero, style.SprinklerRadiusMm));
@@ -75,10 +74,9 @@ public static class PlanDxfWriter
                 var b = nodes[seg.To].Location;
                 doc.Entities.Add(new Line(new XYZ(a.XMm, a.YMm, 0), new XYZ(b.XMm, b.YMm, 0)) { Layer = pipes });
 
-                var parentDn = byTo.TryGetValue(seg.From, out var parent) ? parent.Dn : (int?)null;
-                if (seg.Role != RouteSegmentRole.Row || parentDn != seg.Dn)
+                if (DxfDrawing.NeedsLabel(seg, byTo))
                 {
-                    doc.Entities.Add(Label(seg, a, b, style, segments));
+                    doc.Entities.Add(DxfDrawing.Label(seg, new XY(a.XMm, a.YMm), new XY(b.XMm, b.YMm), style.TextHeightMm, segments));
                 }
             }
         }
@@ -115,33 +113,5 @@ public static class PlanDxfWriter
         }
 
         return doc;
-    }
-
-    // Подпись участка «DN32 L=1,50 м» по середине, вдоль трубы.
-    private static TextEntity Label(RouteSegment seg, PlanPoint a, PlanPoint b, PlanDxfStyle style, Layer layer)
-    {
-        var angle = Math.Atan2(b.YMm - a.YMm, b.XMm - a.XMm);
-        if (angle > Math.PI / 2 || angle <= -Math.PI / 2)
-        {
-            angle += Math.PI; // текст не вверх ногами
-        }
-
-        var mid = new XYZ(((a.XMm + b.XMm) / 2) - (Math.Sin(angle) * style.TextHeightMm * 0.5), ((a.YMm + b.YMm) / 2) + (Math.Cos(angle) * style.TextHeightMm * 0.5), 0);
-        var ru = CultureInfo.GetCultureInfo("ru-RU");
-        return new TextEntity
-        {
-            Value = string.Create(ru, $"DN{seg.Dn} L={seg.Length.Meters:0.00} м"),
-            InsertPoint = mid,
-            Height = style.TextHeightMm,
-            Rotation = angle,
-            Layer = layer,
-        };
-    }
-
-    private static Layer AddLayer(CadDocument doc, string name, short color)
-    {
-        var layer = new Layer(name) { Color = new Color(color) };
-        doc.Layers.Add(layer);
-        return layer;
     }
 }
