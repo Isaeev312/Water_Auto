@@ -6,6 +6,7 @@ public enum TakeoffGroup
     Sprinklers,
     Pipes,
     Fittings,
+    Hydrants,
 }
 
 /// <summary>
