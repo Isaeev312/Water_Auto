@@ -1,3 +1,4 @@
+using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Calc.Layout;
 using WaterAuto.Calc.Routing;
 using WaterAuto.Core;
@@ -17,7 +18,9 @@ public class ExplanatoryNoteComposerTests
         var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), "Узел управления")]);
         var layout = SprinklerLayouter.Layout(plan, rules);
         var routing = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3));
-        var takeoff = MaterialTakeoffBuilder.Build(routing.Routes, layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель спринклерный водяной", "по каталогу"));
+        var settings = new DesignSettings("ГОСТ 3262", new KFactor(0.47), new Length(4), new Length(25), 100, new Pressure(0.1), DesignVelocity: 5);
+        var design = DesignCalculation.Run(routing.Routes[0], Norms, rules, settings);
+        var takeoff = MaterialTakeoffBuilder.Build([design.Route], layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель спринклерный водяной", "по каталогу"));
         using var registry = new StreamReader(RepoPaths.Registry);
         var inputs = new NoteInputs(
             new NoteTitle("[Наименование вуза]", "Автоматическая установка водяного пожаротушения", "Пояснительная записка", "[ФИО студента]", "[ФИО руководителя]", "[Город] 2027"),
@@ -29,6 +32,8 @@ public class ExplanatoryNoteComposerTests
             layout,
             routing,
             takeoff,
+            design,
+            settings,
             LiteratureRegistry.Parse(registry),
             ["SP485-izm"]);
         return ExplanatoryNoteComposer.Compose(inputs, Norms);
@@ -40,6 +45,7 @@ public class ExplanatoryNoteComposerTests
         NotePending p => p.Text,
         NoteList l => string.Join("\n", l.Items),
         NoteTable t => t.Caption + "\n" + string.Join("\n", t.Rows.Select(r => string.Join(" | ", r))),
+        NoteFormula f => f.Expression + "\n" + string.Join("\n", f.Legend),
         _ => "",
     }));
 
@@ -85,16 +91,43 @@ public class ExplanatoryNoteComposerTests
     }
 
     [Fact]
-    public void Undecided_calculations_are_pending_and_name_the_questions()
+    public void Calculation_sections_are_complete_with_formulas_and_clauses()
     {
         var note = Compose();
         foreach (var number in new[] { "5", "6", "7" })
         {
-            note.Sections.Single(s => s.Number == number).Blocks.ShouldContain(b => b is NotePending);
+            var section = note.Sections.Single(s => s.Number == number);
+            section.Blocks.ShouldNotContain(b => b is NotePending, $"раздел {number} не должен содержать заготовок");
+            section.Blocks.ShouldContain(b => b is NoteFormula, $"в разделе {number} нет формул");
         }
 
-        AllText(note.Sections.Single(s => s.Number == "5")).ShouldContain("В-01");
-        AllText(note.Sections.Single(s => s.Number == "6")).ShouldContain("В-03");
+        var hydraulics = AllText(note.Sections.Single(s => s.Number == "5"));
+        foreach (var clause in new[] { "Б.1", "Б.2", "Б.3", "Б.5", "Б.6", "Б.23", "Б.1.3.13", "6.7.1.37" })
+        {
+            hydraulics.ShouldContain(clause);
+        }
+
+        hydraulics.ShouldContain("2,16");
+        hydraulics.ShouldContain("*Принято:*");
+        var pump = AllText(note.Sections.Single(s => s.Number == "6"));
+        foreach (var clause in new[] { "Б.30", "6.10.3", "6.9.4" })
+        {
+            pump.ShouldContain(clause);
+        }
+
+        var water = AllText(note.Sections.Single(s => s.Number == "7"));
+        water.ShouldContain("6.9.13");
+        water.ShouldContain("6.9.12");
+        note.Sections.Single(s => s.Heading == "Заключение").Blocks.ShouldNotContain(b => b is NotePending);
+    }
+
+    [Fact]
+    public void Calculation_numbers_in_the_note_match_the_design_result()
+    {
+        var note = Compose();
+        var table = note.Sections.Single(s => s.Number == "5").Blocks.OfType<NoteTable>().Single(t => t.Caption.Contains("Гидравлический расчёт", StringComparison.Ordinal));
+        table.Rows.Count.ShouldBeGreaterThan(3);
+        AllText(note.Sections.Single(s => s.Number == "6")).ShouldContain("м³/ч");
     }
 
     [Fact]

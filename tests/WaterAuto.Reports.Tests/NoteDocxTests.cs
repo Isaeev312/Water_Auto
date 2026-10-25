@@ -13,7 +13,11 @@ public class NoteDocxTests
                 new NoteList(["группа помещений — 2", "класс конструкций — К0"]),
                 new NoteTable("Таблица 1 — Параметры установки", ["Параметр", "Значение", "Основание"], [["Интенсивность", "0,12 л/(с·м²)", "табл. 6.1"]]),
             ]),
-            new NoteSection("2", "Гидравлический расчёт", [new NotePending("Раздел формируется после решения вопросов В-01, В-02, В-03.")]),
+            new NoteSection("2", "Гидравлический расчёт", [
+                new NotePending("Раздел формируется после решения вопросов В-01, В-02, В-03."),
+                new NoteParagraph("Расход **диктующего** оросителя *q*_{1} по формуле Б.1:\nвторая строка, м^{2}."),
+                new NoteFormula("*q* = 1,5·*i*·*s* = 1,5·0,12·12 = 2,16 л/с", "5.1", ["где *i* — интенсивность орошения, л/(с·м^{2});", "*s* — площадь, м^{2}."]),
+            ]),
         ],
         ["СП 485.1311500.2020. Установки пожаротушения автоматические."]);
 
@@ -61,6 +65,35 @@ public class NoteDocxTests
         // Незаполненное выделено, чтобы его нельзя было пропустить.
         var pending = body.Descendants<Run>().Single(r => r.InnerText.Contains("В-01", StringComparison.Ordinal));
         pending.RunProperties!.Highlight!.Val!.Value.ShouldBe(HighlightColorValues.Yellow);
+    }
+
+    [Fact]
+    public void Markup_gives_bold_italic_subscript_superscript_and_line_breaks()
+    {
+        using var doc = WriteAndOpen();
+        var body = doc.MainDocumentPart!.Document.Body!;
+        var p = body.Elements<Paragraph>().Single(x => x.InnerText.StartsWith("Расход диктующего", StringComparison.Ordinal));
+        p.InnerText.ShouldBe("Расход диктующего оросителя q1 по формуле Б.1:вторая строка, м2.");
+        var runs = p.Elements<Run>().ToList();
+        runs.Single(r => r.InnerText == "диктующего").RunProperties!.Bold.ShouldNotBeNull();
+        runs.Single(r => r.InnerText == "q").RunProperties!.Italic.ShouldNotBeNull();
+        runs.Single(r => r.InnerText == "1").RunProperties!.VerticalTextAlignment!.Val!.Value.ShouldBe(VerticalPositionValues.Subscript);
+        runs.Single(r => r.InnerText == "2").RunProperties!.VerticalTextAlignment!.Val!.Value.ShouldBe(VerticalPositionValues.Superscript);
+        p.Descendants<Break>().Count().ShouldBe(1);
+        p.InnerText.ShouldNotContain("*");
+    }
+
+    [Fact]
+    public void Formula_is_centred_with_its_number_and_legend()
+    {
+        using var doc = WriteAndOpen();
+        var body = doc.MainDocumentPart!.Document.Body!;
+        var f = body.Elements<Paragraph>().Single(x => x.InnerText.Contains("= 2,16 л/с", StringComparison.Ordinal));
+        f.InnerText.ShouldEndWith("(5.1)");
+        f.ParagraphProperties!.Tabs!.Elements<TabStop>().Select(t => t.Val!.Value).ShouldBe([TabStopValues.Center, TabStopValues.Right]);
+        var legend = body.Elements<Paragraph>().SkipWhile(x => x != f).Skip(1).Take(2).Select(x => x.InnerText).ToList();
+        legend[0].ShouldStartWith("где i — интенсивность");
+        legend[1].ShouldStartWith("s — площадь");
     }
 
     [Fact]

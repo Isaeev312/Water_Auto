@@ -6,7 +6,13 @@ public sealed record NoteTitle(string Organization, string Title, string Subtitl
 /// <summary>Элемент текста раздела.</summary>
 public abstract record NoteBlock;
 
+/// <summary>
+/// Абзац. Разметка в тексте всех блоков: **полужирный**, *курсив*, _{нижний индекс}, ^{верхний индекс}, \n — перенос строки.
+/// </summary>
 public sealed record NoteParagraph(string Text) : NoteBlock;
+
+/// <summary>Формула по центру с номером у правого поля («(5.1)») и пояснением «где …» строками ниже.</summary>
+public sealed record NoteFormula(string Expression, string Number, IReadOnlyList<string> Legend) : NoteBlock;
 
 /// <summary>Перечисление (ГОСТ 7.32: через тире).</summary>
 public sealed record NoteList(IReadOnlyList<string> Items) : NoteBlock;
