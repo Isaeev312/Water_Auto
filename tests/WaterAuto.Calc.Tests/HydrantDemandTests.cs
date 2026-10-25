@@ -113,4 +113,29 @@ public class HydrantDemandTests
         d.MinJetFlow.LitersPerSecond.ShouldBe(2.5);
         d.JetFlow.LitersPerSecond.ShouldBe(2.6);
     }
+
+    [Fact]
+    public void Public_building_row_of_Zh1_is_chosen_by_its_id()
+    {
+        var d = HydrantDemand.Resolve(Norms, Parking with { Zh1Row = "g4.seats_over300" }).Demand!;
+        d.Jets.ShouldBe(2);
+        d.MinJetFlow.LitersPerSecond.ShouldBe(2.5);
+        d.Source.ShouldContain("табл. Ж.1");
+        d.NormIds.ShouldContain("snkr4004.tZh_1.g4.seats_over300");
+    }
+
+    [Fact]
+    public void Hall_with_combustible_finish_takes_one_jet_more_7_7()
+    {
+        var d = HydrantDemand.Resolve(Norms, Parking with { Zh1Row = "g4.seats_over300", ExtraJet = true }).Demand!;
+        d.Jets.ShouldBe(3);
+        d.NormIds.ShouldContain("snkr4004.p7_7.extraJet");
+    }
+
+    [Fact]
+    public void Unknown_Zh1_row_is_an_error()
+    {
+        HydrantDemand.Resolve(Norms, Parking with { Zh1Row = "g9.none" }).Issues
+            .ShouldContain(i => i.Code == "vpv.noRow" && i.Level == IssueLevel.Error);
+    }
 }

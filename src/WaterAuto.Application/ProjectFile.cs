@@ -171,6 +171,12 @@ public sealed class ProjectHydrants
 
     /// <summary>Отапливаемая автостоянка закрытого типа: струи по п. 6.4 СНиП 21-02-99* (ADR 0010).</summary>
     public bool IsParking { get; init; }
+
+    /// <summary>Жилое или общественное здание: строка табл. Ж.1 СН КР 40-04:2025, напр. «g4.seats_over300» (список — data/norms/snkr40_04/table_Zh_1.json).</summary>
+    public string? Zh1Row { get; init; }
+
+    /// <summary>Зал с массовым пребыванием людей при сгораемой отделке — на одну струю больше (п. 7.7).</summary>
+    public bool ExtraJet { get; init; }
 }
 
 /// <summary>Титульный лист записки.</summary>
