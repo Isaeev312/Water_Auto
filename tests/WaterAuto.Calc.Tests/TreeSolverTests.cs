@@ -95,6 +95,44 @@ public class TreeSolverTests
     }
 
     [Fact]
+    public void Duplicate_pipe_ids_are_rejected()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [Pipe("duplicate", "S", "1"), Pipe("duplicate", "S", "2")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "topology.duplicatePipe" && i.ElementId == "duplicate");
+    }
+
+    [Fact]
+    public void Non_finite_or_non_positive_pipe_parameters_are_rejected()
+    {
+        var invalidPipes = new[]
+        {
+            Pipe("length-zero", "S", "1", 0),
+            new NetworkPipe("length-nan", "S", "1", new Length(double.NaN), new PipeCharacteristic(16.5)),
+            new NetworkPipe("length-infinite", "S", "1", new Length(double.PositiveInfinity), new PipeCharacteristic(16.5)),
+            Pipe("kt-zero", "S", "1", 3, 0),
+            new NetworkPipe("kt-nan", "S", "1", new Length(3), new PipeCharacteristic(double.NaN)),
+            new NetworkPipe("kt-infinite", "S", "1", new Length(3), new PipeCharacteristic(double.PositiveInfinity)),
+            new NetworkPipe("multiplier-zero", "S", "1", new Length(3), new PipeCharacteristic(16.5), 0),
+            new NetworkPipe("multiplier-nan", "S", "1", new Length(3), new PipeCharacteristic(16.5), double.NaN),
+            new NetworkPipe("multiplier-infinite", "S", "1", new Length(3), new PipeCharacteristic(16.5), double.PositiveInfinity),
+        };
+
+        foreach (var pipe in invalidPipes)
+        {
+            var result = TreeSolver.SolveDesign(
+                new HydraulicNetwork([Source("S"), Sprinkler("1")], [pipe]), "1", new Pressure(0.1));
+
+            result.HasErrors.ShouldBeTrue(pipe.Id);
+        }
+    }
+
+    [Fact]
     public void Branch_with_emitters_at_different_elevations_is_rejected()
     {
         var net = new HydraulicNetwork(
