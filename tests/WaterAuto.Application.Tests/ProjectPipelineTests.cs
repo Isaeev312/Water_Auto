@@ -1,0 +1,120 @@
+using ACadSharp;
+using ACadSharp.Entities;
+using ACadSharp.IO;
+using ACadSharp.Tables;
+using ACadSharp.Types.Units;
+using CSMath;
+using DocumentFormat.OpenXml.Packaging;
+using WaterAuto.Import;
+
+namespace WaterAuto.Application.Tests;
+
+public sealed class ProjectPipelineTests : IDisposable
+{
+    private readonly string _dir = Directory.CreateTempSubdirectory("wa-pipeline-").FullName;
+
+    public void Dispose() => Directory.Delete(_dir, true);
+
+    // Этаж 30 × 20 м: помещение с именем, колонна, ввод — по соглашению о слоях (README §7).
+    private string Drawing(bool withInlet = true)
+    {
+        var doc = new CadDocument(ACadVersion.AC1032);
+        doc.Header.InsUnits = UnitsType.Millimeters;
+        Layer L(string name)
+        {
+            if (!doc.Layers.TryGetValue(name, out var layer))
+            {
+                layer = new Layer(name);
+                doc.Layers.Add(layer);
+            }
+
+            return layer;
+        }
+
+        LwPolyline Rect(double x0, double y0, double x1, double y1) =>
+            new([new XY(x0, y0), new XY(x1, y0), new XY(x1, y1), new XY(x0, y1)]) { IsClosed = true };
+        var room = Rect(0, 0, 30000, 20000);
+        room.Layer = L(FloorPlanImporter.ContourLayer);
+        doc.Entities.Add(room);
+        doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(15000, 10000, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        var column = Rect(7300, 7300, 7700, 7700);
+        column.Layer = L(FloorPlanImporter.ColumnLayer);
+        doc.Entities.Add(column);
+        if (withInlet)
+        {
+            doc.Entities.Add(new Point(new XYZ(500, 500, 0)) { Layer = L(FloorPlanImporter.InletLayer) });
+        }
+
+        var path = Path.Combine(_dir, "floor.dxf");
+        DxfWriter.Write(path, doc, false);
+        return path;
+    }
+
+    private string Project(double k = 0.47) =>
+        Write("project.waproj", ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Тестовая автостоянка",
+            Drawing = "floor.dxf",
+            Design = new ProjectDesign
+            {
+                RoomGroup = "2",
+                SprinklerK = k,
+                SprinklerModel = "по каталогу",
+                PipeElevation = -1.5,
+                DictatingAboveAxis = 3.5,
+                SupplyLength = 30,
+                SupplyDn = 125,
+                InletPressure = 0.1,
+                DesignVelocity = 5,
+            },
+        }));
+
+    private string Write(string name, string text)
+    {
+        var path = Path.Combine(_dir, name);
+        File.WriteAllText(path, text);
+        return path;
+    }
+
+    private PipelineResult Run(string project) =>
+        ProjectPipeline.Run(project, Path.Combine(_dir, "out"), RepoPaths.Norms, RepoPaths.Registry);
+
+    [Fact]
+    public void Drawing_project_produces_the_whole_package()
+    {
+        Drawing();
+        var result = Run(Project());
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        result.Files.Select(Path.GetFileName).ShouldBe([
+            ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile,
+            ProjectPipeline.SpecificationFile, ProjectPipeline.NoteFile, ProjectPipeline.IssuesFile,
+        ]);
+        result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);
+        result.Design!.PumpHead.Meters.ShouldBeGreaterThan(0);
+
+        DwgReader.Read(result.Files[0]).Entities.Count(e => e.Layer.Name == "ПТ_ОРОСИТЕЛИ").ShouldBeGreaterThan(0);
+        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("Тестовая автостоянка");
+        text.ShouldContain("Б.30");
+    }
+
+    [Fact]
+    public void Missing_sprinkler_K_stops_with_an_issue_file()
+    {
+        Drawing();
+        var result = Run(Project(k: 0));
+        result.Success.ShouldBeFalse();
+        File.ReadAllText(result.Files.ShouldHaveSingleItem()).ShouldContain("project.sprinklerK");
+    }
+
+    [Fact]
+    public void Import_errors_stop_with_locations_in_the_issue_file()
+    {
+        Drawing(withInlet: false);
+        var result = Run(Project());
+        result.Success.ShouldBeFalse();
+        result.Issues.ShouldContain(i => i.Code == "import.noInlet");
+        File.ReadAllText(result.Files.Single()).ShouldContain("import.noInlet");
+    }
+}

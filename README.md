@@ -44,11 +44,17 @@ dotnet test
 dotnet run --project src/WaterAuto.App
 ```
 
-Расчёт из командной строки (для тестов и отладки):
+Расчёт проекта по чертежу из командной строки: заготовка файла проекта, затем полный выпуск — план (`plan.dwg`, `plan.dxf`), аксонометрия (`axonometry.dxf`), спецификация (`specification.xlsx`), пояснительная записка (`note.docx`) и замечания (`issues.txt`):
 
 ```bash
-dotnet run --project src/WaterAuto.Cli -- calc tests/Golden/IOS2.2/input.waproj --out out/
+dotnet run --project src/WaterAuto.Cli -- new objects/parking.waproj --drawing objects/floor-1.dwg
 ```
+
+```bash
+dotnet run --project src/WaterAuto.Cli -- calc objects/parking.waproj --out objects/out
+```
+
+В `parking.waproj` заполняются исходные данные (`design`): K оросителя по паспорту, высота диктующего оросителя над осью насоса, длина и DN подводящего трубопровода, давление на входе насоса по ТУ, скорость для подбора диаметров (Б.5), группа помещений и класс конструкций; `title` — титульный лист записки.
 
 ---
 
