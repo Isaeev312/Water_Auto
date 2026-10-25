@@ -21,6 +21,7 @@ public sealed class JsonNormsProvider : INormsProvider
             using var doc = JsonDocument.Parse(File.ReadAllText(file));
             var root = doc.RootElement;
             var docName = root.GetProperty("doc").GetString() ?? "";
+            var edition = root.GetProperty("edition").GetString() ?? "";
             var fileClause = root.TryGetProperty("clause", out var c) ? c.GetString() : null;
             foreach (var r in root.GetProperty("records").EnumerateArray())
             {
@@ -47,7 +48,7 @@ public sealed class JsonNormsProvider : INormsProvider
                 }
 
                 var clause = r.TryGetProperty("clause", out var rc) ? rc.GetString()! : fileClause ?? "";
-                if (!records.TryAdd(id, new NormRecord(id, docName, clause, values, units, attrs)))
+                if (!records.TryAdd(id, new NormRecord(id, docName, edition, clause, values, units, attrs)))
                 {
                     throw new InvalidDataException($"Повтор id нормы {id} в {file}.");
                 }
