@@ -21,7 +21,8 @@ public sealed record NoteInputs(
     DesignSettings DesignSettings,
     IReadOnlyList<LiteratureEntry> Literature,
     IReadOnlyList<string> LiteratureIds,
-    SprinklerSelectionResult? Selection = null);
+    SprinklerSelectionResult? Selection = null,
+    string? Joints = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -182,6 +183,7 @@ public static class ExplanatoryNoteComposer
             .ToList();
         return new NoteSection("4", "Трассировка трубопроводов", [
             new NoteParagraph("Распределительные трубопроводы (рядки) проложены вдоль рядов оросителей, питающий — поперёк рядов, подводящий — от точки подключения. Начальные диаметры приняты ориентировочно по таблице Б.4 СП 485 по числу оросителей за участком и уточняются гидравлическим расчётом (п. Б.1.3.2)."),
+            .. (i.Joints is { } joints ? [new NoteParagraph(joints)] : Array.Empty<NoteBlock>()),
             new NoteTable("Таблица 3 — Трубопроводы по назначению и диаметрам", ["Назначение", "Диаметр", "Участков", "Длина, м"], rows),
             .. Remarks(i.Routing.Issues),
         ]);

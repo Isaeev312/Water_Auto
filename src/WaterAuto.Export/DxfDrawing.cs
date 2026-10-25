@@ -34,16 +34,24 @@ internal static class DxfDrawing
 
     public const string TextFont = "GOST Common.ttf";
 
-    // Все надписи — стилем WA_ГОСТ; если шрифта нет на компьютере, AutoCAD подставит замену.
+    // Слои, созданные программой в документе: стиль надписей меняется только на них (чертёж-подложка не трогается).
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CadDocument, HashSet<string>> OwnLayers = new();
+
+    /// <summary>Чертёж-подложка по расширению: .dwg — DWG, иначе DXF.</summary>
+    public static CadDocument Read(string path) =>
+        Path.GetExtension(path).Equals(".dwg", StringComparison.OrdinalIgnoreCase) ? DwgReader.Read(path) : DxfReader.Read(path);
+
+    // Надписи программы — стилем WA_ГОСТ; если шрифта нет на компьютере, AutoCAD подставит замену.
     private static void ApplyTextStyle(CadDocument doc)
     {
+        var own = OwnLayers.TryGetValue(doc, out var set) ? set : [];
         if (!doc.TextStyles.TryGetValue(TextStyleName, out var style))
         {
             style = new TextStyle(TextStyleName) { Filename = TextFont, Width = 1.0 };
             doc.TextStyles.Add(style);
         }
 
-        foreach (var e in doc.Entities)
+        foreach (var e in doc.Entities.Where(e => own.Contains(e.Layer.Name)))
         {
             switch (e)
             {
@@ -57,8 +65,17 @@ internal static class DxfDrawing
         }
     }
 
+    /// <summary>Слой программы; в чертеже-подложке уже существующий слой (например, из шаблона) используется с цветом и толщиной программы.</summary>
     public static Layer AddLayer(CadDocument doc, string name, short color, LineWeightType lineWeight = LineWeightType.Default)
     {
+        OwnLayers.GetOrCreateValue(doc).Add(name);
+        if (doc.Layers.TryGetValue(name, out var existing))
+        {
+            existing.Color = new Color(color);
+            existing.LineWeight = lineWeight;
+            return existing;
+        }
+
         var layer = new Layer(name) { Color = new Color(color), LineWeight = lineWeight };
         doc.Layers.Add(layer);
         return layer;
