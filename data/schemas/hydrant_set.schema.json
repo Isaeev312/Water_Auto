@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/hydrant_set.schema.json",
+  "title": "Комплект пожарного крана для спецификации",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "items"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "barrel": {
+      "type": "object",
+      "description": "Марка ствола по DN клапана, напр. {\"50\": \"РС-50\"}.",
+      "additionalProperties": { "type": "string" }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "designation", "unit", "perHydrant"],
+        "properties": {
+          "name": { "type": "string", "description": "Шаблон: {dn} — DN клапана, {hose} — длина рукава, м, {nozzle} — спрыск, мм, {barrel} — марка ствола." },
+          "designation": { "type": "string" },
+          "unit": { "type": "string" },
+          "perHydrant": { "type": "number", "exclusiveMinimum": 0 }
+        }
+      }
+    }
+  }
+}

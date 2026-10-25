@@ -37,6 +37,7 @@ public static class SpecificationXlsx
         (TakeoffGroup.Sprinklers, "Оросители"),
         (TakeoffGroup.Pipes, "Трубопроводы"),
         (TakeoffGroup.Fittings, "Фасонные части"),
+        (TakeoffGroup.Hydrants, "Пожарные краны"),
     ];
 
     public static void Write(string path, MaterialTakeoff takeoff, SpecificationHeader header)

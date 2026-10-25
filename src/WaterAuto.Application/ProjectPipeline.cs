@@ -156,6 +156,11 @@ public static class ProjectPipeline
             sprinklerModel),
             design.FittingStandard.Length > 0 ? design.FittingStandard : null);
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
+        var hydrantSet = HydrantEquipment.PathFor(normsDir);
+        if (hydrants is not null && File.Exists(hydrantSet))
+        {
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings)] };
+        }
 
         var outIssues = issues.ToList();
         var summary = Summary(worst);
@@ -166,8 +171,8 @@ public static class ProjectPipeline
             design.InletReference,
         ])).ToList();
 
-        // plan.dwg — трубы поверх исходного чертежа этажа в одном файле; plan.dxf — только слои программы (для вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, basePath: drawing));
+        // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
+        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing));
         Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation)));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов")));

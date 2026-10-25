@@ -137,4 +137,15 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Issues.ShouldContain(i => i.Code == "import.noInlet");
         File.ReadAllText(result.Files.Single()).ShouldContain("import.noInlet");
     }
+
+    [Fact]
+    public void Hydrant_set_for_one_hydrant_follows_the_catalog_template()
+    {
+        var s = new WaterAuto.Calc.Hydraulics.HydrantSettings("II", "В", "С0", 40, new Core.Length(12), new Core.Length(3.3), 65, 19, 20, new Core.Length(1.35), new Core.Length(15), 80);
+        var items = HydrantEquipment.Items(HydrantEquipment.PathFor(RepoPaths.Norms), s);
+        items.ShouldContain(i => i.Name == "Клапан пожарный запорный угловой DN65" && i.Quantity == 1);
+        items.ShouldContain(i => i.Name.Contains("РС-70", StringComparison.Ordinal) && i.Name.Contains("19 мм", StringComparison.Ordinal));
+        items.ShouldContain(i => i.Name.Contains("длина 20 м", StringComparison.Ordinal));
+        items.ShouldAllBe(i => i.Group == Core.TakeoffGroup.Hydrants && i.Note == "на один пожарный кран");
+    }
 }
