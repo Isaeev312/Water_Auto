@@ -11,6 +11,8 @@ namespace WaterAuto.Calc.Hydraulics;
 /// <param name="Category">Категория здания по пожарной опасности: А, Б, В, Г, Д.</param>
 /// <param name="HazardClass">Класс конструктивной пожарной опасности здания С0–С3 (не класс К0–К3 из раскладки).</param>
 /// <param name="AboveAxis">Отметка клапана диктующего ПК над осью насоса.</param>
+/// <param name="Zh1Row">Строка табл. Ж.1 (жилые и общественные здания) — ID без префикса, напр. «g4.seats_over300»; null — табл. Ж.2.</param>
+/// <param name="ExtraJet">Зал с массовым пребыванием людей при сгораемой отделке — на одну струю больше (п. 7.7, только с табл. Ж.1).</param>
 /// <param name="IsParking">Отапливаемая автостоянка закрытого типа: струи — по п. 6.4 СНиП 21-02-99* вместо табл. Ж.2 (ADR 0010).</param>
 public sealed record HydrantSettings(
     string FireResistance,
@@ -25,7 +27,9 @@ public sealed record HydrantSettings(
     Length AboveAxis,
     Length PipeLength,
     int PipeDn,
-    bool IsParking = false);
+    bool IsParking = false,
+    string? Zh1Row = null,
+    bool ExtraJet = false);
 
 /// <summary>Требование к ВПВ: n струй, расход и напор диктующего ПК по табл. Ж.3.</summary>
 public sealed record HydrantDemandValue(
@@ -72,7 +76,19 @@ public static class HydrantDemand
         int n;
         double qMin;
         string rowId, source;
-        if (s.IsParking)
+        if (s.Zh1Row is { } zh1 && !s.IsParking)
+        {
+            var row = norms.Find($"snkr4004.tZh_1.{zh1}");
+            if (row is null)
+            {
+                return Stop("vpv.noRow", IssueLevel.Error, $"В табл. Ж.1 нет строки «{zh1}».", "табл. Ж.1");
+            }
+
+            n = (int)row.Values["jets"]!.Value;
+            qMin = row.Values["jetFlow"]!.Value;
+            (rowId, source) = (row.Id, $"табл. Ж.1 СН КР 40-04:2025 ({row.Attributes["description"]})");
+        }
+        else if (s.IsParking)
         {
             var p = norms.Find("snip2102.p6_4.jets")!;
             if (s.VolumeThousandM3 < p.Values["volumeMin"]!.Value)
@@ -119,6 +135,22 @@ public static class HydrantDemand
             (rowId, source) = (row.Id, "табл. Ж.2 СН КР 40-04:2025");
         }
 
+        string? extraId = null;
+        if (s.ExtraJet)
+        {
+            if (s.Zh1Row is null || s.IsParking)
+            {
+                issues.Add(new Issue("vpv.extraJet", IssueLevel.Warning, "Дополнительная струя по п. 7.7 относится к табл. Ж.1 — признак не учтён.", Clause: "7.7"));
+            }
+            else
+            {
+                var extra = norms.Find("snkr4004.p7_7.extraJet")!;
+                n += (int)extra.Values["jets"]!.Value;
+                extraId = extra.Id;
+                source += ", п. 7.7";
+            }
+        }
+
         var heightRecord = norms.Find("snkr4004.p7_9.jetHeight")!;
         var minHeight = s.BuildingHeight.Meters <= heightRecord.Values["buildingHeightLimit"]!.Value
             ? heightRecord.Values["minUpTo50"]!.Value
@@ -158,7 +190,7 @@ public static class HydrantDemand
         }
 
         return new HydrantDemandResult(
-            new HydrantDemandValue(n, new Flow(qMin), new Length(required), new Length(t3.Values["jetHeight"]!.Value), new Flow(q!.Value), new Length(h!.Value), [rowId, heightRecord.Id, t3.Id, valve.Id], source),
+            new HydrantDemandValue(n, new Flow(qMin), new Length(required), new Length(t3.Values["jetHeight"]!.Value), new Flow(q!.Value), new Length(h!.Value), [rowId, .. extraId is null ? Array.Empty<string>() : [extraId], heightRecord.Id, t3.Id, valve.Id], source),
             issues);
     }
 }
