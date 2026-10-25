@@ -40,22 +40,30 @@ public static class TreeSolver
 
         var incoming = new Dictionary<string, NetworkPipe>(StringComparer.Ordinal);
         var children = new Dictionary<string, List<NetworkPipe>>(StringComparer.Ordinal);
+        var pipeIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var p in network.Pipes)
         {
+            if (!pipeIds.Add(p.Id))
+            {
+                issues.Add(new Issue("topology.duplicatePipe", IssueLevel.Error, $"Труба {p.Id} задана дважды.", p.Id));
+                continue;
+            }
+
             if (!nodes.ContainsKey(p.From) || !nodes.ContainsKey(p.To))
             {
                 issues.Add(new Issue("topology.danglingPipe", IssueLevel.Error, $"Труба {p.Id} ссылается на несуществующий узел.", p.Id));
                 continue;
             }
 
-            if (p.Length.Meters <= 0)
+            if (!double.IsFinite(p.Length.Meters) || p.Length.Meters <= 0)
             {
-                issues.Add(new Issue("topology.zeroLength", IssueLevel.Error, $"Труба {p.Id} имеет нулевую длину.", p.Id));
+                issues.Add(new Issue("topology.pipeLength", IssueLevel.Error, $"Длина трубы {p.Id} должна быть конечной и больше нуля.", p.Id));
             }
 
-            if (p.Characteristic.Kt <= 0 || p.LossMultiplier <= 0)
+            if (!double.IsFinite(p.Characteristic.Kt) || p.Characteristic.Kt <= 0
+                || !double.IsFinite(p.LossMultiplier) || p.LossMultiplier <= 0)
             {
-                issues.Add(new Issue("pipe.characteristic", IssueLevel.Error, $"Труба {p.Id}: Kт и множитель потерь должны быть больше нуля.", p.Id));
+                issues.Add(new Issue("pipe.characteristic", IssueLevel.Error, $"Труба {p.Id}: Kт и множитель потерь должны быть конечными и больше нуля.", p.Id));
             }
 
             if (!incoming.TryAdd(p.To, p))
