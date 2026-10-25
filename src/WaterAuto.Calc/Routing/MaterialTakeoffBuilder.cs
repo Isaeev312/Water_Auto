@@ -29,11 +29,11 @@ public static class MaterialTakeoffBuilder
 
     /// <param name="fittingStandard">Стандарт приварных деталей (отводы, тройники, переходы), например ГОСТ 17375-2001; null — не указывается.</param>
     /// <param name="steelDensity">Плотность стали для теоретической массы 1 м трубы, т/м³; null — масса не указывается.</param>
-    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, string? fittingStandard = null, double? steelDensity = null)
+    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, string? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(sprinkler);
-        var series = new PipeSeries(norms, pipeStandard);
+        var series = new PipeSeries(norms, pipeStandard, sizes);
         var items = new List<TakeoffItem>
         {
             new(TakeoffGroup.Sprinklers, sprinkler.Name, sprinkler.Designation, installedSprinklers, "шт.", Supplier: sprinkler.Supplier),

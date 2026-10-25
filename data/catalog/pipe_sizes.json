@@ -1,0 +1,50 @@
+{
+  "$schema": "../schemas/pipe_sizes.schema.json",
+  "schemaVersion": 1,
+  "notes": [
+    "Размеры электросварных труб по ГОСТ 10704-91, принятые владельцем проекта (26.10.2026) для АУПТ; из пар стенок берётся первая.",
+    "Если размера нет в табл. Б.2 СП 485, Kт определяется по формуле Б.8 (п. Б.1.2.9) по внутреннему диаметру."
+  ],
+  "sizes": [
+    {
+      "standard": "ГОСТ 10704",
+      "dn": 50,
+      "outerDiameter": 57,
+      "wall": 3.5
+    },
+    {
+      "standard": "ГОСТ 10704",
+      "dn": 65,
+      "outerDiameter": 76,
+      "wall": 3.5,
+      "alternativeWall": 4
+    },
+    {
+      "standard": "ГОСТ 10704",
+      "dn": 80,
+      "outerDiameter": 89,
+      "wall": 4,
+      "alternativeWall": 4.5
+    },
+    {
+      "standard": "ГОСТ 10704",
+      "dn": 100,
+      "outerDiameter": 108,
+      "wall": 4,
+      "alternativeWall": 4.5
+    },
+    {
+      "standard": "ГОСТ 10704",
+      "dn": 125,
+      "outerDiameter": 133,
+      "wall": 4.5,
+      "alternativeWall": 5
+    },
+    {
+      "standard": "ГОСТ 10704",
+      "dn": 150,
+      "outerDiameter": 159,
+      "wall": 5
+    }
+  ]
+}

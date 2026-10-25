@@ -16,11 +16,11 @@ public sealed record PipeSupportsResult(IReadOnlyList<SupportPoint> Points, IRea
 /// </summary>
 public static class PipeSupports
 {
-    public static PipeSupportsResult Build(IReadOnlyList<PipeRoute> routes, INormsProvider norms, string pipeStandard)
+    public static PipeSupportsResult Build(IReadOnlyList<PipeRoute> routes, INormsProvider norms, string pipeStandard, IReadOnlyList<PipeSize>? sizes = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(norms);
-        var series = new PipeSeries(norms, pipeStandard);
+        var series = new PipeSeries(norms, pipeStandard, sizes);
         var table = norms.ByClause("табл. 6.7.1").OrderBy(r => r.Values["outerDiameter"]!.Value).ToList();
         var last = norms.Find("sp485.p6_7_1_26.lastSprinkler")!;
         var joints = norms.Find("sp485.p6_7_1_31.joints")!;

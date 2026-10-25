@@ -8,14 +8,21 @@ public sealed record SpecificationHeader(string Title);
 
 /// <summary>
 /// Спецификация оборудования, изделий и материалов по форме 1 ГОСТ 21.110-2013 в xlsx (A3, альбомная).
-/// Графы и ширины — по форме 1; заголовки разделов — в графе 2, подчёркнуты; позиции нумеруются подряд;
+/// Графы и ширины — по форме 1; заголовки разделов — в графе 2, подчёркнуты;
 /// обозначения документов — с годом утверждения; масса единицы, кг, где она известна (трубы — теоретическая масса 1 м);
 /// в конце — итог массы позиций с известной массой. Шрифт — GOST Common (ГОСТ 2.304, тип А).
-/// Рамку и основную надпись (ГОСТ Р 21.101, форма 3) проектировщик добавляет при выпуске листа.
+/// Позиции нумеруются заново в каждом разделе; строки — по 8 мм (длинный текст — кратно 8 мм).
+/// Внизу листа оставлено место под основную надпись (ГОСТ Р 21.101), её и рамку проектировщик добавляет при выпуске.
 /// </summary>
 public static class SpecificationXlsx
 {
     public const int HeaderRow = 3;
+
+    /// <summary>Высота строки формы 1 — 8 мм, пт; длинный текст занимает кратное число строк.</summary>
+    public const double RowHeightPt = 8 / 25.4 * 72;
+
+    /// <summary>Нижнее поле под основную надпись (ГОСТ Р 21.101, форма 3 — 55 мм) и рамку, мм.</summary>
+    public const double TitleBlockMm = 60;
 
     /// <summary>Шрифт листа (ГОСТ 2.304, тип А); если его нет на компьютере, Excel подставит замену.</summary>
     public const string Font = "GOST Common";
@@ -70,8 +77,21 @@ public static class SpecificationXlsx
         ws.Row(HeaderRow).Height = 45;
 
         var row = HeaderRow + 2;
-        var position = 0;
         var totalMass = 0.0;
+
+        // Высота строки: 8 мм на каждую строку текста самой длинной ячейки (оценка по ширине графы).
+        void Height(int r, params string[] texts)
+        {
+            var lines = 1;
+            for (var c = 0; c < texts.Length && c < WidthsMm.Length; c++)
+            {
+                var perLine = Math.Max(1, (int)(WidthsMm[c] / 1.8));
+                lines = Math.Max(lines, (int)Math.Ceiling((double)Math.Max(1, texts[c].Length) / perLine));
+            }
+
+            ws.Row(r).Height = RowHeightPt * lines;
+        }
+
         foreach (var (group, title) in Sections)
         {
             var items = takeoff.Items.Where(i => i.Group == group).ToList();
@@ -82,7 +102,9 @@ public static class SpecificationXlsx
 
             ws.Cell(row, 2).Value = title;
             ws.Cell(row, 2).Style.Font.SetUnderline().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+            ws.Row(row).Height = RowHeightPt;
             row++;
+            var position = 0;
             foreach (var item in items)
             {
                 ws.Cell(row, 1).Value = (++position).ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -100,6 +122,7 @@ public static class SpecificationXlsx
                 }
 
                 ws.Cell(row, 9).Value = item.Note ?? "";
+                Height(row, "", item.Name, item.Designation ?? "", "", item.Supplier ?? "", item.Unit, "", "", item.Note ?? "");
                 row++;
             }
         }
@@ -110,6 +133,7 @@ public static class SpecificationXlsx
             ws.Cell(row, 8).Value = Math.Round(totalMass, 1);
             ws.Cell(row, 8).Style.NumberFormat.Format = "0.0";
             ws.Row(row).Style.Font.SetBold();
+            ws.Row(row).Height = RowHeightPt;
             row++;
         }
 
@@ -128,8 +152,8 @@ public static class SpecificationXlsx
         ws.PageSetup.Margins.Left = 20 / 25.4;
         ws.PageSetup.Margins.Right = 5 / 25.4;
         ws.PageSetup.Margins.Top = 5 / 25.4;
-        ws.PageSetup.Margins.Bottom = 5 / 25.4;
-        ws.PageSetup.Footer.Right.AddText("Лист &P");
+        ws.PageSetup.Margins.Bottom = TitleBlockMm / 25.4;
+        ws.PageSetup.Margins.Footer = 0;
         book.SaveAs(path);
     }
 }

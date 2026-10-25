@@ -16,7 +16,8 @@ public sealed record DesignSettings(
     int SupplyDn,
     Pressure InletPressure,
     double? DesignVelocity = null,
-    bool RingValvesClosed = false);
+    bool RingValvesClosed = false,
+    IReadOnlyList<PipeSize>? PipeSizes = null);
 
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
@@ -172,7 +173,7 @@ public static class DesignCalculation
             .Select(x => x.Id)
             .ToList();
 
-        var series = new PipeSeries(norms, settings.PipeStandard);
+        var series = new PipeSeries(norms, settings.PipeStandard, settings.PipeSizes);
         var diameter = norms.Find("sp485.b1_2_6.diameter")!;
         var mu = diameter.Values["muMin"]!.Value;
         var open = zone.ToHashSet();
@@ -180,7 +181,7 @@ public static class DesignCalculation
         RingCheck? ringCheck = null;
         TreeSolution Solve(PipeRoute r, double pDictating)
         {
-            var built = RouteNetwork.Build(r, norms, settings.PipeStandard, settings.SprinklerK, Length.FromMillimeters(0), 1 + k);
+            var built = RouteNetwork.Build(r, norms, settings.PipeStandard, settings.SprinklerK, Length.FromMillimeters(0), 1 + k, settings.PipeSizes);
             var network = built.Network!;
             network = network with
             {

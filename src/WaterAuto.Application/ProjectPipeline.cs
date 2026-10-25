@@ -87,6 +87,7 @@ public static class ProjectPipeline
             return Stop();
         }
 
+        var pipeSizes = PipeSizes(normsDir);
         var settings = new DesignSettings(
             design.PipeSeriesStandard,
             new KFactor(design.SprinklerK),
@@ -95,7 +96,8 @@ public static class ProjectPipeline
             design.SupplyDn,
             new Pressure(design.InletPressure),
             design.DesignVelocity,
-            design.RingValvesClosed);
+            design.RingValvesClosed,
+            pipeSizes);
         HydrantInput? hydrants = null;
         if (design.Hydrants is { } h)
         {
@@ -161,14 +163,15 @@ public static class ProjectPipeline
         // Номинальная температура срабатывания (п. 6.2.16, табл. 6.4) и цвет колбы (ГОСТ Р 51043, табл. 2).
         var temperature = SprinklerTemperature.Choose(norms, design.MaxAmbientTemperature, sprinklerTemps);
         issues.AddRange(temperature.Issues);
-        var temperatureText = temperature.Choice is { } tc ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $", {tc.Nominal} °С (колба {tc.Color})") : "";
+        var temperatureText = temperature.Choice is { } tc ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $", {tc.Nominal} °С (колба — {Feminine(tc.Color)})") : "";
 
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
             sprinklerSupplier),
             design.FittingStandard.Length > 0 ? design.FittingStandard : null,
-            SteelDensity(normsDir));
+            SteelDensity(normsDir),
+            pipeSizes);
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
         var hydrantSet = HydrantEquipment.PathFor(normsDir);
         if (hydrants is not null && File.Exists(hydrantSet))
@@ -177,7 +180,7 @@ public static class ProjectPipeline
         }
 
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
-        var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard);
+        var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard, pipeSizes);
         issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
         var supportSet = SupportEquipment.PathFor(normsDir);
         if (File.Exists(supportSet))
@@ -232,6 +235,26 @@ public static class ProjectPipeline
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
         return new PipelineResult(true, files, issues, worst);
+    }
+
+    // Цвет колбы в данных — прилагательное мужского рода («красный»); в спецификации — «колба красная».
+    private static string Feminine(string color) => color.EndsWith("ый", StringComparison.Ordinal) || color.EndsWith("ий", StringComparison.Ordinal) || color.EndsWith("ой", StringComparison.Ordinal)
+        ? color[..^2] + (color.EndsWith("ий", StringComparison.Ordinal) && !color.EndsWith("кий", StringComparison.Ordinal) ? "яя" : "ая")
+        : color;
+
+    // Принятые размеры труб из data/catalog/pipe_sizes.json (наружный диаметр × стенка по DN).
+    private static List<PipeSize> PipeSizes(string normsDir)
+    {
+        var path = Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, "pipe_sizes.json");
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.GetProperty("sizes").EnumerateArray()
+            .Select(s => new PipeSize(s.GetProperty("standard").GetString()!, s.GetProperty("dn").GetInt32(), s.GetProperty("outerDiameter").GetDouble(), s.GetProperty("wall").GetDouble()))
+            .ToList();
     }
 
     // Плотность стали из data/catalog/materials.json — для теоретической массы труб в спецификации.

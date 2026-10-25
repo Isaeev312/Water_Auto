@@ -3,6 +3,9 @@ using WaterAuto.Core;
 namespace WaterAuto.Calc.Routing;
 
 /// <summary>Труба сортамента: строка табл. Б.2 и DN, которым она принята.</summary>
+/// <summary>Принятый размер трубы для DN (практика проекта): наружный диаметр × стенка; Kт — табл. Б.2 или формула Б.8.</summary>
+public sealed record PipeSize(string Standard, int Dn, double OuterDiameterMm, double WallMm);
+
 public sealed record SeriesPipe(int Dn, double OuterDiameterMm, double WallMm, PipeCharacteristic Kt, string PipeType, string NormId, string Standard = "");
 
 /// <summary>
@@ -18,9 +21,15 @@ public sealed class PipeSeries
     private readonly Dictionary<int, SeriesPipe?> _cache = [];
     private readonly List<Issue> _issues = [];
 
-    public PipeSeries(INormsProvider norms, string standard)
+    private readonly INormsProvider _norms;
+    private readonly IReadOnlyList<PipeSize> _sizes;
+
+    /// <param name="sizes">Принятые размеры труб по DN; для DN из списка вместо первой строки табл. Б.2 берётся этот размер.</param>
+    public PipeSeries(INormsProvider norms, string standard, IReadOnlyList<PipeSize>? sizes = null)
     {
         ArgumentNullException.ThrowIfNull(norms);
+        _norms = norms;
+        _sizes = sizes ?? [];
         _standard = standard;
         var parts = Parse(standard);
         _rows = norms.ByClause("табл. Б.2")
@@ -85,12 +94,26 @@ public sealed class PipeSeries
 
         var rows = _rows.Where(r => (int)r.Values["dn"]!.Value == actual).ToList();
         var row = rows[0];
+        var designation = _designation(row);
+        var baseStandard = row.Attributes.GetValueOrDefault("standard") ?? "";
+        if (_sizes.FirstOrDefault(s => s.Dn == actual && s.Standard == baseStandard) is { } size)
+        {
+            // Принятый размер: Kт по табл. Б.2, если там есть такая труба, иначе по формуле Б.8 (п. Б.1.2.9).
+            var kt = Hydraulics.PipeCharacteristics.Resolve(_norms, baseStandard, actual, new Length(size.OuterDiameterMm / 1000), new Length(size.WallMm / 1000));
+            if (kt is not null)
+            {
+                return _cache[dn] = new SeriesPipe(actual, size.OuterDiameterMm, size.WallMm, kt.Value, row.Attributes.GetValueOrDefault("pipeType") ?? "", kt.NormId, designation);
+            }
+
+            _issues.Add(new Issue("network.pipeSize", IssueLevel.Warning, string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"Принятый размер {size.OuterDiameterMm}×{size.WallMm} мм для DN {actual} нельзя рассчитать (нет в табл. Б.2 и вне формулы Б.8) — взята труба табл. Б.2."), row.Id, "Б.1.2.9"));
+        }
+
         if (actual != dn)
         {
             _issues.Add(new Issue("network.dnSubstituted", IssueLevel.Info, $"DN {dn} (табл. Б.4) нет в сортаменте {_standard} — принят DN {actual}.", row.Id, "табл. Б.4"));
         }
 
-        if (rows.Count > 1)
+        if (rows.Count > 1 && !_sizes.Any(s => s.Dn == actual && s.Standard == baseStandard))
         {
             _issues.Add(new Issue("network.pipeAmbiguous", IssueLevel.Warning, $"Для {_standard} DN {actual} в табл. Б.2 несколько труб — принята {row.Id}; задайте трубу явно.", row.Id, "табл. Б.2"));
         }

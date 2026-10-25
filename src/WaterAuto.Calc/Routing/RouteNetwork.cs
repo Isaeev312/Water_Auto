@@ -10,11 +10,11 @@ public sealed record RouteNetworkResult(HydraulicNetwork? Network, IReadOnlyList
 /// </summary>
 public static class RouteNetwork
 {
-    public static RouteNetworkResult Build(PipeRoute route, INormsProvider norms, string standard, KFactor sprinklerK, Length elevation, double lossMultiplier = 1.0)
+    public static RouteNetworkResult Build(PipeRoute route, INormsProvider norms, string standard, KFactor sprinklerK, Length elevation, double lossMultiplier = 1.0, IReadOnlyList<PipeSize>? sizes = null)
     {
         ArgumentNullException.ThrowIfNull(route);
         ArgumentNullException.ThrowIfNull(norms);
-        var series = new PipeSeries(norms, standard);
+        var series = new PipeSeries(norms, standard, sizes);
 
         var nodes = route.Nodes.Select(n => n.Kind switch
         {
