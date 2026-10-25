@@ -4,6 +4,7 @@ namespace WaterAuto.Core;
 public sealed record NormRecord(
     string Id,
     string Doc,
+    string Edition,
     string Clause,
     IReadOnlyDictionary<string, double?> Values,
     IReadOnlyDictionary<string, string> Units,
