@@ -23,7 +23,7 @@ public static class RouteNetwork
             _ => new NetworkNode(n.Id, NodeKind.Tee, elevation),
         }).ToList();
         var pipes = new List<NetworkPipe>();
-        foreach (var s in route.Segments)
+        foreach (var s in route.Segments.Concat(route.Loops))
         {
             if (series.Pick(s.Dn) is { } pipe)
             {

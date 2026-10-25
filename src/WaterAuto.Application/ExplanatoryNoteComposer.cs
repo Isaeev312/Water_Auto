@@ -174,7 +174,7 @@ public static class ExplanatoryNoteComposer
 
     private static NoteSection Routing(NoteInputs i)
     {
-        var segments = i.Routing.Routes.SelectMany(r => r.Segments).ToList();
+        var segments = i.Routing.Routes.SelectMany(r => r.Segments.Concat(r.Loops)).ToList();
         var rows = segments
             .GroupBy(s => (s.Role, s.Dn))
             .OrderBy(g => g.Key.Role)
@@ -309,6 +309,12 @@ public static class ExplanatoryNoteComposer
         }
 
         blocks.Add(new NoteFormula($"*P*_{{вв}} = *p*_{{1}} + ΣΔ*P*′ = {F(pStart, "0.000")} + {F(d.Path.Sum(x => x.LossWithLocal.Mpa), "0.000")} = **{F(d.InletNodePressure.Mpa, "0.000")} МПа**.", "5.8", []));
+        if (d.Ring is { } ring)
+        {
+            blocks.Add(new NoteParagraph($"**Кольцевая сеть.** Питающий трубопровод закольцован. Расчёт выполнен двумя способами: расчётом сети с кольцом (узловой метод, баланс расходов в узлах) и по п. Б.1.2.16.1 — как тупиковая сеть без замыкающего участка при {F(ring.SharePercent, "0")} % расчётного расхода по полукольцу{(ring.SharePercent >= 100 ? " (на кольце есть нормально закрытые разделительные запорные устройства)" : "")}. Замыкающий участок принят в наиболее удалённой от ввода части кольца."));
+            blocks.Add(new NoteFormula($"*P*_{{вв}} = max(*P*_{{кольцо}}; *P*_{{Б.1.2.16.1}}) = max({F(ring.SolverInletPressure.Mpa, "0.000")}; {F(ring.NormativeInletPressure.Mpa, "0.000")}) = **{F(d.InletNodePressure.Mpa, "0.000")} МПа** — принят {(ring.NormativeTaken ? "нормативный вариант" : "расчёт кольца")}.", "5.12", []));
+        }
+
         if (d.Hydrants is { } h)
         {
             blocks.AddRange(HydrantBlocks(d, h, qAup));

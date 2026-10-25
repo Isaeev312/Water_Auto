@@ -75,6 +75,32 @@ public class DesignCalculationTests
         r.Issues.ShouldContain(i => i.Code == "vpv.diaphragm" && i.Clause == "7.11");
     }
 
+    private static DesignResult CalculateRing(bool valvesClosed)
+    {
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var layout = SprinklerLayouter.Layout(plan, Rules);
+        var route = PipeRouter.Route(plan, layout, Norms, Rules, new Pressure(0.3), ring: true).Routes[0];
+        route.Loops.ShouldNotBeEmpty();
+        return DesignCalculation.Run(route, Norms, Rules, Settings with { RingValvesClosed = valvesClosed });
+    }
+
+    [Fact]
+    public void Ring_takes_the_heavier_of_the_loop_solver_and_B_1_2_16_1()
+    {
+        var r = CalculateRing(valvesClosed: false);
+        var ring = r.Ring.ShouldNotBeNull();
+        ring.SharePercent.ShouldBe(50);
+        r.InletNodePressure.Mpa.ShouldBe(Math.Max(ring.SolverInletPressure.Mpa, ring.NormativeInletPressure.Mpa), 1e-9);
+        ring.NormativeTaken.ShouldBe(ring.NormativeInletPressure.Mpa > ring.SolverInletPressure.Mpa);
+        r.NormIds.ShouldContain("sp485.b1_2_16_1.ringShare");
+
+        // Нормально закрытые разделительные устройства — 100 % на полуветвь: напор не меньше, чем при 50 %.
+        var closed = CalculateRing(valvesClosed: true);
+        closed.Ring!.SharePercent.ShouldBe(100);
+        closed.Ring.NormativeInletPressure.Mpa.ShouldBeGreaterThanOrEqualTo(ring.NormativeInletPressure.Mpa - 1e-9);
+    }
+
     [Fact]
     public void Worst_zone_is_chosen_by_pump_pressure_among_branch_ends()
     {

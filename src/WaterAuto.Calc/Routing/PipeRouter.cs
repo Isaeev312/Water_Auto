@@ -13,7 +13,8 @@ public static class PipeRouter
     private const double Tol = Polygon.ToleranceMm;
     private const double SampleMm = 50;
 
-    public static RoutingResult Route(FloorPlan plan, SprinklerLayout layout, INormsProvider norms, LayoutRules rules, Pressure designPressure)
+    /// <param name="ring">Кольцевой питающий трубопровод (рис. Б.2, секции В, Г): две ветви у концов рядов и две перемычки.</param>
+    public static RoutingResult Route(FloorPlan plan, SprinklerLayout layout, INormsProvider norms, LayoutRules rules, Pressure designPressure, bool ring = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(layout);
@@ -43,7 +44,7 @@ public static class PipeRouter
             }
 
             var angle = layout.Zones.FirstOrDefault(z => z.RoomId == room.Id)?.RowAngleRad ?? 0;
-            var route = new RoomRouter(room, plan, sprinklers, inlet, angle, rules.MaxSpacing.Millimeters, table, issues).Build();
+            var route = new RoomRouter(room, plan, sprinklers, inlet, angle, rules.MaxSpacing.Millimeters, table, issues, ring).Build();
             if (route is not null)
             {
                 routes.Add(route);
@@ -77,10 +78,11 @@ public static class PipeRouter
         private readonly Polygon _contourPolygon;
         private readonly List<Polygon> _holes;
         private readonly List<Box> _columns;
+        private readonly bool _ring;
 
-        public RoomRouter(Room room, FloorPlan plan, List<PlacedSprinkler> sprinklers, Inlet inlet, double angle, double s, DnTable table, List<Issue> issues)
+        public RoomRouter(Room room, FloorPlan plan, List<PlacedSprinkler> sprinklers, Inlet inlet, double angle, double s, DnTable table, List<Issue> issues, bool ring)
         {
-            (_room, _sprinklers, _inlet, _s, _table, _issues) = (room, sprinklers, inlet, s, table, issues);
+            (_room, _sprinklers, _inlet, _s, _table, _issues, _ring) = (room, sprinklers, inlet, s, table, issues, ring);
             (_cos, _sin) = angle == 0 ? (1.0, 0.0) : (Math.Cos(angle), Math.Sin(angle));
             _contour = room.Contour.Vertices.Select(Local).ToList();
             _contourPolygon = new Polygon(_contour);
@@ -105,7 +107,7 @@ public static class PipeRouter
             var inlet = Local(_inlet.Location);
 
             // Питающий — между соседними вертикалями оросителей или у концов рядов.
-            var candidates = xs.Zip(xs.Skip(1), (a, b) => (a + b) / 2).Append(xs[0] - (_s / 4)).Append(xs[^1] + (_s / 4));
+            var candidates = xs.Zip(xs.Skip(1), (a, b) => (a + b) / 2).Append(xs[0] - (_s / 4)).Append(xs[^1] + (_s / 4)).ToList();
             var best = candidates
                 .Select(x => Main(x, runs, inlet))
                 .Where(m => m is not null)
@@ -133,6 +135,26 @@ public static class PipeRouter
                 remaining.RemoveAll(extra.Main.Reached.Contains);
             }
 
+            // Кольцо: вторая ветвь питающего у другого конца рядов; нижняя перемычка — в дереве, дальняя от ввода — замыкающая.
+            (double Y, double Mid)? ring = null;
+            if (_ring)
+            {
+                if (mains.Count > 1 || remaining.Count > 0)
+                {
+                    _issues.Add(new Issue("routing.ringSkipped", IssueLevel.Warning, $"Помещение «{_room.Name}»: ряды разделены зонами запрета — кольцо не строится, сеть тупиковая.", _room.Id, Location: _room.Contour.Centroid));
+                }
+                else if (Ring(best, candidates, inlet) is { } r)
+                {
+                    mains.Add(r.Leg);
+                    links.Add((0, r.LinkY));
+                    ring = (r.CloseY, r.Mid);
+                }
+                else
+                {
+                    _issues.Add(new Issue("routing.ringSkipped", IssueLevel.Warning, $"Помещение «{_room.Name}»: нет места для второй ветви или перемычек кольца — сеть тупиковая.", _room.Id, Location: _room.Contour.Centroid));
+                }
+            }
+
             foreach (var run in remaining)
             {
                 _issues.Add(new Issue(
@@ -151,7 +173,42 @@ public static class PipeRouter
                 return null;
             }
 
-            return Assemble(mains, links, supply);
+            return Assemble(mains, links, supply, ring);
+        }
+
+        // Вторая ветвь кольца: достаёт те же ряды, делит оросители поровну с первой; перемычки ниже первого и выше последнего ряда.
+        private ((double X, double Lo, double Hi, List<Run> Reached, int Imbalance) Leg, double LinkY, double CloseY, double Mid)? Ring(
+            (double X, double Lo, double Hi, List<Run> Reached, int Imbalance) first, List<double> candidates, PlanPoint inlet)
+        {
+            var runs = first.Reached;
+            var ys = runs.Select(r => r.Y).Distinct().Order().ToList();
+            var items = runs.SelectMany(r => r.Items).ToList();
+            ((double X, double Lo, double Hi, List<Run> Reached, int Imbalance) Leg, double LinkY, double CloseY, double Mid)? best = null;
+            var bestBalance = -1;
+            foreach (var x in candidates.Where(x => Math.Abs(x - first.X) > _s))
+            {
+                if (Main(x, runs, inlet) is not { } m || m.Reached.Count != runs.Count)
+                {
+                    continue;
+                }
+
+                var mid = (first.X + x) / 2;
+                var near = items.Count(i => (i.At.XMm < mid) == (first.X < mid));
+                var balance = Math.Min(near, items.Count - near);
+                double lo = Math.Max(first.Lo, m.Lo), hi = Math.Min(first.Hi, m.Hi);
+                var bottom = (Math.Max(lo, ys[0] - _s) + ys[0]) / 2;
+                var top = (ys[^1] + Math.Min(hi, ys[^1] + _s)) / 2;
+                if (balance <= bestBalance || bottom <= lo + Tol || top >= hi - Tol
+                    || !Clear(new PlanPoint(first.X, bottom), new PlanPoint(x, bottom)) || !Clear(new PlanPoint(first.X, top), new PlanPoint(x, top)))
+                {
+                    continue;
+                }
+
+                var (link, close) = Math.Abs(bottom - inlet.YMm) <= Math.Abs(top - inlet.YMm) ? (bottom, top) : (top, bottom);
+                (best, bestBalance) = ((m, link, close, mid), balance);
+            }
+
+            return best;
         }
 
         // Дополнительный питающий: больше достигнутых рядов, затем короче перемычка; перемычка не ложится на ряды.
@@ -307,7 +364,7 @@ public static class PipeRouter
             return best;
         }
 
-        private PipeRoute Assemble(List<(double X, double Lo, double Hi, List<Run> Reached, int Imbalance)> mains, List<(int Parent, double Y)> links, List<PlanPoint> supply)
+        private PipeRoute Assemble(List<(double X, double Lo, double Hi, List<Run> Reached, int Imbalance)> mains, List<(int Parent, double Y)> links, List<PlanPoint> supply, (double Y, double Mid)? ring = null)
         {
             var nodes = new Dictionary<string, (RouteNodeKind Kind, PlanPoint At, string? Sprinkler)>();
             var edges = new List<(string A, string B, RouteSegmentRole Role)>();
@@ -347,13 +404,19 @@ public static class PipeRouter
                 return id;
             }
 
-            var rowTees = new Dictionary<Run, string>();
+            var rowTees = new Dictionary<(int, Run), string>();
             for (var m = 0; m < mains.Count; m++)
             {
                 foreach (var run in mains[m].Reached)
                 {
-                    rowTees[run] = On(m, run.Y);
+                    rowTees[(m, run)] = On(m, run.Y);
                 }
+            }
+
+            var closures = new List<(string A, string B)>();
+            if (ring is { } rc)
+            {
+                closures.Add((On(0, rc.Y), On(1, rc.Y)));
             }
 
             for (var k = 0; k < links.Count; k++)
@@ -371,14 +434,16 @@ public static class PipeRouter
                 }
             }
 
-            // Рядки: от узла на питающем в обе стороны по порядку.
-            foreach (var main in mains)
+            // Рядки: от узла на питающем в обе стороны по порядку; в кольце ряд делится по середине между ветвями.
+            for (var m = 0; m < mains.Count; m++)
             {
+                var main = mains[m];
+                bool Mine((PlanPoint At, PlacedSprinkler S) i) => ring is not { } rr || (i.At.XMm < rr.Mid) == (main.X < rr.Mid);
                 foreach (var run in main.Reached)
                 {
-                    foreach (var side in new[] { run.Items.Where(i => i.At.XMm < main.X).OrderByDescending(i => i.At.XMm), run.Items.Where(i => i.At.XMm > main.X).OrderBy(i => i.At.XMm) })
+                    foreach (var side in new[] { run.Items.Where(i => Mine(i) && i.At.XMm < main.X).OrderByDescending(i => i.At.XMm), run.Items.Where(i => Mine(i) && i.At.XMm > main.X).OrderBy(i => i.At.XMm) })
                     {
-                        var from = rowTees[run];
+                        var from = rowTees[(m, run)];
                         foreach (var (at, s) in side)
                         {
                             nodes[s.Id] = (RouteNodeKind.Sprinkler, at, s.Id);
@@ -389,12 +454,12 @@ public static class PipeRouter
                 }
             }
 
-            WarnColumns(edges, nodes);
-            return Orient(nodes, edges);
+            WarnColumns([.. edges, .. closures.Select(c => (c.A, c.B, RouteSegmentRole.Main))], nodes);
+            return Orient(nodes, edges, closures);
         }
 
         // Направление участков — от ввода; число оросителей за участком и начальный DN.
-        private PipeRoute Orient(Dictionary<string, (RouteNodeKind Kind, PlanPoint At, string? Sprinkler)> nodes, List<(string A, string B, RouteSegmentRole Role)> edges)
+        private PipeRoute Orient(Dictionary<string, (RouteNodeKind Kind, PlanPoint At, string? Sprinkler)> nodes, List<(string A, string B, RouteSegmentRole Role)> edges, List<(string A, string B)> closures)
         {
             var adjacent = nodes.Keys.ToDictionary(k => k, _ => new List<(string Other, RouteSegmentRole Role)>());
             foreach (var (a, b, role) in edges)
@@ -435,7 +500,19 @@ public static class PipeRouter
                 .Where(n => seen.Contains(n.Key))
                 .Select(n => new RouteNode(n.Key, n.Value.Kind, n.Key == _inlet.Id ? _inlet.Location : World(n.Value.At), n.Value.Sprinkler))
                 .ToList();
-            return new PipeRoute(_room.Id, _inlet.Id, routeNodes, segments);
+
+            // Замыкающий участок кольца: начальный DN — как у питающих участков по его концам (уточняется по Б.5).
+            var loops = closures
+                .Select((c, k) => new RouteSegment(
+                    $"{_room.Id}.P{segments.Count + k + 1}",
+                    c.A,
+                    c.B,
+                    RouteSegmentRole.Main,
+                    Length.FromMillimeters(Dist(nodes[c.A].At, nodes[c.B].At)),
+                    0,
+                    segments.Where(s => s.Role == RouteSegmentRole.Main && (s.From == c.A || s.To == c.A || s.From == c.B || s.To == c.B)).Select(s => s.Dn).DefaultIfEmpty(_table.Pick(1)).Max()))
+                .ToList();
+            return new PipeRoute(_room.Id, _inlet.Id, routeNodes, segments, loops.Count > 0 ? loops : null);
         }
 
         private void WarnColumns(List<(string A, string B, RouteSegmentRole Role)> edges, Dictionary<string, (RouteNodeKind Kind, PlanPoint At, string? Sprinkler)> nodes)

@@ -50,7 +50,8 @@ public static class MaterialTakeoffBuilder
             var outgoing = route.Segments.ToLookup(s => s.From);
             int Dn(RouteSegment s) => series.Pick(s.Dn)?.Dn ?? s.Dn;
 
-            foreach (var s in route.Segments)
+            var closureAt = route.Loops.SelectMany(c => new[] { (Node: c.From, Seg: c), (Node: c.To, Seg: c) }).ToLookup(x => x.Node, x => x.Seg);
+            foreach (var s in route.Segments.Concat(route.Loops))
             {
                 if (series.Pick(s.Dn) is { } pipe)
                 {
@@ -62,8 +63,9 @@ public static class MaterialTakeoffBuilder
             {
                 var inSeg = incoming[node.Id];
                 var inDn = Dn(inSeg);
-                var outs = outgoing[node.Id].ToList();
-                var straight = outs.FirstOrDefault(o => Collinear(nodes, inSeg, o));
+                // Замыкающий участок кольца на узле — ещё одно ответвление (для фасонной части).
+                var outs = outgoing[node.Id].Concat(closureAt[node.Id]).ToList();
+                var straight = outgoing[node.Id].FirstOrDefault(o => Collinear(nodes, inSeg, o));
 
                 if (node.Kind == RouteNodeKind.Sprinkler)
                 {

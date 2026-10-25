@@ -95,13 +95,14 @@ public static class PlanDxfWriter
         {
             var nodes = route.Nodes.ToDictionary(n => n.Id);
             var byTo = route.Segments.ToDictionary(s => s.To);
-            foreach (var seg in route.Segments)
+            var loops = route.Loops.Select(s => s.Id).ToHashSet();
+            foreach (var seg in route.Segments.Concat(route.Loops))
             {
                 var a = nodes[seg.From].Location;
                 var b = nodes[seg.To].Location;
                 doc.Entities.Add(new Line(new XYZ(a.XMm, a.YMm, 0), new XYZ(b.XMm, b.YMm, 0)) { Layer = pipes });
 
-                if (DxfDrawing.NeedsLabel(seg, byTo))
+                if (loops.Contains(seg.Id) || DxfDrawing.NeedsLabel(seg, byTo))
                 {
                     doc.Entities.Add(DxfDrawing.Label(seg, new XY(a.XMm, a.YMm), new XY(b.XMm, b.YMm), style.TextHeightMm, segments));
                 }

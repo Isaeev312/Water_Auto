@@ -227,6 +227,30 @@ public class PipeRouterTests
     }
 
     [Fact]
+    public void Ring_main_closes_around_the_rows_with_one_closing_segment()
+    {
+        var plan = Plan(Rect(0, 0, 30000, 20000), new PlanPoint(500, 500));
+        var layout = SprinklerLayouter.Layout(plan, Rules);
+        var routing = PipeRouter.Route(plan, layout, Norms, Rules, Low, ring: true);
+        var route = routing.Routes.ShouldHaveSingleItem();
+        RouteChecks.ShouldBeTree(route);
+        route.Loops.ShouldHaveSingleItem().Role.ShouldBe(RouteSegmentRole.Main);
+        route.Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
+        var nodes = route.Nodes.ToDictionary(n => n.Id);
+        nodes.ShouldContainKey(route.Loops[0].From);
+        nodes.ShouldContainKey(route.Loops[0].To);
+
+        // Замыкающий участок — дальний от ввода: все питающие участки дерева не выше его.
+        var closeY = nodes[route.Loops[0].From].Location.YMm;
+        route.Segments.Where(s => s.Role == RouteSegmentRole.Main)
+            .ShouldAllBe(s => nodes[s.From].Location.YMm <= closeY + 1 && nodes[s.To].Location.YMm <= closeY + 1);
+
+        // Две ветви кольца: у питающих участков две разные абсциссы вертикалей.
+        route.Segments.Where(s => s.Role == RouteSegmentRole.Main && Math.Abs(nodes[s.From].Location.XMm - nodes[s.To].Location.XMm) < 1)
+            .Select(s => Math.Round(nodes[s.From].Location.XMm)).Distinct().Count().ShouldBe(2);
+    }
+
+    [Fact]
     public void Routed_network_solves_with_the_tree_solver()
     {
         var (_, _, routing) = Route(Plan(Rect(0, 0, 30000, 20000), new PlanPoint(500, 500)));

@@ -75,7 +75,7 @@ public static class ProjectPipeline
         issues.AddRange(layout.Issues);
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
-        var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero);
+        var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero, design.Ring);
         issues.AddRange(routing.Issues);
         if (design.MaxSprinklersPerBranch is { } maxBranch)
         {
@@ -94,7 +94,8 @@ public static class ProjectPipeline
             new Length(design.SupplyLength),
             design.SupplyDn,
             new Pressure(design.InletPressure),
-            design.DesignVelocity);
+            design.DesignVelocity,
+            design.RingValvesClosed);
         HydrantInput? hydrants = null;
         if (design.Hydrants is { } h)
         {

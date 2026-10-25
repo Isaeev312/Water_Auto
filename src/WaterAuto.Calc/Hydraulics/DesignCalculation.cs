@@ -15,7 +15,8 @@ public sealed record DesignSettings(
     Length SupplyLength,
     int SupplyDn,
     Pressure InletPressure,
-    double? DesignVelocity = null);
+    double? DesignVelocity = null,
+    bool RingValvesClosed = false);
 
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
@@ -43,6 +44,12 @@ public sealed record HydrantResult(
     /// <summary>Давление у клапана ПК при фактическом расходе: (q / K)².</summary>
     public Pressure ValvePressure => new(Math.Pow(JetFlowActual.LitersPerSecond / K, 2));
 }
+
+/// <summary>
+/// Кольцевая сеть (ADR 0011): давление в точке подключения по расчёту кольца и по нормативному варианту Б.1.2.16.1
+/// (тупиковая схема без замыкающего участка, расход по полукольцу — SharePercent); принят больший.
+/// </summary>
+public sealed record RingCheck(Pressure SolverInletPressure, Pressure NormativeInletPressure, double SharePercent, bool NormativeTaken);
 
 /// <summary>Кандидат в диктующие: ороситель в конце ветви и давление насоса при зоне вокруг него.</summary>
 public sealed record ZoneCandidate(string SprinklerId, Pressure PumpPressure);
@@ -85,7 +92,8 @@ public sealed record DesignResult(
     double FirstSegmentDiameterMm,
     IReadOnlyList<Issue> Issues,
     IReadOnlyList<ZoneCandidate> Candidates,
-    HydrantResult? Hydrants = null);
+    HydrantResult? Hydrants = null,
+    RingCheck? Ring = null);
 
 /// <summary>
 /// Проектный расчёт спринклерной АУП по приложению Б СП 485 (ADR 0008):
@@ -168,6 +176,8 @@ public static class DesignCalculation
         var diameter = norms.Find("sp485.b1_2_6.diameter")!;
         var mu = diameter.Values["muMin"]!.Value;
         var open = zone.ToHashSet();
+        var ringShare = norms.Find("sp485.b1_2_16_1.ringShare");
+        RingCheck? ringCheck = null;
         TreeSolution Solve(PipeRoute r, double pDictating)
         {
             var built = RouteNetwork.Build(r, norms, settings.PipeStandard, settings.SprinklerK, Length.FromMillimeters(0), 1 + k);
@@ -176,7 +186,28 @@ public static class DesignCalculation
             {
                 Nodes = network.Nodes.Select(x => x.Kind == NodeKind.Sprinkler && !open.Contains(x.Id) ? x with { Kind = NodeKind.Tee, Emitter = null } : x).ToList(),
             };
-            return TreeSolver.SolveDesign(network, dictating.Id, new Pressure(pDictating));
+            if (r.Loops.Count == 0 || ringShare is null)
+            {
+                return TreeSolver.SolveDesign(network, dictating.Id, new Pressure(pDictating));
+            }
+
+            // Кольцо: расчёт сети с кольцом и нормативный вариант Б.1.2.16.1 — тупиковая схема без замыкающих участков,
+            // потери на трубах кольца при доле расхода полукольца (потери ∝ Q²); принимается больший напор (ADR 0011).
+            var loop = LoopSolver.SolveDesign(network, dictating.Id, new Pressure(pDictating));
+            var share = ringShare.Values[settings.RingValvesClosed ? "closedValves" : "open"]!.Value;
+            var ringPipes = RingPipes(r);
+            var closures = r.Loops.Select(c => c.Id).ToHashSet();
+            var cut = network with
+            {
+                Pipes = network.Pipes
+                    .Where(x => !closures.Contains(x.Id))
+                    .Select(x => ringPipes.Contains(x.Id) ? x with { LossMultiplier = x.LossMultiplier * Math.Pow(share / 100, 2) } : x)
+                    .ToList(),
+            };
+            var normative = TreeSolver.SolveDesign(cut, dictating.Id, new Pressure(pDictating));
+            var take = normative.SourcePressure.Mpa > loop.SourcePressure.Mpa;
+            ringCheck = new RingCheck(loop.SourcePressure, normative.SourcePressure, share, take);
+            return take ? normative : loop;
         }
 
         // Б.5: диаметры участков, по которым идёт расход, — по принятой скорости V; повтор до установления диаметров.
@@ -214,7 +245,7 @@ public static class DesignCalculation
             var pipe = series.Pick(seg.Dn)!;
             var flow = solution.PipeFlows[seg.Id];
             var loss = solution.PipeLosses[seg.Id];
-            path.Add(new PathSegment(seg.Id, seg.From, seg.To, pipe.Dn, seg.Length, pipe.Kt, flow, new Pressure(loss.Mpa / (1 + k)), loss, Velocity(flow.LitersPerSecond, pipe)));
+            path.Add(new PathSegment(seg.Id, seg.From, seg.To, pipe.Dn, seg.Length, pipe.Kt, flow, new Pressure(loss.Mpa / (1 + k)), loss, Velocity(Math.Abs(flow.LitersPerSecond), pipe)));
         }
 
         path.Reverse();
@@ -232,6 +263,14 @@ public static class DesignCalculation
         var z = Pressure.FromHeight(settings.DictatingAboveAxis).Mpa;
         var pump = solution.SourcePressure.Mpa + ((1 + k) * supplyLinear) + z - settings.InletPressure.Mpa;
         var supplyVelocity = supply is null ? 0 : Velocity(qPump, supply);
+
+        foreach (var c in current.Loops)
+        {
+            if (solution.PipeFlows.TryGetValue(c.Id, out var cq) && series.Pick(c.Dn) is { } cp && Velocity(Math.Abs(cq.LitersPerSecond), cp) is var cv && cv > vMax + 1e-9)
+            {
+                issues.Add(new Issue("design.velocity", IssueLevel.Warning, $"Замыкающий участок кольца {c.Id} DN{cp.Dn}: скорость {cv:0.00} м/с больше {vMax} м/с — увеличить диаметр.", c.Id, "6.7.1.37"));
+            }
+        }
 
         foreach (var x in path.Where(x => x.Velocity > vMax + 1e-9))
         {
@@ -276,7 +315,7 @@ public static class DesignCalculation
             water / (maxFill / 100),
             maxFill,
             jockey.Values["minVolume"]!.Value,
-            [.. parameters.NormIds, factorRecord.Id, circle.Id, local.Id, velocity.Id, jockey.Id, fill.Id, diameter.Id],
+            [.. parameters.NormIds, factorRecord.Id, circle.Id, local.Id, velocity.Id, jockey.Id, fill.Id, diameter.Id, .. (ringCheck is not null && ringShare is not null ? [ringShare.Id] : Array.Empty<string>())],
             parameters,
             current,
             settings.DesignVelocity,
@@ -284,7 +323,44 @@ public static class DesignCalculation
             settings.DesignVelocity is { } dv ? DiameterMm(q1, mu, dv) : 0,
             issues,
             [],
-            hydrant);
+            hydrant,
+            ringCheck);
+    }
+
+    // Трубы кольца: замыкающие участки и путь по дереву между их концами.
+    private static HashSet<string> RingPipes(PipeRoute route)
+    {
+        var byTo = route.Segments.ToDictionary(s => s.To);
+        var result = new HashSet<string>();
+        foreach (var c in route.Loops)
+        {
+            result.Add(c.Id);
+            var up = new List<RouteSegment>();
+            for (var id = c.From; byTo.TryGetValue(id, out var s); id = s.From)
+            {
+                up.Add(s);
+            }
+
+            var ancestors = up.Select(s => s.From).Prepend(c.From).ToHashSet();
+            var meet = c.To;
+            for (var id = c.To; !ancestors.Contains(id) && byTo.TryGetValue(id, out var s); id = s.From)
+            {
+                result.Add(s.Id);
+                meet = s.From;
+            }
+
+            foreach (var s in up)
+            {
+                if (s.To == meet)
+                {
+                    break;
+                }
+
+                result.Add(s.Id);
+            }
+        }
+
+        return result;
     }
 
     // Б.1.3.16: n кранов в узле ввода трассы через трубопровод ПК. Если им нужно больше давления, чем даёт спринклерная сеть,
@@ -345,10 +421,10 @@ public static class DesignCalculation
     // Новые DN участков с расходом по Б.5; выше по течению DN не меньше, чем на участках за ним. null — без изменений.
     private static PipeRoute? Resize(PipeRoute route, TreeSolution solution, PipeSeries series, double mu, double velocity, List<Issue> issues)
     {
-        var dn = route.Segments.ToDictionary(s => s.Id, s => series.Pick(s.Dn)?.Dn ?? s.Dn);
-        foreach (var s in route.Segments)
+        var dn = route.Segments.Concat(route.Loops).ToDictionary(s => s.Id, s => series.Pick(s.Dn)?.Dn ?? s.Dn);
+        foreach (var s in route.Segments.Concat(route.Loops))
         {
-            var q = solution.PipeFlows.TryGetValue(s.Id, out var f) ? f.LitersPerSecond : 0;
+            var q = solution.PipeFlows.TryGetValue(s.Id, out var f) ? Math.Abs(f.LitersPerSecond) : 0;
             if (q <= 1e-9)
             {
                 continue;
@@ -371,8 +447,14 @@ public static class DesignCalculation
             Up(root);
         }
 
-        var changed = route.Segments.Any(s => dn[s.Id] != (series.Pick(s.Dn)?.Dn ?? s.Dn));
-        return changed ? route with { Segments = route.Segments.Select(s => s with { Dn = dn[s.Id] }).ToList() } : null;
+        var changed = route.Segments.Concat(route.Loops).Any(s => dn[s.Id] != (series.Pick(s.Dn)?.Dn ?? s.Dn));
+        return changed
+            ? route with
+            {
+                Segments = route.Segments.Select(s => s with { Dn = dn[s.Id] }).ToList(),
+                Closures = route.Closures?.Select(s => s with { Dn = dn[s.Id] }).ToList(),
+            }
+            : null;
     }
 
     // Шаг вдоль ряда l и между рядами b у оросителя: ближайший сосед и ближайший в перпендикулярном направлении, м.

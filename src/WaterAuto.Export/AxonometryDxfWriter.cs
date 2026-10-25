@@ -60,12 +60,13 @@ public static class AxonometryDxfWriter
         {
             var nodes = route.Nodes.ToDictionary(n => n.Id);
             var byTo = route.Segments.ToDictionary(s => s.To);
-            foreach (var seg in route.Segments)
+            var loops = route.Loops.Select(s => s.Id).ToHashSet();
+            foreach (var seg in route.Segments.Concat(route.Loops))
             {
                 var a = Project(nodes[seg.From].Location, z, style);
                 var b = Project(nodes[seg.To].Location, z, style);
                 doc.Entities.Add(new Line(At(a), At(b)) { Layer = pipes });
-                if (DxfDrawing.NeedsLabel(seg, byTo))
+                if (loops.Contains(seg.Id) || DxfDrawing.NeedsLabel(seg, byTo))
                 {
                     doc.Entities.Add(DxfDrawing.Label(seg, a, b, style.TextHeightMm, labels));
                 }

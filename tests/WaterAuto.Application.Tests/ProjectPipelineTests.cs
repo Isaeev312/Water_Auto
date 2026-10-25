@@ -50,7 +50,7 @@ public sealed class ProjectPipelineTests : IDisposable
         return path;
     }
 
-    private string Project(double k = 0.47, ProjectHydrants? hydrants = null) =>
+    private string Project(double k = 0.47, ProjectHydrants? hydrants = null, bool ring = false) =>
         Write("project.waproj", ProjectFile.ToJson(new ProjectFile
         {
             Name = "Тестовая автостоянка",
@@ -67,6 +67,7 @@ public sealed class ProjectPipelineTests : IDisposable
                 InletPressure = 0.1,
                 DesignVelocity = 5,
                 Hydrants = hydrants,
+                Ring = ring,
             },
         }));
 
@@ -147,5 +148,16 @@ public sealed class ProjectPipelineTests : IDisposable
         items.ShouldContain(i => i.Name.Contains("РС-70", StringComparison.Ordinal) && i.Name.Contains("19 мм", StringComparison.Ordinal));
         items.ShouldContain(i => i.Name.Contains("длина 20 м", StringComparison.Ordinal));
         items.ShouldAllBe(i => i.Group == Core.TakeoffGroup.Hydrants && i.Note == "на один пожарный кран");
+    }
+
+    [Fact]
+    public void Ring_project_reports_both_variants_in_the_note()
+    {
+        Drawing();
+        var result = Run(Project(ring: true));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        result.Design!.Ring.ShouldNotBeNull();
+        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("Б.1.2.16.1");
     }
 }

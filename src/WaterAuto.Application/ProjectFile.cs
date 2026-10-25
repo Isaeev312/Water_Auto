@@ -119,6 +119,12 @@ public sealed record ProjectDesign
     /// <summary>Скорость для подбора диаметров по Б.5, м/с; null — диаметры по табл. Б.4.</summary>
     public double? DesignVelocity { get; init; }
 
+    /// <summary>Кольцевой питающий трубопровод (рис. Б.2, секции В, Г; ADR 0011).</summary>
+    public bool Ring { get; init; }
+
+    /// <summary>На кольце есть нормально закрытые разделительные запорные устройства — полуветвь на 100 % расхода (Б.1.2.16.1).</summary>
+    public bool RingValvesClosed { get; init; }
+
     /// <summary>Предел оросителей на ветви, выбранный проектом (В-09; СП 485 предела не задаёт); null — без проверки.</summary>
     public int? MaxSprinklersPerBranch { get; init; }
 

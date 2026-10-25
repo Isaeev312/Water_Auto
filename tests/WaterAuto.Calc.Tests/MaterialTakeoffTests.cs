@@ -116,4 +116,17 @@ public class MaterialTakeoffTests
         fittings.ShouldNotBeEmpty();
         fittings.ShouldAllBe(i => i.Designation == "ГОСТ 17375-2001");
     }
+
+    [Fact]
+    public void Ring_closing_segment_is_counted_in_pipe_lengths()
+    {
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
+        var layout = SprinklerLayouter.Layout(plan, rules);
+        var route = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3), ring: true).Routes[0];
+        var takeoff = MaterialTakeoffBuilder.Build([route], layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель", "СВВ-12"));
+        var meters = takeoff.Items.Where(i => i.Group == TakeoffGroup.Pipes).Sum(i => i.Quantity);
+        meters.ShouldBe(route.Segments.Concat(route.Loops).Sum(s => s.Length.Meters), 0.05);
+    }
 }
