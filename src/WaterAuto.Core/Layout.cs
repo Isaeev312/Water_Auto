@@ -13,8 +13,11 @@ public enum ConstructionClass
 /// <summary>Ороситель раскладки; ID — «ID помещения.S номер».</summary>
 public sealed record PlacedSprinkler(string Id, string RoomId, PlanPoint Location);
 
-/// <summary>Прямоугольная зона раскладки: часть помещения со своей сеткой (ARCHITECTURE §6, этап 2).</summary>
-public sealed record LayoutZone(string RoomId, Polygon Outline, int SprinklerCount);
+/// <summary>
+/// Прямоугольная зона раскладки: часть помещения со своей сеткой (ARCHITECTURE §6, этап 2).
+/// RowAngleRad — направление рядов на плане: вдоль него ряды соседних зон продолжают друг друга.
+/// </summary>
+public sealed record LayoutZone(string RoomId, Polygon Outline, int SprinklerCount, double RowAngleRad);
 
 /// <summary>Результат раскладки плана: оросители, зоны и замечания.</summary>
 public sealed record SprinklerLayout(
