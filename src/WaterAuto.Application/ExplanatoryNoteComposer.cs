@@ -24,7 +24,9 @@ public sealed record NoteInputs(
     IReadOnlyList<string> LiteratureIds,
     SprinklerSelectionResult? Selection = null,
     string? Joints = null,
-    PipeSupportsResult? Supports = null);
+    PipeSupportsResult? Supports = null,
+    TemperatureChoice? Temperature = null,
+    double? MaxAmbient = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -121,6 +123,11 @@ public static class ExplanatoryNoteComposer
             ["Наименьшее расстояние между оросителями", string.Create(Ru, $"{i.Rules.MinSpacing.Meters:0.###} м"), "п. 6.2.21"],
             ["Наибольшее расстояние до стен", string.Create(Ru, $"{i.Rules.MaxWallDistance.Meters:0.###} м"), "п. 6.2.21"],
         ]));
+        if (i.Temperature is { } temp)
+        {
+            blocks.Add(new NoteParagraph(string.Create(Ru, $"**Температура срабатывания.** Максимальная температура среды в зоне расположения оросителей — {i.MaxAmbient:0.#} °С (п. 6.2.17). По таблице 6.4 СП 485 (п. 6.2.16) принята номинальная температура срабатывания **{temp.Nominal} °С**: предельно допустимая рабочая температура среды для неё — не более {temp.MaxAmbient} °С. Маркировочный цвет жидкости в термоколбе — {temp.Color}, номинальное время срабатывания — не более {temp.ResponseTime} с (ГОСТ Р 51043-2002, табл. 2).")));
+        }
+
         if (i.Selection is { Chosen: { } chosen } sel)
         {
             blocks.Add(new NoteParagraph(string.Create(Ru, $"**Подбор оросителя.** Ороситель подобран по каталогу производителя: для каждой модели выполнен полный гидравлический расчёт. Модель допускается, если давление у оросителей диктующей зоны лежит в её рабочем диапазоне, средняя интенсивность по каталогу при давлении у диктующего оросителя не меньше нормативной ({i.Design.Parameters.Intensity:0.###} л/(с·м²)) и защищаемая площадь не меньше площади на ороситель. Из допустимых принята модель с наименьшим произведением расхода и давления насоса: **{chosen.Maker} {chosen.Model}**, *K* = {chosen.K:0.###} л/(с·МПа^{{0,5}}). Данные каталога подлежат сверке с паспортом изделия.")));

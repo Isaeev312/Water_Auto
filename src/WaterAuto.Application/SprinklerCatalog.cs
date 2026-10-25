@@ -4,7 +4,7 @@ using WaterAuto.Calc.Hydraulics;
 namespace WaterAuto.Application;
 
 /// <summary>Модель каталога data/catalog/sprinklers.json с признаками для отбора.</summary>
-public sealed record CatalogSprinkler(SprinklerCandidate Candidate, string Kind, string Purpose, string Medium, string Deflector, string Designation, bool Verified, string Source);
+public sealed record CatalogSprinkler(SprinklerCandidate Candidate, string Kind, string Purpose, string Medium, string Deflector, string Designation, bool Verified, string Source, IReadOnlyList<int>? Temperatures = null);
 
 /// <summary>Чтение каталога оросителей (схема data/schemas/sprinklers.schema.json) и отбор кандидатов для автоподбора.</summary>
 public static class SprinklerCatalog
@@ -34,7 +34,8 @@ public static class SprinklerCatalog
                 s.GetProperty("pMax").GetDouble(),
                 s.TryGetProperty("area_m2", out var a) ? a.GetDouble() : null,
                 intensity);
-            list.Add(new CatalogSprinkler(candidate, Str("kind"), Str("purpose", "general"), Str("medium", "water"), Str("deflector", "any"), Str("designation"), s.GetProperty("verified").GetBoolean(), Str("source")));
+            var temps = s.TryGetProperty("tempC", out var tc) ? tc.EnumerateArray().Select(x => (int)Math.Round(x.GetDouble())).ToList() : null;
+            list.Add(new CatalogSprinkler(candidate, Str("kind"), Str("purpose", "general"), Str("medium", "water"), Str("deflector", "any"), Str("designation"), s.GetProperty("verified").GetBoolean(), Str("source"), temps));
         }
 
         return list;

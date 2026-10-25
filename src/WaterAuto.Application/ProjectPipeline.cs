@@ -125,6 +125,7 @@ public static class ProjectPipeline
         var sprinklerK = design.SprinklerK;
         var sprinklerModel = design.SprinklerModel;
         string? sprinklerSupplier = null;
+        IReadOnlyList<int>? sprinklerTemps = null;
         if (sprinklerK > 0)
         {
             designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
@@ -144,6 +145,7 @@ public static class ProjectPipeline
             sprinklerK = chosen.K;
             sprinklerModel = entry.Designation.Length > 0 ? $"{chosen.Model} ({entry.Designation})" : chosen.Model;
             sprinklerSupplier = chosen.Maker;
+            sprinklerTemps = entry.Temperatures;
             settings = settings with { SprinklerK = new KFactor(chosen.K) };
             designs = [.. chosenDesigns];
             issues.Add(new Issue(
@@ -156,8 +158,13 @@ public static class ProjectPipeline
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         var routes = designs.Select(d => d.Route).ToList();
 
+        // Номинальная температура срабатывания (п. 6.2.16, табл. 6.4) и цвет колбы (ГОСТ Р 51043, табл. 2).
+        var temperature = SprinklerTemperature.Choose(norms, design.MaxAmbientTemperature, sprinklerTemps);
+        issues.AddRange(temperature.Issues);
+        var temperatureText = temperature.Choice is { } tc ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $", {tc.Nominal} °С (колба {tc.Color})") : "";
+
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
-            string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}"),
+            string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
             sprinklerSupplier),
             design.FittingStandard.Length > 0 ? design.FittingStandard : null,
@@ -218,7 +225,9 @@ public static class ProjectPipeline
                 ids,
                 selection,
                 $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}.",
-                supports),
+                supports,
+                temperature.Choice,
+                design.MaxAmbientTemperature),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
