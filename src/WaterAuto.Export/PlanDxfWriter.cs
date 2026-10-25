@@ -12,6 +12,18 @@ namespace WaterAuto.Export;
 public sealed record PlanDxfStyle(double SprinklerRadiusMm = 100, double TextHeightMm = 200, double IssueRadiusMm = 500);
 
 /// <summary>
+/// Сводка расчёта для листа плана: строки «параметр — значение» и оросители диктующей зоны.
+/// Собирается из результата расчёта (Application): Export не знает про Calc.
+/// </summary>
+/// <param name="ZoneMarginMm">Отступ контура зоны от крайних оросителей, мм.</param>
+public sealed record PlanCalcSummary(
+    string Title,
+    IReadOnlyList<(string Label, string Value)> Rows,
+    IReadOnlyList<string> ZoneSprinklerIds,
+    string ZoneLabel,
+    double ZoneMarginMm);
+
+/// <summary>
 /// DXF-наложение на чертёж пользователя (README §7): в тех же координатах, в мм.
 /// ПТ_ОРОСИТЕЛИ — блок с атрибутом ID; ПТ_ТРУБЫ — участки трассы; ПТ_УЧАСТКИ — DN и длины
 /// на подводящем, питающем и там, где диаметр меняется; ПТ_ЗАМЕЧАНИЯ — замечания с координатами
@@ -23,14 +35,16 @@ public static class PlanDxfWriter
     public const string PipeLayer = "ПТ_ТРУБЫ";
     public const string SegmentLayer = "ПТ_УЧАСТКИ";
     public const string IssueLayer = "ПТ_ЗАМЕЧАНИЯ";
+    public const string ZoneLayer = "ПТ_ДИКТ_ЗОНА";
+    public const string SummaryLayer = "ПТ_РАСЧЁТ";
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null)
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null)
     {
-        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle()));
+        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary));
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
@@ -42,6 +56,8 @@ public static class PlanDxfWriter
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4);
         var segments = DxfDrawing.AddLayer(doc, SegmentLayer, 7);
         var marks = DxfDrawing.AddLayer(doc, IssueLayer, 6);
+        var zoneLayer = DxfDrawing.AddLayer(doc, ZoneLayer, 2);
+        var summaryLayer = DxfDrawing.AddLayer(doc, SummaryLayer, 7);
 
         var block = new BlockRecord(SprinklerBlock);
         block.Entities.Add(new Circle(XYZ.Zero, style.SprinklerRadiusMm));
@@ -111,6 +127,48 @@ public static class PlanDxfWriter
             });
         }
 
+        if (summary is not null)
+        {
+            AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer);
+        }
+
         return doc;
+    }
+
+    // Диктующая зона: контур по крайним оросителям с отступом, кружки у оросителей зоны и подпись;
+    // сводка расчёта — многострочный текст справа от плана (приём из зарубежных комплектов, docs/foreign_drawings_ideas.md).
+    private static void AddSummary(CadDocument doc, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, PlanCalcSummary summary, PlanDxfStyle style, Layer zoneLayer, Layer summaryLayer)
+    {
+        var ids = summary.ZoneSprinklerIds.ToHashSet(StringComparer.Ordinal);
+        var zone = layout.Sprinklers.Where(s => ids.Contains(s.Id)).Select(s => s.Location).ToList();
+        if (zone.Count > 0)
+        {
+            var m = summary.ZoneMarginMm;
+            double x0 = zone.Min(p => p.XMm) - m, x1 = zone.Max(p => p.XMm) + m, y0 = zone.Min(p => p.YMm) - m, y1 = zone.Max(p => p.YMm) + m;
+            doc.Entities.Add(new LwPolyline([new XY(x0, y0), new XY(x1, y0), new XY(x1, y1), new XY(x0, y1)]) { IsClosed = true, Layer = zoneLayer });
+            foreach (var p in zone)
+            {
+                doc.Entities.Add(new Circle(new XYZ(p.XMm, p.YMm, 0), 2 * style.SprinklerRadiusMm) { Layer = zoneLayer });
+            }
+
+            doc.Entities.Add(new MText
+            {
+                Value = summary.ZoneLabel,
+                InsertPoint = new XYZ(x0, y1 + (2 * style.TextHeightMm), 0),
+                Height = style.TextHeightMm,
+                RectangleWidth = Math.Max(x1 - x0, 30 * style.TextHeightMm),
+                Layer = zoneLayer,
+            });
+        }
+
+        var all = layout.Sprinklers.Select(s => s.Location).Concat(routes.SelectMany(r => r.Nodes.Select(n => n.Location))).DefaultIfEmpty(new PlanPoint(0, 0)).ToList();
+        doc.Entities.Add(new MText
+        {
+            Value = $"{summary.Title}\\P" + string.Join("\\P", summary.Rows.Select(r => $"{r.Label} — {r.Value}")),
+            InsertPoint = new XYZ(all.Max(p => p.XMm) + (10 * style.TextHeightMm), all.Max(p => p.YMm), 0),
+            Height = style.TextHeightMm,
+            RectangleWidth = 60 * style.TextHeightMm,
+            Layer = summaryLayer,
+        });
     }
 }

@@ -65,6 +65,51 @@ public class PlanDxfWriterTests
         }
     }
 
+    private static readonly PlanCalcSummary Summary = new(
+        "Сводка гидравлического расчёта",
+        [("Расход насоса Q_нас", "33,77 л/с (Б.26)"), ("Требуемый напор H_н", "35,4 м (Б.30)")],
+        ["R1.S1", "R1.S2"],
+        "Диктующая зона: S = 120 м², N = 2",
+        ZoneMarginMm: 500);
+
+    [Fact]
+    public void Dictating_zone_is_outlined_around_its_sprinklers()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"wa-{Guid.NewGuid():N}.dxf");
+        PlanDxfWriter.Write(path, Layout, [Route], [], summary: Summary);
+        var doc = DxfReader.Read(path);
+        File.Delete(path);
+        var zone = On(doc, PlanDxfWriter.ZoneLayer);
+        var outline = zone.OfType<LwPolyline>().ShouldHaveSingleItem();
+        outline.IsClosed.ShouldBeTrue();
+        var xs = outline.Vertices.Select(v => v.Location.X).ToList();
+        var ys = outline.Vertices.Select(v => v.Location.Y).ToList();
+        (xs.Min(), xs.Max(), ys.Min(), ys.Max()).ShouldBe((1500.0, 5500.0, 1000.0, 2000.0)); // оросители ± 500 мм
+        zone.OfType<Circle>().Count().ShouldBe(2); // выделены оросители зоны
+        zone.OfType<MText>().ShouldContain(t => t.Value.Contains("S = 120 м²", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Calculation_summary_is_a_table_on_its_own_layer()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"wa-{Guid.NewGuid():N}.dxf");
+        PlanDxfWriter.Write(path, Layout, [Route], [], summary: Summary);
+        var doc = DxfReader.Read(path);
+        File.Delete(path);
+        var text = On(doc, PlanDxfWriter.SummaryLayer).OfType<MText>().ShouldHaveSingleItem().Value;
+        text.ShouldContain("Сводка гидравлического расчёта");
+        text.ShouldContain("Расход насоса Q_нас — 33,77 л/с (Б.26)");
+        text.ShouldContain("Требуемый напор H_н — 35,4 м (Б.30)");
+    }
+
+    [Fact]
+    public void Without_summary_the_new_layers_stay_empty()
+    {
+        var doc = WriteAndRead();
+        On(doc, PlanDxfWriter.ZoneLayer).ShouldBeEmpty();
+        On(doc, PlanDxfWriter.SummaryLayer).ShouldBeEmpty();
+    }
+
     [Fact]
     public void Drawing_is_in_millimetres_with_the_output_layers()
     {
