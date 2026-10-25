@@ -27,8 +27,7 @@ public static class PlanDxfWriter
 
     public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null)
     {
-        var doc = Build(layout, routes, issues, style ?? new PlanDxfStyle());
-        DxfWriter.Write(path, doc, false);
+        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle()));
     }
 
     public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style)

@@ -49,6 +49,23 @@ public class PlanDxfWriterTests
     private static List<Entity> On(CadDocument doc, string layer) => doc.Entities.Where(e => e.Layer.Name == layer).ToList();
 
     [Fact]
+    public void Dwg_extension_writes_a_dwg_for_AutoCAD_insert()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"wa-{Guid.NewGuid():N}.dwg");
+        PlanDxfWriter.Write(path, Layout, [Route], [Located]);
+        try
+        {
+            var doc = DwgReader.Read(path);
+            On(doc, PlanDxfWriter.SprinklerLayer).OfType<Insert>().Count().ShouldBe(2);
+            On(doc, PlanDxfWriter.PipeLayer).OfType<Line>().Count().ShouldBe(3);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Drawing_is_in_millimetres_with_the_output_layers()
     {
         var doc = WriteAndRead();
