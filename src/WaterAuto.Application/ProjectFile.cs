@@ -78,6 +78,9 @@ public sealed record ProjectDesign
 
     public int PipeStandardLargeFromDn { get; init; } = 50;
 
+    /// <summary>Стандарт приварных деталей трубопроводов (отводы, тройники, переходы).</summary>
+    public string FittingStandard { get; init; } = "ГОСТ 17375-2001";
+
     /// <summary>Сортамент для расчёта и спецификации.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string PipeSeriesStandard => PipeStandardLarge.Length > 0

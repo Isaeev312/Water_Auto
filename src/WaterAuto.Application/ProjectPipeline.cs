@@ -153,7 +153,8 @@ public static class ProjectPipeline
 
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}"),
-            sprinklerModel));
+            sprinklerModel),
+            design.FittingStandard.Length > 0 ? design.FittingStandard : null);
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
 
         var outIssues = issues.ToList();
