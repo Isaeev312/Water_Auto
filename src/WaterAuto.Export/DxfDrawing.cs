@@ -1,6 +1,7 @@
 using System.Globalization;
 using ACadSharp;
 using ACadSharp.Entities;
+using ACadSharp.IO;
 using ACadSharp.Tables;
 using CSMath;
 using WaterAuto.Core;
@@ -11,6 +12,21 @@ namespace WaterAuto.Export;
 internal static class DxfDrawing
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
+
+    /// <summary>
+    /// Запись по расширению: .dwg — DWG (его вставляет команда AutoCAD INSERT и WA-INSERT), иначе DXF.
+    /// </summary>
+    public static void Save(string path, CadDocument doc)
+    {
+        if (string.Equals(Path.GetExtension(path), ".dwg", StringComparison.OrdinalIgnoreCase))
+        {
+            DwgWriter.Write(path, doc);
+        }
+        else
+        {
+            DxfWriter.Write(path, doc, false);
+        }
+    }
 
     public static Layer AddLayer(CadDocument doc, string name, short color)
     {

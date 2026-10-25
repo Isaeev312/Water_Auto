@@ -41,7 +41,7 @@ public static class AxonometryDxfWriter
 
     public static void Write(string path, IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle? style = null)
     {
-        DxfWriter.Write(path, Build(routes, pipeElevation, style ?? new AxonometryStyle()), false);
+        DxfDrawing.Save(path, Build(routes, pipeElevation, style ?? new AxonometryStyle()));
     }
 
     public static CadDocument Build(IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle style)
