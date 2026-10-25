@@ -24,15 +24,15 @@ public sealed record GeneralData(
 /// <summary>
 /// Лист «Общие данные по рабочим чертежам» основного комплекта (ГОСТ Р 21.101) в docx A3 альбомный:
 /// ведомость рабочих чертежей (форма 1), ведомость ссылочных и прилагаемых документов (форма 2), основные показатели,
-/// общие указания. Шрифт — GOST Common (ГОСТ 2.304, тип А), как на чертежах; рамка и основная надпись по форме 3 (<see cref="GostFrame"/>).
+/// общие указания. Шрифт — шрифт проекта (по умолчанию GOST Common), как на чертежах; рамка и основная надпись по форме 3 (<see cref="GostFrame"/>).
 /// </summary>
 public static class GeneralDataDocx
 {
-    private const string Font = "GOST Common";
+    private const string Font = GostFrame.Font;
     private const string Size = "24";
     private static readonly string[] ReferencesCaption = ["", "Ссылочные документы", ""];
 
-    public static void Write(string path, GeneralData data, TitleBlock? stamp = null)
+    public static void Write(string path, GeneralData data, TitleBlock? stamp = null, string font = GostFrame.Font)
     {
         ArgumentNullException.ThrowIfNull(data);
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
@@ -66,6 +66,8 @@ public static class GeneralDataDocx
         {
             GostFrame.Apply(main, section, 420, 297, stamp, StampForm.Form3, StampForm.Form3);
         }
+
+        DocxFont.Apply(main, font);
 
         main.Document.Save();
     }

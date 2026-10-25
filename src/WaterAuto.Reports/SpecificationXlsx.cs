@@ -10,7 +10,7 @@ public sealed record SpecificationHeader(string Title);
 /// Спецификация оборудования, изделий и материалов по форме 1 ГОСТ 21.110-2013 в xlsx (A3, альбомная).
 /// Графы и ширины — по форме 1; заголовки разделов — в графе 2, подчёркнуты;
 /// обозначения документов — с годом утверждения; масса единицы, кг, где она известна (трубы — теоретическая масса 1 м);
-/// в конце — итог массы позиций с известной массой. Шрифт — GOST Common (ГОСТ 2.304, тип А).
+/// в конце — итог массы позиций с известной массой. Шрифт — шрифт проекта (по умолчанию GOST Common).
 /// Позиции нумеруются заново в каждом разделе; строки — по 8 мм (длинный текст — кратно 8 мм).
 /// Рабочий файл для правки; для выпуска — <see cref="SpecificationDocx"/> в рамке с основной надписью. Внизу оставлено место под основную надпись.
 /// </summary>
@@ -23,9 +23,6 @@ public static class SpecificationXlsx
 
     /// <summary>Нижнее поле под основную надпись (ГОСТ Р 21.101, форма 3 — 55 мм) и рамку, мм.</summary>
     public const double TitleBlockMm = 60;
-
-    /// <summary>Шрифт листа (ГОСТ 2.304, тип А); если его нет на компьютере, Excel подставит замену.</summary>
-    public const string Font = "GOST Common";
 
     /// <summary>Графы формы 1 ГОСТ 21.110.</summary>
     public static readonly IReadOnlyList<string> Columns =
@@ -53,13 +50,13 @@ public static class SpecificationXlsx
         (TakeoffGroup.Supports, "Крепления трубопроводов"),
     ];
 
-    public static void Write(string path, MaterialTakeoff takeoff, SpecificationHeader header)
+    public static void Write(string path, MaterialTakeoff takeoff, SpecificationHeader header, string font = DocumentStyle.DefaultFont)
     {
         ArgumentNullException.ThrowIfNull(takeoff);
         ArgumentNullException.ThrowIfNull(header);
         using var book = new XLWorkbook();
         var ws = book.AddWorksheet("Спецификация");
-        ws.Style.Font.FontName = Font;
+        ws.Style.Font.FontName = font;
         ws.Style.Font.FontSize = 11;
         ws.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
 

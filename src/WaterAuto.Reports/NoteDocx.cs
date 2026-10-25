@@ -4,19 +4,26 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
+using WaterAuto.Core;
+
 namespace WaterAuto.Reports;
 
 /// <summary>
-/// Пояснительная записка в docx по ГОСТ 7.32-2017 и ГОСТ 2.105-2019: A4, поля 30/15/20/20 мм, единый шрифт Times New Roman
-/// (текст 14 пт, таблицы 12 пт — п. 6.6 ГОСТ 7.32 допускает меньший кегль в таблицах), интервал 1,5, абзацный отступ 1,25 см,
-/// выравнивание по ширине, номер страницы внизу по центру (на титульном листе не ставится).
+/// Пояснительная записка в docx как текстовый документ по ГОСТ Р 21.101 (рамка, основные надписи) и ГОСТ 2.105 / ГОСТ 7.32 (текст):
+/// A4 в рамке 20/5 мм; титульный лист — рамка и дополнительные графы без основной надписи; первый лист после титульного
+/// (содержание) — основная надпись по форме 5, остальные — по форме 6 (<see cref="GostFrame"/>); номер листа — в основной надписи.
+/// Единый шрифт проекта (по умолчанию GOST Common), как на чертежах и в спецификации (текст 14 пт, таблицы 12 пт), интервал 1,5, абзацный отступ 1,25 см,
+/// выравнивание по ширине.
 /// Титульный лист, СОДЕРЖАНИЕ (поле оглавления, обновляется при открытии), структурные элементы прописными по центру
 /// с новой страницы, разделы «N Заголовок» с новой страницы, подразделы «N.M Заголовок» — стили заголовков для оглавления.
 /// Таблицы нумеруются по порядку появления, название «Таблица N — …» над таблицей слева, шапка повторяется на каждой странице.
 /// </summary>
 public static class NoteDocx
 {
-    private const string Font = "Times New Roman";
+    private const string Font = GostFrame.Font;
+
+    // Поле текста A4 внутри рамки: слева 20 + 5 мм, справа 5 + 5 мм.
+    private const double TextWidthMm = 175;
     private const string TextSize = "28";
     private const string TableSize = "24";
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
@@ -24,7 +31,7 @@ public static class NoteDocx
     private static readonly Regex CaptionPattern = new(@"^Таблица \d+ — ", RegexOptions.Compiled);
     private static readonly Regex NumberCell = new(@"^[−\-+]?\d[\d\s]*([,.]\d+)?$|^DN\d+$|^\d+×\d+$", RegexOptions.Compiled);
 
-    public static void Write(string path, NoteDocument note)
+    public static void Write(string path, NoteDocument note, TitleBlock? stamp = null, string font = GostFrame.Font)
     {
         ArgumentNullException.ThrowIfNull(note);
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
@@ -35,8 +42,13 @@ public static class NoteDocx
         AddSettings(main);
         AddTheme(main);
 
+        stamp ??= new TitleBlock("ПЗ", note.Title.ObjectName, "", note.Title.Title, "", note.Title.Organization, [new("Разраб.", note.Title.Author), new("Руковод.", note.Title.Supervisor), new("Н. контр.", "")]);
+
+        // Раздел 1 — титульный лист (рамка без основной надписи), раздел 2 — содержание (форма 5), раздел 3 — текст (форма 6).
         WriteTitlePage(body, note.Title);
+        body.Append(SectionBreak(main, stamp, StampForm.None, StampForm.None, 10));
         WriteContents(body);
+        body.Append(SectionBreak(main, stamp, StampForm.Form5, StampForm.Form6, 5 + GostFrame.Height(StampForm.Form5)));
         var tableNo = 0;
         foreach (var section in note.Sections)
         {
@@ -74,17 +86,24 @@ public static class NoteDocx
         body.Append(Heading(new NoteSection("", "Список использованных источников", [])));
         body.Append(note.References.Select((r, i) => Text($"{i + 1} {Escape(r)}")));
 
-        var footer = main.AddNewPart<FooterPart>();
-        footer.Footer = new Footer(new Paragraph(
-            new ParagraphProperties(new Justification { Val = JustificationValues.Center }),
-            new SimpleField { Instruction = "PAGE" }));
-        body.Append(new SectionProperties(
-            new FooterReference { Type = HeaderFooterValues.Default, Id = main.GetIdOfPart(footer) },
-            new PageSize { Width = (UInt32Value)(uint)Mm(210), Height = (UInt32Value)(uint)Mm(297) },
-            new PageMargin { Left = (UInt32Value)(uint)Mm(30), Right = (UInt32Value)(uint)Mm(15), Top = Mm(20), Bottom = Mm(20), Header = 709, Footer = 709, Gutter = 0 },
-            new TitlePage()));
+        body.Append(Section(main, stamp, StampForm.Form6, StampForm.Form6, 5 + GostFrame.Height(StampForm.Form6) + 5));
+        DocxFont.Apply(main, font);
         main.Document.Save();
     }
+
+    // Параметры раздела: A4, поля внутри рамки, снизу — над основной надписью.
+    private static SectionProperties Section(MainDocumentPart main, TitleBlock stamp, StampForm first, StampForm others, double bottomMm)
+    {
+        var section = new SectionProperties(
+            new SectionType { Val = SectionMarkValues.NextPage },
+            new PageSize { Width = (UInt32Value)(uint)Mm(210), Height = (UInt32Value)(uint)Mm(297) },
+            new PageMargin { Left = (UInt32Value)(uint)Mm(25), Right = (UInt32Value)(uint)Mm(10), Top = Mm(10), Bottom = Mm(bottomMm), Header = 0, Footer = 0, Gutter = 0 });
+        GostFrame.Apply(main, section, 210, 297, stamp, first, others);
+        return section;
+    }
+
+    private static Paragraph SectionBreak(MainDocumentPart main, TitleBlock stamp, StampForm first, StampForm others, double bottomMm) =>
+        new(new ParagraphProperties(Section(main, stamp, first, others, bottomMm)));
 
     /// <summary>Звёздочка в обозначениях документов («СНиП 21-02-99*») — как текст, а не разметка курсива.</summary>
     public static string Escape(string text) => text.Replace("*", "\\*", StringComparison.Ordinal);
@@ -132,7 +151,7 @@ public static class NoteDocx
             new StyleName { Val = name },
             new BasedOn { Val = "Normal" },
             new StyleParagraphProperties(
-                new Tabs(new TabStop { Val = TabStopValues.Right, Leader = TabStopLeaderCharValues.Dot, Position = Mm(165) }),
+                new Tabs(new TabStop { Val = TabStopValues.Right, Leader = TabStopLeaderCharValues.Dot, Position = Mm(TextWidthMm) }),
                 new Indentation { Left = indent, FirstLine = "0" },
                 new Justification { Val = JustificationValues.Left }),
             new StyleRunProperties(Fonts(), new FontSize { Val = TextSize }, new FontSizeComplexScript { Val = TextSize }))
@@ -159,7 +178,7 @@ public static class NoteDocx
             Toc("TOC2", "toc 2", Twips(5)));
     }
 
-    // Тема со шрифтами Times New Roman: всё, что Word оформляет «шрифтом темы» (строки оглавления и т. п.), — тем же шрифтом.
+    // Тема со шрифтом записки: всё, что Word оформляет «шрифтом темы» (строки оглавления и т. п.), — тем же шрифтом.
     private static void AddTheme(MainDocumentPart main)
     {
         var theme = main.AddNewPart<ThemePart>();
@@ -170,9 +189,9 @@ public static class NoteDocx
 
     private const string ThemeXml = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Water_Auto">
+        <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="ГОСТ">
           <a:themeElements>
-            <a:clrScheme name="Water_Auto">
+            <a:clrScheme name="ГОСТ">
               <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
               <a:dk2><a:srgbClr val="000000"/></a:dk2><a:lt2><a:srgbClr val="FFFFFF"/></a:lt2>
               <a:accent1><a:srgbClr val="000000"/></a:accent1><a:accent2><a:srgbClr val="000000"/></a:accent2>
@@ -180,11 +199,11 @@ public static class NoteDocx
               <a:accent5><a:srgbClr val="000000"/></a:accent5><a:accent6><a:srgbClr val="000000"/></a:accent6>
               <a:hlink><a:srgbClr val="000000"/></a:hlink><a:folHlink><a:srgbClr val="000000"/></a:folHlink>
             </a:clrScheme>
-            <a:fontScheme name="Water_Auto">
-              <a:majorFont><a:latin typeface="Times New Roman"/><a:ea typeface=""/><a:cs typeface="Times New Roman"/><a:font script="Cyrl" typeface="Times New Roman"/></a:majorFont>
-              <a:minorFont><a:latin typeface="Times New Roman"/><a:ea typeface=""/><a:cs typeface="Times New Roman"/><a:font script="Cyrl" typeface="Times New Roman"/></a:minorFont>
+            <a:fontScheme name="ГОСТ">
+              <a:majorFont><a:latin typeface="GOST Common"/><a:ea typeface=""/><a:cs typeface="GOST Common"/><a:font script="Cyrl" typeface="GOST Common"/></a:majorFont>
+              <a:minorFont><a:latin typeface="GOST Common"/><a:ea typeface=""/><a:cs typeface="GOST Common"/><a:font script="Cyrl" typeface="GOST Common"/></a:minorFont>
             </a:fontScheme>
-            <a:fmtScheme name="Water_Auto">
+            <a:fmtScheme name="ГОСТ">
               <a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>
               <a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst>
               <a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>
@@ -251,7 +270,6 @@ public static class NoteDocx
         body.Append(Line(JustificationValues.Center, 50));
         body.Append(signatures);
         body.Append(Line(JustificationValues.Center, 30, R(t.CityYear)));
-        body.Append(new Paragraph(new Run(new Break { Type = BreakValues.Page })));
     }
 
     private static void WriteContents(Body body)
@@ -304,10 +322,10 @@ public static class NoteDocx
         return paragraph;
     }
 
-    // Формула: табуляция по центру поля текста и номер у правого края (ширина поля A4 при полях 30 и 15 мм — 165 мм).
+    // Формула: табуляция по центру поля текста и номер у правого края.
     private static Paragraph Formula(NoteFormula f)
     {
-        var width = Mm(165);
+        var width = Mm(TextWidthMm);
         var props = new ParagraphProperties(
             new KeepNext(),
             new Tabs(
@@ -315,11 +333,49 @@ public static class NoteDocx
                 new TabStop { Val = TabStopValues.Right, Position = width }),
             new SpacingBetweenLines { Before = "120", After = "120", Line = "360", LineRule = LineSpacingRuleValues.Auto },
             new Justification { Val = JustificationValues.Left });
-        var paragraph = new Paragraph(props, new Run(new TabChar()));
-        paragraph.Append(Runs(f.Expression, false, null));
+        var paragraph = new Paragraph(props);
+        var lines = WrapFormula(f.Expression);
+        for (var k = 0; k < lines.Count; k++)
+        {
+            if (k > 0)
+            {
+                paragraph.Append(new Run(new Break()));
+            }
+
+            paragraph.Append(new Run(new TabChar()));
+            paragraph.Append(Runs(lines[k], false, null));
+        }
+
         paragraph.Append(new Run(new TabChar()), new Run(new Text($"({f.Number})")));
         return paragraph;
     }
+
+    // Длинная формула переносится на знаке равенства, знак повторяется в начале следующей строки (ГОСТ 2.105);
+    // номер — в последней строке. Длина строки — по числу видимых знаков (разметка не считается).
+    private static List<string> WrapFormula(string expression)
+    {
+        const int maxChars = 58;
+        var parts = expression.Split(" = ");
+        var lines = new List<string>();
+        var current = parts[0];
+        foreach (var part in parts.Skip(1))
+        {
+            if (Visible(current) + Visible(part) + 3 > maxChars)
+            {
+                lines.Add(current + " =");
+                current = "= " + part;
+            }
+            else
+            {
+                current += " = " + part;
+            }
+        }
+
+        lines.Add(current);
+        return lines;
+    }
+
+    private static int Visible(string markup) => Regex.Replace(markup, @"\\\*|[*{}]|[_^](?=\{)", m => m.Value == "\\*" ? "*" : "").Length;
 
     /// <summary>Разбор разметки: **полужирный**, *курсив*, _{нижний}, ^{верхний}, \n — перенос строки, \* — звёздочка.</summary>
     private static IEnumerable<Run> Runs(string text, bool highlight, string? size)

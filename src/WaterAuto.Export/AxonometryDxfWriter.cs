@@ -17,7 +17,8 @@ public sealed record AxonometryStyle(
     double YAxisAngleDeg = 45,
     double TextHeightMm = 200,
     double SprinklerRadiusMm = 100,
-    double RiserLengthMm = 1000);
+    double RiserLengthMm = 1000,
+    string Font = DocumentStyle.DefaultFont);
 
 /// <summary>
 /// Черновик аксонометрической схемы (лист ПТ-5) из трассы: трубы, оросители, подписи DN и длин
@@ -41,7 +42,8 @@ public static class AxonometryDxfWriter
 
     public static void Write(string path, IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle? style = null)
     {
-        DxfDrawing.Save(path, Build(routes, pipeElevation, style ?? new AxonometryStyle()));
+        style ??= new AxonometryStyle();
+        DxfDrawing.Save(path, Build(routes, pipeElevation, style), style.Font);
     }
 
     public static CadDocument Build(IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle style)

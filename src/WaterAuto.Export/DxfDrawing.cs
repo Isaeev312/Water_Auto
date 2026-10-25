@@ -16,9 +16,9 @@ internal static class DxfDrawing
     /// <summary>
     /// Запись по расширению: .dwg и .dwt (шаблон) — DWG (его вставляет команда AutoCAD INSERT и WA-INSERT), иначе DXF.
     /// </summary>
-    public static void Save(string path, CadDocument doc)
+    public static void Save(string path, CadDocument doc, string font = DocumentStyle.DefaultFont)
     {
-        ApplyTextStyle(doc);
+        ApplyTextStyle(doc, font);
         if (Path.GetExtension(path).ToLowerInvariant() is ".dwg" or ".dwt")
         {
             DwgWriter.Write(path, doc);
@@ -29,10 +29,11 @@ internal static class DxfDrawing
         }
     }
 
-    /// <summary>Стиль текста по ГОСТ 2.304: шрифт GOST Common (TrueType) — для всех подписей программы.</summary>
+    /// <summary>Стиль текста для всех подписей программы; шрифт — шрифт проекта (по умолчанию GOST Common, TrueType).</summary>
     public const string TextStyleName = "WA_ГОСТ";
 
-    public const string TextFont = "GOST Common.ttf";
+    /// <summary>Файл шрифта стиля: имя шрифта с расширением .ttf, если расширение (.ttf, .shx) не указано.</summary>
+    public static string FontFile(string font) => Path.HasExtension(font) ? font : font + ".ttf";
 
     // Слои, созданные программой в документе: стиль надписей меняется только на них (чертёж-подложка не трогается).
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CadDocument, HashSet<string>> OwnLayers = new();
@@ -42,14 +43,16 @@ internal static class DxfDrawing
         Path.GetExtension(path).Equals(".dwg", StringComparison.OrdinalIgnoreCase) ? DwgReader.Read(path) : DxfReader.Read(path);
 
     // Надписи программы — стилем WA_ГОСТ; если шрифта нет на компьютере, AutoCAD подставит замену.
-    private static void ApplyTextStyle(CadDocument doc)
+    private static void ApplyTextStyle(CadDocument doc, string font)
     {
         var own = OwnLayers.TryGetValue(doc, out var set) ? set : [];
         if (!doc.TextStyles.TryGetValue(TextStyleName, out var style))
         {
-            style = new TextStyle(TextStyleName) { Filename = TextFont, Width = 1.0 };
+            style = new TextStyle(TextStyleName) { Width = 1.0 };
             doc.TextStyles.Add(style);
         }
+
+        style.Filename = FontFile(font);
 
         foreach (var e in doc.Entities.Where(e => own.Contains(e.Layer.Name)))
         {

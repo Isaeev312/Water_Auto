@@ -17,6 +17,7 @@ public class NoteDocxTests
                 new NotePending("Раздел формируется после решения вопросов В-01, В-02, В-03."),
                 new NoteParagraph("Расход **диктующего** оросителя *q*_{1} по формуле Б.1:\nвторая строка, м^{2}."),
                 new NoteFormula("*q* = 1,5·*i*·*s* = 1,5·0,12·12 = 2,16 л/с", "5.1", ["где *i* — интенсивность орошения, л/(с·м^{2});", "*s* — площадь, м^{2}."]),
+                new NoteFormula("*P*_{вв} = *H*/100 + Δ*Z* + (1 + 0,2)·(*n*·*q*)^{2}·*L* / (100·*K*_{т}) = 0,199 + (−0,027) + 0,022 = 0,194 МПа", "5.2", []),
             ]),
         ],
         ["СП 485.1311500.2020. Установки пожаротушения автоматические."]);
@@ -97,20 +98,33 @@ public class NoteDocxTests
     }
 
     [Fact]
-    public void Page_is_A4_with_GOST_7_32_margins_and_font()
+    public void Long_formula_wraps_at_the_equals_sign_repeating_it()
     {
         using var doc = WriteAndOpen();
-        var section = doc.MainDocumentPart!.Document.Body!.Elements<SectionProperties>().Single();
+        var f = doc.MainDocumentPart!.Document.Body!.Elements<Paragraph>().Single(x => x.InnerText.EndsWith("(5.2)", StringComparison.Ordinal));
+        f.Descendants<Break>().Count().ShouldBe(1);
+        f.InnerText.ShouldContain("100·Kт) == 0,199");
+    }
+
+    [Fact]
+    public void Page_is_A4_in_a_frame_with_stamps_and_GOST_font()
+    {
+        using var doc = WriteAndOpen();
+        var body = doc.MainDocumentPart!.Document.Body!;
+        var sections = body.Descendants<SectionProperties>().ToList();
+        sections.Count.ShouldBe(3); // титульный лист, содержание, текст
+        var section = sections[^1];
         var size = section.GetFirstChild<PageSize>()!;
         ((int)size.Width!.Value).ShouldBe(11906); // 210 мм в twip
         ((int)size.Height!.Value).ShouldBe(16838);
         var margin = section.GetFirstChild<PageMargin>()!;
-        ((int)margin.Left!.Value).ShouldBe(1701); // 30 мм
-        ((int)margin.Right!.Value).ShouldBe(850); // 15 мм
-        ((int)margin.Top!.Value).ShouldBe(1134); // 20 мм
+        ((int)margin.Left!.Value).ShouldBe(1417); // рамка 20 мм + 5 мм
+        ((int)margin.Right!.Value).ShouldBe(567); // рамка 5 мм + 5 мм
         var defaults = doc.MainDocumentPart.StyleDefinitionsPart!.Styles!.DocDefaults!.RunPropertiesDefault!.RunPropertiesBaseStyle!;
-        defaults.RunFonts!.Ascii!.Value.ShouldBe("Times New Roman");
+        defaults.RunFonts!.Ascii!.Value.ShouldBe("GOST Common");
         defaults.FontSize!.Val!.Value.ShouldBe("28"); // 14 пт
-        doc.MainDocumentPart.FooterParts.ShouldNotBeEmpty(); // номер страницы
+        var footers = doc.MainDocumentPart.FooterParts.Select(f => f.Footer.InnerText).ToList();
+        footers.ShouldContain(f => f.Contains("Стадия", StringComparison.Ordinal)); // форма 5 — на листе содержания
+        footers.ShouldContain(f => f.Contains("Лист", StringComparison.Ordinal) && !f.Contains("Стадия", StringComparison.Ordinal)); // форма 6
     }
 }
