@@ -150,6 +150,18 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
+    public void Empty_output_layers_from_the_template_are_not_reported()
+    {
+        var b = new DrawingBuilder();
+        b.Rect(FloorPlanImporter.ContourLayer, 0, 0, 10000, 10000);
+        b.Point(FloorPlanImporter.InletLayer, 500, 500);
+        b.Layer("ПТ_ОРОСИТЕЛИ");
+        b.Layer("ПТ_АКСОН_ТРУБЫ");
+
+        ImportDxf(b).Issues.ShouldNotContain(i => i.Code == "import.unknownLayer");
+    }
+
+    [Fact]
     public void Layer_with_latin_lookalike_letters_is_reported()
     {
         var b = new DrawingBuilder();
