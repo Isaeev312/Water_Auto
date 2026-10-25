@@ -35,3 +35,6 @@ public sealed record PipeRoute(string RoomId, string InletId, IReadOnlyList<Rout
 }
 
 public sealed record RoutingResult(IReadOnlyList<PipeRoute> Routes, IReadOnlyList<Issue> Issues);
+
+/// <summary>Опора (держатель) трубопровода: место на плане, DN трубы и участок.</summary>
+public sealed record SupportPoint(PlanPoint At, int Dn, string SegmentId);

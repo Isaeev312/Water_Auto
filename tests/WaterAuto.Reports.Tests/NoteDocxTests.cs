@@ -56,7 +56,7 @@ public class NoteDocxTests
     {
         using var doc = WriteAndOpen();
         var body = doc.MainDocumentPart!.Document.Body!;
-        var table = body.Elements<Table>().ShouldHaveSingleItem();
+        var table = body.Elements<Table>().Where(x => x.Descendants<TableHeader>().Any()).ShouldHaveSingleItem(); // без таблицы подписей титульного листа
         table.Elements<TableRow>().Count().ShouldBe(2);
         table.Elements<TableRow>().Last().InnerText.ShouldContain("0,12 л/(с·м²)");
         Paragraphs(doc).ShouldContain("Таблица 1 — Параметры установки");

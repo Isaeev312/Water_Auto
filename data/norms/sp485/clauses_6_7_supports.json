@@ -1,0 +1,247 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "title": "Крепление стальных трубопроводов: расстояние между опорами, держатель у последнего оросителя, стыки",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, пп. 6.7.1.26, 6.7.1.31, 6.7.2.11, табл. 6.7.1 (ячейки таблицы из document.xml).",
+  "verified": false,
+  "columns": {
+    "outerDiameter": "наружный диаметр трубопровода из табл. 6.7.1, мм",
+    "maxSpacing": "расстояние между опорами, м, не более"
+  },
+  "records": [
+    {
+      "id": "sp485.t6_7_1.od18",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 18,
+        "maxSpacing": 2.5
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od25",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 25,
+        "maxSpacing": 3
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od32",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 32,
+        "maxSpacing": 3.5
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od40",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 40,
+        "maxSpacing": 4
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od45",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 45,
+        "maxSpacing": 4.5
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od57",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 57,
+        "maxSpacing": 5
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od76",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 76,
+        "maxSpacing": 6
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od89",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 89,
+        "maxSpacing": 6
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od108",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 108,
+        "maxSpacing": 6
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od114",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 114,
+        "maxSpacing": 6
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od133",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 133,
+        "maxSpacing": 6
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od140",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 140,
+        "maxSpacing": 7
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od152",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 152,
+        "maxSpacing": 8
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od159",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 159,
+        "maxSpacing": 8
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od219",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 219,
+        "maxSpacing": 9
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od273",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 273,
+        "maxSpacing": 9
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.t6_7_1.od325",
+      "clause": "табл. 6.7.1",
+      "values": {
+        "outerDiameter": 325,
+        "maxSpacing": 9
+      },
+      "units": {
+        "outerDiameter": "мм",
+        "maxSpacing": "м"
+      }
+    },
+    {
+      "id": "sp485.p6_7_1_26.lastSprinkler",
+      "clause": "6.7.1.26",
+      "values": {
+        "smallDnMax": 25,
+        "smallDistance": 0.9,
+        "largeDistance": 1.2
+      },
+      "units": {
+        "smallDnMax": "DN",
+        "smallDistance": "м",
+        "largeDistance": "м"
+      },
+      "note": "Расстояние от держателя до последнего оросителя на распределительном трубопроводе: DN 25 и менее — не более 0,9 м, свыше DN 25 — не более 1,2 м."
+    },
+    {
+      "id": "sp485.p6_7_1_31.joints",
+      "clause": "6.7.1.31",
+      "values": {
+        "weldFromSupport": 500,
+        "jointFromSupport": 200
+      },
+      "units": {
+        "weldFromSupport": "мм",
+        "jointFromSupport": "мм"
+      },
+      "note": "Сварной стык — не ближе 500 мм от края опоры; соединения труб — не ближе 200 мм от мест опор или крепления."
+    }
+  ]
+}

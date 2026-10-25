@@ -160,4 +160,21 @@ public sealed class ProjectPipelineTests : IDisposable
         using var note = WordprocessingDocument.Open(result.Files[4], false);
         note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("Б.1.2.16.1");
     }
+
+    [Fact]
+    public void Dimension_chains_tie_the_lowest_row_and_left_column_to_the_walls()
+    {
+        var contour = new Core.Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new Core.FloorPlan([new Core.Room("R1", "Автостоянка", contour)], [], [], [], [], [new Core.Inlet("I1", new(500, 500), null)]);
+        var norms = WaterAuto.Norms.JsonNormsProvider.Load(RepoPaths.Norms);
+        var rules = WaterAuto.Calc.Layout.LayoutRules.Resolve(norms, "2", Core.ConstructionClass.K0).Rules!;
+        var layout = WaterAuto.Calc.Layout.SprinklerLayouter.Layout(plan, rules);
+        var chains = PlanDimensions.Build(plan, layout);
+        chains.Count.ShouldBe(2);
+        chains[0].Points[0].XMm.ShouldBe(0, 1e-6);
+        chains[0].Points[^1].XMm.ShouldBe(30000, 1e-6);
+        chains[1].Points[0].YMm.ShouldBe(0, 1e-6);
+        chains[1].Points[^1].YMm.ShouldBe(20000, 1e-6);
+        chains[0].Points.Zip(chains[0].Points.Skip(1), (a, b) => b.XMm - a.XMm).ShouldAllBe(d => d > 0);
+    }
 }

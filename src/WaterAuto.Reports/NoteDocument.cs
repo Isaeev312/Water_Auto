@@ -1,7 +1,7 @@
 namespace WaterAuto.Reports;
 
 /// <summary>Титульный лист пояснительной записки. Имена — заполнители, их вписывает студент.</summary>
-public sealed record NoteTitle(string Organization, string Title, string Subtitle, string Author, string Supervisor, string CityYear);
+public sealed record NoteTitle(string Organization, string Title, string Subtitle, string Author, string Supervisor, string CityYear, string ObjectName = "");
 
 /// <summary>Элемент текста раздела.</summary>
 public abstract record NoteBlock;

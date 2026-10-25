@@ -1,6 +1,7 @@
 using System.Globalization;
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Calc.Layout;
+using WaterAuto.Calc.Routing;
 using WaterAuto.Core;
 using WaterAuto.Reports;
 
@@ -22,7 +23,8 @@ public sealed record NoteInputs(
     IReadOnlyList<LiteratureEntry> Literature,
     IReadOnlyList<string> LiteratureIds,
     SprinklerSelectionResult? Selection = null,
-    string? Joints = null);
+    string? Joints = null,
+    PipeSupportsResult? Supports = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -172,6 +174,25 @@ public static class ExplanatoryNoteComposer
         yield return new NoteParagraph(string.Create(Ru, $"Под воздуховодами (площадками, оборудованием) шириной более {i.Rules.DuctMinWidth.Meters:0.##} м ({ducts} шт.) дополнительно установлено **{under.Count}** оросителей (п. 6.2.14); расстояние от термочувствительного элемента до плоскости воздуховода — по п. 6.2.11. *Принято:* такие воздуховоды препятствуют орошению защищаемой поверхности."));
     }
 
+    // Крепление трубопроводов: шаг опор по табл. 6.7.1, держатель у последнего оросителя, стыки у опор.
+    private static List<NoteBlock> SupportBlocks(NoteInputs i)
+    {
+        if (i.Supports is not { } s || s.Points.Count == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            new NoteParagraph("**Крепление трубопроводов.** Трубопроводы крепятся к конструкциям здания держателями из негорючих материалов (пп. 6.7.1.9, 6.7.1.13 СП 485). Расстояние между опорами стальных трубопроводов принято по таблице 6.7.1 по наружному диаметру трубы (для диаметра, которого нет в таблице, — по ближайшему меньшему, в запас); расстояние от держателя до последнего оросителя — не более 0,9 м для DN 25 и менее и 1,2 м для большего (п. 6.7.1.26); сварные стыки — не ближе 500 мм, соединения — не ближе 200 мм от опор (п. 6.7.1.31). Тип опор (подвижные, неподвижные) назначается по условию компенсации температурных удлинений (п. 6.7.1.10)."),
+            new NoteTable("Таблица 7 — Опоры трубопроводов", ["Диаметр", "Шаг опор, м, не более", "Количество опор, шт."],
+                s.Points.GroupBy(p => p.Dn).OrderBy(g => g.Key)
+                    .Select(g => (IReadOnlyList<string>)[$"DN{g.Key}", string.Create(Ru, $"{s.MaxSpacing(g.Key):0.0#}"), g.Count().ToString(Ru)])
+                    .Append([ "Итого", "", s.Points.Count.ToString(Ru) ])
+                    .ToList()),
+        ];
+    }
+
     private static NoteSection Routing(NoteInputs i)
     {
         var segments = i.Routing.Routes.SelectMany(r => r.Segments.Concat(r.Loops)).ToList();
@@ -185,6 +206,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Распределительные трубопроводы (рядки) проложены вдоль рядов оросителей, питающий — поперёк рядов, подводящий — от точки подключения. Начальные диаметры приняты ориентировочно по таблице Б.4 СП 485 по числу оросителей за участком и уточняются гидравлическим расчётом (п. Б.1.3.2)."),
             .. (i.Joints is { } joints ? [new NoteParagraph(joints)] : Array.Empty<NoteBlock>()),
             new NoteTable("Таблица 3 — Трубопроводы по назначению и диаметрам", ["Назначение", "Диаметр", "Участков", "Длина, м"], rows),
+            .. SupportBlocks(i),
             .. Remarks(i.Routing.Issues),
         ]);
     }
@@ -338,9 +360,9 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."),
             new NoteParagraph(s.IsParking || s.Zh1Row is not null
                 ? s.Zh1Row is not null && !s.IsParking
-                    ? $"По {v.Source} принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
-                    : $"Для отапливаемой автостоянки закрытого типа по {v.Source} (объём пожарного отсека {F(s.VolumeThousandM3, "0.#")} тыс. м³) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
-                : $"По {v.Source} (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
+                    ? $"По {NoteDocx.Escape(v.Source)} принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
+                    : $"Для отапливаемой автостоянки закрытого типа по {NoteDocx.Escape(v.Source)} (объём пожарного отсека {F(s.VolumeThousandM3, "0.#")} тыс. м³) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
+                : $"По {NoteDocx.Escape(v.Source)} (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
             new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м) принята первая строка с высотой струи не меньше требуемой и расходом ствола не меньше *q*_{{min}} — {F(v.TableJetHeight.Meters, "0")} м, без интерполяции: *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
             new NoteParagraph("Пожарные краны включены в расчётную сеть АУП как потребители с характеристикой:"),
             new NoteFormula($"*K*_{{ПК}} = *q*_{{ПК}} / √(*H*_{{ПК}}/100) = {F(v.JetFlow.LitersPerSecond)} / √{F(v.Head.Meters / 100, "0.000")} = {F(h.K, "0.000")} л/(с·МПа^{{0,5}}).", "5.9", []),

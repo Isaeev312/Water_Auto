@@ -165,8 +165,18 @@ public static class ProjectPipeline
             takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings)] };
         }
 
+        // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
+        var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard);
+        issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
+        var supportSet = SupportEquipment.PathFor(normsDir);
+        if (File.Exists(supportSet))
+        {
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. SupportEquipment.Items(supportSet, supports, design.HangerRodLength)] };
+        }
+
         var outIssues = issues.ToList();
         var summary = Summary(worst);
+        var dimensions = PlanDimensions.Build(plan, layout);
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var inletNotes = plan.Inlets.Select(i => new PlanInletNote(i.Location, [
             $"Ввод DN{design.SupplyDn}",
@@ -175,8 +185,8 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing));
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes));
+        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions));
+        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation)));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов")));
 
@@ -189,7 +199,7 @@ public static class ProjectPipeline
         var t = project.Title;
         var note = ExplanatoryNoteComposer.Compose(
             new NoteInputs(
-                new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear),
+                new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
                 project.Name,
                 design.RoomGroup,
                 design.ConstructionClass,
@@ -203,7 +213,8 @@ public static class ProjectPipeline
                 literature,
                 ids,
                 selection,
-                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}."),
+                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}.",
+                supports),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
