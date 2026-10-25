@@ -27,9 +27,10 @@ public static class MaterialTakeoffBuilder
         return (int)row.Values["sprinklerSpare"]!.Value;
     }
 
-    /// <param name="fittingStandard">Стандарт приварных деталей (отводы, тройники, переходы), например ГОСТ 17375-2001; null — не указывается.</param>
+    /// <param name="fittingStandard">Стандарты приварных деталей по началу наименования («Отвод» → ГОСТ 17375-2001, «Тройник» → ГОСТ 17376-2001,
+    /// «Переход» → ГОСТ 17378-2001); null — не указываются.</param>
     /// <param name="steelDensity">Плотность стали для теоретической массы 1 м трубы, т/м³; null — масса не указывается.</param>
-    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, string? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null)
+    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, IReadOnlyDictionary<string, string>? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(sprinkler);
@@ -106,9 +107,9 @@ public static class MaterialTakeoffBuilder
             .OrderBy(f => FittingOrder(f.Key))
             .ThenBy(f => Diameters(f.Key).First)
             .ThenBy(f => Diameters(f.Key).Second)
-            .Select(f => f.Key.StartsWith("Крестовина", StringComparison.Ordinal) || fittingStandard is null
-                ? new TakeoffItem(TakeoffGroup.Fittings, f.Key, null, f.Value, "шт.", "уточняется при оформлении узлов")
-                : new TakeoffItem(TakeoffGroup.Fittings, f.Key, fittingStandard, f.Value, "шт.")));
+            .Select(f => fittingStandard?.FirstOrDefault(s => f.Key.StartsWith(s.Key, StringComparison.Ordinal)).Value is { } standard
+                ? new TakeoffItem(TakeoffGroup.Fittings, f.Key, standard, f.Value, "шт.")
+                : new TakeoffItem(TakeoffGroup.Fittings, f.Key, null, f.Value, "шт.", "уточняется при оформлении узлов")));
         return new MaterialTakeoff(items, series.Issues.ToList());
     }
 
