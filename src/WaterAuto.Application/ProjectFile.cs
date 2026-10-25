@@ -98,6 +98,47 @@ public sealed record ProjectDesign
 
     /// <summary>Предел оросителей на ветви, выбранный проектом (В-09; СП 485 предела не задаёт); null — без проверки.</summary>
     public int? MaxSprinklersPerBranch { get; init; }
+
+    /// <summary>Внутренний противопожарный водопровод, совмещённый с АУП (СН КР 40-04:2025, ADR 0010); null — без ВПВ.</summary>
+    public ProjectHydrants? Hydrants { get; init; }
+}
+
+/// <summary>Исходные данные ВПВ: признаки здания для табл. Ж.2, ПК для табл. Ж.3, трубопровод до диктующего ПК.</summary>
+public sealed class ProjectHydrants
+{
+    /// <summary>Степень огнестойкости: I, II, III, IV, V.</summary>
+    public string FireResistance { get; init; } = "";
+
+    /// <summary>Категория по пожарной опасности: А, Б, В, Г, Д.</summary>
+    public string Category { get; init; } = "";
+
+    /// <summary>Класс конструктивной пожарной опасности здания: С0, С1, С2, С3.</summary>
+    public string HazardClass { get; init; } = "";
+
+    /// <summary>Объём здания (пожарного отсека), тыс. м³.</summary>
+    public double Volume { get; init; }
+
+    /// <summary>Высота здания, м.</summary>
+    public double BuildingHeight { get; init; }
+
+    /// <summary>Высота помещения у диктующего ПК, м; null — высота помещения из design.</summary>
+    public double? RoomHeight { get; init; }
+
+    public int ValveDn { get; init; } = 50;
+
+    /// <summary>Диаметр спрыска ствола, мм: 13, 16, 19.</summary>
+    public int Nozzle { get; init; } = 16;
+
+    /// <summary>Длина рукава, м: 10, 15, 20.</summary>
+    public int HoseLength { get; init; } = 20;
+
+    /// <summary>Отметка клапана диктующего ПК над осью насоса, м.</summary>
+    public double AboveAxis { get; init; }
+
+    /// <summary>Трубопровод от точки ПТ_ВВОД до диктующего ПК: длина, м, и DN.</summary>
+    public double PipeLength { get; init; }
+
+    public int PipeDn { get; init; } = 65;
 }
 
 /// <summary>Титульный лист записки.</summary>

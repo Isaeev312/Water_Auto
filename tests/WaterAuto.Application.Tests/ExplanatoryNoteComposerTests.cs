@@ -11,7 +11,7 @@ public class ExplanatoryNoteComposerTests
 {
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
-    private static NoteDocument Compose()
+    private static NoteDocument Compose(bool hydrants = false)
     {
         var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
         var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
@@ -19,7 +19,8 @@ public class ExplanatoryNoteComposerTests
         var layout = SprinklerLayouter.Layout(plan, rules);
         var routing = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3));
         var settings = new DesignSettings("ГОСТ 3262", new KFactor(0.47), new Length(4), new Length(25), 100, new Pressure(0.1), DesignVelocity: 5);
-        var design = DesignCalculation.Run(routing.Routes[0], Norms, rules, settings);
+        var hs = new HydrantSettings("II", "В", "С0", 40, new Length(12), new Length(3.3), 50, 16, 20, new Length(1.35), new Length(15), 65);
+        var design = DesignCalculation.Run(routing.Routes[0], Norms, rules, settings, hydrants: hydrants ? new HydrantInput(hs, HydrantDemand.Resolve(Norms, hs).Demand!) : null);
         var takeoff = MaterialTakeoffBuilder.Build([design.Route], layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель спринклерный водяной", "по каталогу"));
         using var registry = new StreamReader(RepoPaths.Registry);
         var inputs = new NoteInputs(
@@ -48,6 +49,18 @@ public class ExplanatoryNoteComposerTests
         NoteFormula f => f.Expression + "\n" + string.Join("\n", f.Legend),
         _ => "",
     }));
+
+    [Fact]
+    public void Hydrant_section_cites_Zh2_Zh3_and_B29()
+    {
+        var text = AllText(Compose(hydrants: true).Sections.Single(s => s.Number == "5"));
+        text.ShouldContain("СН КР 40-04:2025");
+        text.ShouldContain("Ж.2");
+        text.ShouldContain("Ж.3");
+        text.ShouldContain("(Б.29)");
+        text.ShouldContain("Б.1.3.16");
+        AllText(Compose().Sections.Single(s => s.Number == "5")).ShouldNotContain("Ж.2");
+    }
 
     [Fact]
     public void Sections_follow_the_planned_structure()

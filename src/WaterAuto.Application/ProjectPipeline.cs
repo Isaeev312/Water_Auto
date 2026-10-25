@@ -94,7 +94,28 @@ public static class ProjectPipeline
             design.SupplyDn,
             new Pressure(design.InletPressure),
             design.DesignVelocity);
-        var designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters)).ToList();
+        HydrantInput? hydrants = null;
+        if (design.Hydrants is { } h)
+        {
+            var hs = new HydrantSettings(
+                h.FireResistance,
+                h.Category,
+                h.HazardClass,
+                h.Volume,
+                new Length(h.BuildingHeight),
+                new Length(h.RoomHeight ?? design.RoomHeight ?? 0),
+                h.ValveDn,
+                h.Nozzle,
+                h.HoseLength,
+                new Length(h.AboveAxis),
+                new Length(h.PipeLength),
+                h.PipeDn);
+            var demand = HydrantDemand.Resolve(norms, hs);
+            issues.AddRange(demand.Issues);
+            hydrants = demand.Demand is { } dv ? new HydrantInput(hs, dv) : null;
+        }
+
+        var designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
         var worst = designs.MaxBy(d => d.PumpPressure.Mpa)!;
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         var routes = designs.Select(d => d.Route).ToList();
