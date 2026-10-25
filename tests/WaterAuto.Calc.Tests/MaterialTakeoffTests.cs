@@ -129,4 +129,19 @@ public class MaterialTakeoffTests
         var meters = takeoff.Items.Where(i => i.Group == TakeoffGroup.Pipes).Sum(i => i.Quantity);
         meters.ShouldBe(route.Segments.Concat(route.Loops).Sum(s => s.Length.Meters), 0.05);
     }
+
+    [Fact]
+    public void Pipe_rows_carry_theoretical_mass_per_metre()
+    {
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
+        var layout = SprinklerLayouter.Layout(plan, rules);
+        var route = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3)).Routes[0];
+        var takeoff = MaterialTakeoffBuilder.Build([route], layout.Sprinklers.Count, Norms, "ГОСТ 3262-75", new SprinklerSpec("Ороситель", "СВВ-12", "Спецавтоматика"), steelDensity: 7.85);
+        var dn25 = takeoff.Items.Single(i => i.Group == TakeoffGroup.Pipes && i.Name.Contains("DN25", StringComparison.Ordinal));
+        dn25.UnitMass!.Value.ShouldBe(Math.Round(Math.PI * (33.5 - 2.8) * 2.8 * 7.85 / 1000, 2));
+        dn25.Designation.ShouldBe("ГОСТ 3262-75");
+        takeoff.Items.First(i => i.Group == TakeoffGroup.Sprinklers).Supplier.ShouldBe("Спецавтоматика");
+    }
 }
