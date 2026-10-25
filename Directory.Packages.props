@@ -3,6 +3,8 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Чертежи -->
+    <PackageVersion Include="ACadSharp" Version="3.7.16" />
     <!-- Данные -->
     <PackageVersion Include="JsonSchema.Net" Version="9.4.1" />
     <!-- Тесты -->
