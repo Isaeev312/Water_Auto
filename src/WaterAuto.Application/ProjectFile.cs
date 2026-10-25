@@ -150,6 +150,9 @@ public sealed class ProjectHydrants
     public double PipeLength { get; init; }
 
     public int PipeDn { get; init; } = 65;
+
+    /// <summary>Отапливаемая автостоянка закрытого типа: струи по п. 6.4 СНиП 21-02-99* (ADR 0010).</summary>
+    public bool IsParking { get; init; }
 }
 
 /// <summary>Титульный лист записки.</summary>

@@ -109,7 +109,8 @@ public static class ProjectPipeline
                 h.HoseLength,
                 new Length(h.AboveAxis),
                 new Length(h.PipeLength),
-                h.PipeDn);
+                h.PipeDn,
+                h.IsParking);
             var demand = HydrantDemand.Resolve(norms, hs);
             issues.AddRange(demand.Issues);
             hydrants = demand.Demand is { } dv ? new HydrantInput(hs, dv) : null;
