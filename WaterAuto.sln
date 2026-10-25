@@ -41,6 +41,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WaterAuto.Export.Tests", "t
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WaterAuto.Reports.Tests", "tests\WaterAuto.Reports.Tests\WaterAuto.Reports.Tests.csproj", "{B8CA32FB-55BC-4EDB-86AF-4192EA049F6A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WaterAuto.Application.Tests", "tests\WaterAuto.Application.Tests\WaterAuto.Application.Tests.csproj", "{4D1AB138-B912-4D96-94C0-CEC79BA52957}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -243,6 +245,18 @@ Global
 		{B8CA32FB-55BC-4EDB-86AF-4192EA049F6A}.Release|x64.Build.0 = Release|Any CPU
 		{B8CA32FB-55BC-4EDB-86AF-4192EA049F6A}.Release|x86.ActiveCfg = Release|Any CPU
 		{B8CA32FB-55BC-4EDB-86AF-4192EA049F6A}.Release|x86.Build.0 = Release|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Debug|x64.Build.0 = Debug|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Debug|x86.Build.0 = Debug|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Release|x64.ActiveCfg = Release|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Release|x64.Build.0 = Release|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Release|x86.ActiveCfg = Release|Any CPU
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -264,5 +278,6 @@ Global
 		{72D0ADCF-E512-4DFD-AE47-E8722F5524B3} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{D190EFDD-D17A-467F-B1EF-B3538B974DDD} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{B8CA32FB-55BC-4EDB-86AF-4192EA049F6A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{4D1AB138-B912-4D96-94C0-CEC79BA52957} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
