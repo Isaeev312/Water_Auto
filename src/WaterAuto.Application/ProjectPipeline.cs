@@ -63,6 +63,13 @@ public static class ProjectPipeline
             return Stop();
         }
 
+        var fire = FireParameters.Resolve(norms, design.RoomGroup, design.RoomHeight is { } rh ? new Length(rh) : null, design.StorageHeight is { } sh ? new Length(sh) : null);
+        issues.AddRange(fire.Issues);
+        if (fire.Parameters is not { } parameters)
+        {
+            return Stop();
+        }
+
         var layout = SprinklerLayouter.Layout(plan, rules, design.FloorElevation is { } floor ? new Length(floor) : null);
         issues.AddRange(layout.Issues);
 
@@ -83,7 +90,7 @@ public static class ProjectPipeline
             design.SupplyDn,
             new Pressure(design.InletPressure),
             design.DesignVelocity);
-        var designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings)).ToList();
+        var designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters)).ToList();
         var worst = designs.MaxBy(d => d.PumpPressure.Mpa)!;
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         var routes = designs.Select(d => d.Route).ToList();

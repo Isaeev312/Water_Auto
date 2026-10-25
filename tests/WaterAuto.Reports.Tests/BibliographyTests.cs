@@ -39,6 +39,18 @@ public class BibliographyTests
     }
 
     [Fact]
+    public void Laws_and_resolutions_come_before_codes_of_practice()
+    {
+        var law = new LiteratureEntry("FZ123", "Федеральный закон от 22.07.2008 № 123-ФЗ «Технический регламент о требованиях пожарной безопасности»", "—", "2008", "действует");
+        var pp = new LiteratureEntry("PP87", "Постановление Правительства РФ от 16.02.2008 № 87 «О составе разделов проектной документации»", "—", "2008", "действует");
+        var sp = LiteratureRegistry.Parse(new StringReader(Csv))[0];
+        var sp7 = new LiteratureEntry("SP7", "СП 7.13130.2013 «Отопление, вентиляция и кондиционирование»", "МЧС России", "2013", "действует");
+        var gost = new LiteratureEntry("G", "ГОСТ Р 59636-2021 «Установки пожаротушения автоматические»", "—", "2021", "действует");
+        Bibliography.Order([sp, pp, law, sp7, gost]).Select(e => e.Id).ShouldBe(["FZ123", "PP87", "G", "SP7", "SP485-izm"]);
+        Bibliography.Format(law).ShouldStartWith("Федеральный закон от 22.07.2008 № 123-ФЗ");
+    }
+
+    [Fact]
     public void Norms_come_first_then_the_rest_alphabetically()
     {
         var entries = LiteratureRegistry.Parse(new StringReader(Csv));

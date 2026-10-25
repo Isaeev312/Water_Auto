@@ -63,8 +63,17 @@ public class ExplanatoryNoteComposerTests
             ("6", "Насосная установка"),
             ("7", "Запас воды"),
             ("8", "Спецификация"),
+            ("9", "Взаимодействие со смежными системами"),
             ("", "Заключение"),
         ]);
+    }
+
+    [Fact]
+    public void Interfaces_cite_SP_7()
+    {
+        var text = AllText(Compose().Sections.Single(s => s.Number == "9"));
+        text.ShouldContain("СП 7.13130.2013, п. 6.24");
+        text.ShouldContain("п. 7.3 «а»");
     }
 
     [Fact]

@@ -1,0 +1,404 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "clause": "табл. 6.2",
+  "title": "Интенсивность и расход для складов (группы 5–7) по высоте складирования",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, табл. 6.2 и примечание 3 (формулы — изображения).",
+  "verified": false,
+  "columns": {
+    "hMin": "высота складирования «св.», м (не включая)",
+    "hMax": "высота складирования «до … включ.», м"
+  },
+  "footnotes": {
+    "*": "Минимальная площадь S, продолжительность и шаг для групп 5–7 — по табл. 6.1.",
+    "Высота складирования более 5,5 м": "таблицей 6.2 не охватывается."
+  },
+  "records": [
+    {
+      "id": "sp485.t6_2.group5.hdo1",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 0,
+        "hMax": 1,
+        "i_water": 0.08,
+        "i_foam": 0.04,
+        "Q_water": 15,
+        "Q_foam": 7.5
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "5"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group5.h1_2",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 1,
+        "hMax": 2,
+        "i_water": 0.16,
+        "i_foam": 0.08,
+        "Q_water": 30,
+        "Q_foam": 15.0
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "5"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group5.h2_3",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 2,
+        "hMax": 3,
+        "i_water": 0.24,
+        "i_foam": 0.12,
+        "Q_water": 45,
+        "Q_foam": 22.5
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "5"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group5.h3_4",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 3,
+        "hMax": 4,
+        "i_water": 0.32,
+        "i_foam": 0.16,
+        "Q_water": 60,
+        "Q_foam": 30.0
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "5"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group5.h4_5_5",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 4,
+        "hMax": 5.5,
+        "i_water": 0.4,
+        "i_foam": 0.32,
+        "Q_water": 75,
+        "Q_foam": 37.5
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "5"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group6.hdo1",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 0,
+        "hMax": 1,
+        "i_water": 0.16,
+        "i_foam": 0.08,
+        "Q_water": 30,
+        "Q_foam": 15
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "6"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group6.h1_2",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 1,
+        "hMax": 2,
+        "i_water": 0.32,
+        "i_foam": 0.16,
+        "Q_water": 60,
+        "Q_foam": 30
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "6"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group6.h2_3",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 2,
+        "hMax": 3,
+        "i_water": 0.4,
+        "i_foam": 0.24,
+        "Q_water": 75,
+        "Q_foam": 45
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "6"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group6.h3_4",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 3,
+        "hMax": 4,
+        "i_water": 0.45,
+        "i_foam": 0.32,
+        "Q_water": 85,
+        "Q_foam": 60
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "6"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group6.h4_5_5",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 4,
+        "hMax": 5.5,
+        "i_water": 0.5,
+        "i_foam": 0.4,
+        "Q_water": 90,
+        "Q_foam": 75
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "6"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group7.hdo1",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 0,
+        "hMax": 1,
+        "i_water": null,
+        "i_foam": 0.1,
+        "Q_water": null,
+        "Q_foam": 18
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "7"
+      },
+      "refs": {
+        "i_water": "в таблице «-»: водой группа 7 не тушится",
+        "Q_water": "в таблице «-»"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group7.h1_2",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 1,
+        "hMax": 2,
+        "i_water": null,
+        "i_foam": 0.2,
+        "Q_water": null,
+        "Q_foam": 36
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "7"
+      },
+      "refs": {
+        "i_water": "в таблице «-»: водой группа 7 не тушится",
+        "Q_water": "в таблице «-»"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group7.h2_3",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 2,
+        "hMax": 3,
+        "i_water": null,
+        "i_foam": 0.3,
+        "Q_water": null,
+        "Q_foam": 54
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "7"
+      },
+      "refs": {
+        "i_water": "в таблице «-»: водой группа 7 не тушится",
+        "Q_water": "в таблице «-»"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group7.h3_4",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 3,
+        "hMax": 4,
+        "i_water": null,
+        "i_foam": 0.4,
+        "Q_water": null,
+        "Q_foam": 75
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "7"
+      },
+      "refs": {
+        "i_water": "в таблице «-»: водой группа 7 не тушится",
+        "Q_water": "в таблице «-»"
+      }
+    },
+    {
+      "id": "sp485.t6_2.group7.h4_5_5",
+      "clause": "табл. 6.2",
+      "values": {
+        "hMin": 4,
+        "hMax": 5.5,
+        "i_water": null,
+        "i_foam": 0.5,
+        "Q_water": null,
+        "Q_foam": 90
+      },
+      "units": {
+        "hMin": "м",
+        "hMax": "м",
+        "i_water": "л/(с·м²)",
+        "i_foam": "л/(с·м²)",
+        "Q_water": "л/с",
+        "Q_foam": "л/с"
+      },
+      "attrs": {
+        "group": "7"
+      },
+      "refs": {
+        "i_water": "в таблице «-»: водой группа 7 не тушится",
+        "Q_water": "в таблице «-»"
+      }
+    },
+    {
+      "id": "sp485.t6_2.note3",
+      "clause": "табл. 6.2",
+      "values": {
+        "k0": 1,
+        "k1": 0.05,
+        "hRef": 10,
+        "hMax": 30,
+        "storageMax": 5.5
+      },
+      "units": {
+        "k0": "—",
+        "k1": "1/м",
+        "hRef": "м",
+        "hMax": "м",
+        "storageMax": "м"
+      },
+      "note": "Примечание 3: для складов с высотой складирования до 5,5 м включ. и высотой помещения более 10 м (но не выше 30 м) Q_h = [k0 + k1·(H − hRef)]·Q, i_h = [k0 + k1·(H − hRef)]·i, где Q и i — по таблице при высоте помещения не более 10 м, H — высота помещения, м. Формулы восстановлены по изображениям в docx."
+    }
+  ]
+}

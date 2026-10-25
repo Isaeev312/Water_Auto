@@ -105,12 +105,30 @@ public static partial class Bibliography
         return $"{authors}{entry.Title.TrimEnd('.')}. — {Year(entry.Year)}. — {Missing}.";
     }
 
-    /// <summary>Сначала нормативные документы, затем остальное по алфавиту (авторы, затем название).</summary>
+    /// <summary>
+    /// По юридической силе: федеральные законы, постановления правительства, своды правил и стандарты,
+    /// затем остальное по алфавиту (авторы, затем название).
+    /// </summary>
     public static IReadOnlyList<LiteratureEntry> Order(IEnumerable<LiteratureEntry> entries) =>
         entries
-            .OrderBy(e => NormTitle().IsMatch(e.Title) ? 0 : 1)
+            .OrderBy(e => e.Title.StartsWith("Федеральный закон", StringComparison.Ordinal) ? 0
+                : e.Title.StartsWith("Постановление", StringComparison.Ordinal) ? 1
+                : NormTitle().IsMatch(e.Title) ? 2
+                : 3)
+            .ThenBy(e => NormTitle().IsMatch(e.Title) ? CodeKey(e.Title) : "", StringComparer.Ordinal)
             .ThenBy(e => e.Authors is "" or "—" ? e.Title : e.Authors, StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), false))
             .ToList();
+
+    // Нормы по обозначению: вид документа, затем номер по возрастанию (СП 7 раньше СП 30, СП 30 раньше СП 485).
+    private static string CodeKey(string title)
+    {
+        var code = NormTitle().Match(title).Groups["code"].Value;
+        var kind = code.StartsWith("ГОСТ", StringComparison.Ordinal) ? "1" : code.StartsWith("СП", StringComparison.Ordinal) ? "2" : "3";
+        return kind + Digits().Replace(code, m => m.Value.PadLeft(8, '0'));
+    }
+
+    [GeneratedRegex(@"\d+")]
+    private static partial Regex Digits();
 
     private static string Year(string year) => year.Length > 0 ? year : "[год]";
 

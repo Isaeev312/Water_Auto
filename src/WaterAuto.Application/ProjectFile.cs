@@ -70,6 +70,12 @@ public sealed record ProjectDesign
 
     public string PipeStandard { get; init; } = "ГОСТ 3262";
 
+    /// <summary>Высота помещения, м — для табл. 6.3 и примечания 3 к табл. 6.2; null — до 10 м.</summary>
+    public double? RoomHeight { get; init; }
+
+    /// <summary>Высота складирования, м — для складов (группы 5–7, табл. 6.2).</summary>
+    public double? StorageHeight { get; init; }
+
     /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
     public double? FloorElevation { get; init; }
 
