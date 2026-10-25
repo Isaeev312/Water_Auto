@@ -9,7 +9,7 @@ using WaterAuto.Core;
 namespace WaterAuto.Export;
 
 /// <summary>Оформление DXF: размеры значков и текста на плане, мм. Это не нормы — только вид чертежа.</summary>
-public sealed record PlanDxfStyle(double SprinklerRadiusMm = 100, double TextHeightMm = 200, double IssueRadiusMm = 500);
+public sealed record PlanDxfStyle(double SprinklerRadiusMm = 100, double TextHeightMm = 200, double IssueRadiusMm = 500, string Font = DocumentStyle.DefaultFont);
 
 /// <summary>
 /// Сводка расчёта для листа плана: строки «параметр — значение» и оросители диктующей зоны.
@@ -55,7 +55,8 @@ public static class PlanDxfWriter
     public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null)
     {
         var source = basePath is null ? null : DxfDrawing.Read(basePath);
-        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source, supports, dimensions, hydrants));
+        style ??= new PlanDxfStyle();
+        DxfDrawing.Save(path, Build(layout, routes, issues, style, summary, inlets, source, supports, dimensions, hydrants), style.Font);
     }
 
     public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null)

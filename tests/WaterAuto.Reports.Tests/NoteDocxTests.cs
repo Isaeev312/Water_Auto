@@ -97,20 +97,24 @@ public class NoteDocxTests
     }
 
     [Fact]
-    public void Page_is_A4_with_GOST_7_32_margins_and_font()
+    public void Page_is_A4_in_a_frame_with_stamps_and_GOST_font()
     {
         using var doc = WriteAndOpen();
-        var section = doc.MainDocumentPart!.Document.Body!.Elements<SectionProperties>().Single();
+        var body = doc.MainDocumentPart!.Document.Body!;
+        var sections = body.Descendants<SectionProperties>().ToList();
+        sections.Count.ShouldBe(3); // титульный лист, содержание, текст
+        var section = sections[^1];
         var size = section.GetFirstChild<PageSize>()!;
         ((int)size.Width!.Value).ShouldBe(11906); // 210 мм в twip
         ((int)size.Height!.Value).ShouldBe(16838);
         var margin = section.GetFirstChild<PageMargin>()!;
-        ((int)margin.Left!.Value).ShouldBe(1701); // 30 мм
-        ((int)margin.Right!.Value).ShouldBe(850); // 15 мм
-        ((int)margin.Top!.Value).ShouldBe(1134); // 20 мм
+        ((int)margin.Left!.Value).ShouldBe(1417); // рамка 20 мм + 5 мм
+        ((int)margin.Right!.Value).ShouldBe(567); // рамка 5 мм + 5 мм
         var defaults = doc.MainDocumentPart.StyleDefinitionsPart!.Styles!.DocDefaults!.RunPropertiesDefault!.RunPropertiesBaseStyle!;
-        defaults.RunFonts!.Ascii!.Value.ShouldBe("Times New Roman");
+        defaults.RunFonts!.Ascii!.Value.ShouldBe("GOST Common");
         defaults.FontSize!.Val!.Value.ShouldBe("28"); // 14 пт
-        doc.MainDocumentPart.FooterParts.ShouldNotBeEmpty(); // номер страницы
+        var footers = doc.MainDocumentPart.FooterParts.Select(f => f.Footer.InnerText).ToList();
+        footers.ShouldContain(f => f.Contains("Стадия", StringComparison.Ordinal)); // форма 5 — на листе содержания
+        footers.ShouldContain(f => f.Contains("Лист", StringComparison.Ordinal) && !f.Contains("Стадия", StringComparison.Ordinal)); // форма 6
     }
 }

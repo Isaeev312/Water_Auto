@@ -16,7 +16,7 @@ public static class SpecificationDocx
     private const string Size = "22";
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static void Write(string path, MaterialTakeoff takeoff, TitleBlock stamp)
+    public static void Write(string path, MaterialTakeoff takeoff, TitleBlock stamp, string font = GostFrame.Font)
     {
         ArgumentNullException.ThrowIfNull(takeoff);
         ArgumentNullException.ThrowIfNull(stamp);
@@ -24,7 +24,6 @@ public static class SpecificationDocx
         var main = doc.AddMainDocumentPart();
         main.Document = new Document(new Body());
         var body = main.Document.Body!;
-        var font = GostFrame.Font;
         var styles = main.AddNewPart<StyleDefinitionsPart>();
         styles.Styles = new Styles(new DocDefaults(
             new RunPropertiesDefault(new RunPropertiesBaseStyle(new RunFonts { Ascii = font, HighAnsi = font, ComplexScript = font, EastAsia = font }, new FontSize { Val = Size }, new FontSizeComplexScript { Val = Size }, new Languages { Val = "ru-RU" })),
@@ -90,6 +89,7 @@ public static class SpecificationDocx
             new PageMargin { Left = (UInt32Value)(uint)Twips(20), Right = (UInt32Value)(uint)Twips(5), Top = Twips(5), Bottom = Twips(5 + GostFrame.Height(StampForm.Form5)), Header = 0, Footer = 0, Gutter = 0 });
         body.Append(section);
         GostFrame.Apply(main, section, 420, 297, stamp, StampForm.Form5, StampForm.Form6);
+        DocxFont.Apply(main, font);
         main.Document.Save();
     }
 

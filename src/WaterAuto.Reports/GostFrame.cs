@@ -2,6 +2,7 @@ using System.Globalization;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using WaterAuto.Core;
 using Vml = DocumentFormat.OpenXml.Vml;
 
 namespace WaterAuto.Reports;
@@ -23,9 +24,10 @@ public sealed record TitleBlock(
     IReadOnlyList<TitleSignature> Signatures,
     int? SheetCount = null);
 
-/// <summary>Форма основной надписи ГОСТ Р 21.101: 3 — чертежи; 5 — первый лист текстового документа; 6 — последующие листы.</summary>
+/// <summary>Форма основной надписи ГОСТ Р 21.101: 3 — чертежи; 5 — первый лист текстового документа; 6 — последующие листы; None — только рамка и дополнительные графы (титульный лист).</summary>
 public enum StampForm
 {
+    None,
     Form3,
     Form5,
     Form6,
@@ -38,7 +40,7 @@ public enum StampForm
 /// </summary>
 public static class GostFrame
 {
-    public const string Font = "GOST Common";
+    public const string Font = DocumentStyle.DefaultFont;
     private const int Thick = 12;
     private const int Thin = 4;
 
@@ -47,7 +49,8 @@ public static class GostFrame
     {
         StampForm.Form3 => 55,
         StampForm.Form5 => 40,
-        _ => 15,
+        StampForm.Form6 => 15,
+        _ => 0,
     };
 
     /// <summary>Рамка и основные надписи раздела: <paramref name="first"/> — на первом листе, <paramref name="others"/> — на остальных.</summary>
@@ -66,11 +69,13 @@ public static class GostFrame
 
             var form = type == HeaderFooterValues.First ? first : others;
             var footer = main.AddNewPart<FooterPart>();
-            footer.Footer = new Footer(
-                Stamp(form, block, pageWidthMm, pageHeightMm, type == HeaderFooterValues.First),
-                Tiny(),
-                Additional(pageHeightMm),
-                Tiny());
+            footer.Footer = form == StampForm.None
+                ? new Footer(Additional(pageHeightMm), Tiny())
+                : new Footer(
+                    Stamp(form, block, pageWidthMm, pageHeightMm, type == HeaderFooterValues.First),
+                    Tiny(),
+                    Additional(pageHeightMm),
+                    Tiny());
             section.InsertAfter(new FooterReference { Type = type, Id = main.GetIdOfPart(footer) }, section.Elements<HeaderReference>().Last());
         }
 
@@ -292,9 +297,10 @@ public static class GostFrame
         return table;
     }
 
+    // Межстрочный интервал 0,85 — текст 10 пт помещается в строку высотой 5 мм без обрезки.
     private static Paragraph Para(OpenXmlElement content, JustificationValues align) => new(
         new ParagraphProperties(
-            new SpacingBetweenLines { Before = "0", After = "0", Line = "240", LineRule = LineSpacingRuleValues.Auto },
+            new SpacingBetweenLines { Before = "0", After = "0", Line = "204", LineRule = LineSpacingRuleValues.Auto },
             new Justification { Val = align }),
         content);
 

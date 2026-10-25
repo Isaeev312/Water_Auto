@@ -107,7 +107,6 @@ public static class GeneralDataComposer
         }
 
         instructions.Add("Размеры даны в миллиметрах, отметки — в метрах.");
-        instructions.Add("Расчёт выполнен программой Water_Auto; результаты подлежат проверке специалистом по противопожарным системам.");
 
         return new GeneralData(
             $"{i.ObjectName}. Автоматическая установка водяного пожаротушения. Общие данные",

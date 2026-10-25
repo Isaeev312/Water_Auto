@@ -20,6 +20,9 @@ public sealed record ProjectFile
 
     public ProjectTitle Title { get; init; } = new();
 
+    /// <summary>Единый шрифт выпуска: записка, спецификация, «Общие данные», основные надписи и надписи на чертежах.</summary>
+    public string Font { get; init; } = Core.DocumentStyle.DefaultFont;
+
     /// <summary>Ведомость рабочих чертежей основного комплекта (лист «Общие данные»).</summary>
     public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
     [

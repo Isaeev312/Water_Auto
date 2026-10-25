@@ -84,4 +84,17 @@ public class GostFrameTests
         footer.ShouldContain(t => t.Contains("Листов", StringComparison.Ordinal) && t.Contains('6', StringComparison.Ordinal));
         footer.ShouldAllBe(t => t.Contains("Подп.", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void Chosen_font_is_used_everywhere_including_the_stamp()
+    {
+        var fonts = Open(p => SpecificationDocx.Write(p, Takeoff, Stamp, "ISOCPEUR"), d =>
+            d.MainDocumentPart!.Document.Descendants<RunFonts>()
+                .Concat(d.MainDocumentPart.StyleDefinitionsPart!.Styles!.Descendants<RunFonts>())
+                .Concat(d.MainDocumentPart.FooterParts.SelectMany(f => f.Footer.Descendants<RunFonts>()))
+                .Select(f => f.Ascii!.Value)
+                .Distinct()
+                .ToList());
+        fonts.ShouldBe(["ISOCPEUR"]);
+    }
 }
