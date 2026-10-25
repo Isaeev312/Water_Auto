@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WaterAuto.Core\WaterAuto.Core.csproj" />
     <ProjectReference Include="..\..\src\WaterAuto.Export\WaterAuto.Export.csproj" />
+    <ProjectReference Include="..\..\src\WaterAuto.Import\WaterAuto.Import.csproj" />
   </ItemGroup>
 
 </Project>

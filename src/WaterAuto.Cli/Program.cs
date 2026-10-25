@@ -1,6 +1,7 @@
 // Консоль для расчёта по проекту и для тестов.
 //   calc <проект.waproj> --out <папка> [--data <папка data>]  — сквозной расчёт: план, аксонометрия, спецификация, записка
 //   new <проект.waproj> --drawing <чертёж.dwg|dxf>              — заготовка файла проекта с исходными данными
+//   template <файл.dwt|dwg|dxf>                                 — шаблон чертежа: слои ПТ_, мм, блок ввода, памятка
 using System.Text;
 using WaterAuto.Application;
 
@@ -9,6 +10,7 @@ const string Usage = """
     Использование:
       WaterAuto.Cli calc <проект.waproj> --out <папка> [--data <папка data>]
       WaterAuto.Cli new <проект.waproj> --drawing <чертёж.dwg|dxf>
+      WaterAuto.Cli template <файл.dwt|dwg|dxf>
     """;
 
 if (args.Length < 2 || args[0] is "-h" or "--help")
@@ -73,6 +75,14 @@ switch (args[0])
         var relative = Path.GetRelativePath(Path.GetDirectoryName(path)!, Path.GetFullPath(drawing));
         File.WriteAllText(path, ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(path), Drawing = relative }), new UTF8Encoding(false));
         Console.WriteLine($"Создан {path}. Заполните design: sprinklerK (по паспорту оросителя), dictatingAboveAxis, supplyLength, supplyDn, inletPressure (по ТУ), designVelocity.");
+        return 0;
+    }
+
+    case "template":
+    {
+        var path = Path.GetFullPath(args[1]);
+        DrawingTemplate.Write(path);
+        Console.WriteLine($"Шаблон: {path}. Архитектурный план — внешней ссылкой в 0,0, контуры и препятствия — на слоях ПТ_ (памятка в файле).");
         return 0;
     }
 
