@@ -26,6 +26,7 @@ public static class ProjectPipeline
     public const string AxonometryFile = "axonometry.dxf";
     public const string SpecificationFile = "specification.xlsx";
     public const string NoteFile = "note.docx";
+    public const string GeneralDataFile = "general_data.docx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -249,16 +250,19 @@ public static class ProjectPipeline
                 hydrantReach),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
+
+        // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
+        var general = GeneralDataComposer.Compose(
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards),
+            norms,
+            GeneralDataComposer.DocumentsPath(normsDir));
+        Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general));
         files.Add(WriteIssues(outDir, issues));
         return new PipelineResult(true, files, issues, worst);
     }
 
     // «Отвод» → «отводы» для перечня стандартов фасонных частей в ПЗ.
-    private static string Plural(string noun)
-    {
-        var lower = noun.ToLower(CultureInfo.GetCultureInfo("ru-RU"));
-        return lower + ("кгхжшчщ".Contains(lower[^1], StringComparison.Ordinal) ? "и" : "ы");
-    }
+    private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
 
     // Цвет колбы в данных — прилагательное мужского рода («красный»); в спецификации — «колба красная».
     private static string Feminine(string color) => color.EndsWith("ый", StringComparison.Ordinal) || color.EndsWith("ий", StringComparison.Ordinal) || color.EndsWith("ой", StringComparison.Ordinal)

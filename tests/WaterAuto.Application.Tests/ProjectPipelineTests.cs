@@ -89,7 +89,7 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile,
-            ProjectPipeline.SpecificationFile, ProjectPipeline.NoteFile, ProjectPipeline.IssuesFile,
+            ProjectPipeline.SpecificationFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);
         result.Design!.PumpHead.Meters.ShouldBeGreaterThan(0);
@@ -176,5 +176,19 @@ public sealed class ProjectPipelineTests : IDisposable
         chains[1].Points[0].YMm.ShouldBe(0, 1e-6);
         chains[1].Points[^1].YMm.ShouldBe(20000, 1e-6);
         chains[0].Points.Zip(chains[0].Points.Skip(1), (a, b) => b.XMm - a.XMm).ShouldAllBe(d => d > 0);
+    }
+
+    [Fact]
+    public void General_data_lists_the_spec_standards_with_names()
+    {
+        Drawing();
+        var result = Run(Project());
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        using var doc = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.GeneralDataFile, StringComparison.Ordinal)), false);
+        var text = doc.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("Ведомость ссылочных и прилагаемых документов");
+        text.ShouldContain("ГОСТ 3262-75");
+        text.ShouldContain("Трубы стальные водогазопроводные. Технические условия");
+        text.ShouldContain("Расход пожарного насоса");
     }
 }

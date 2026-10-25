@@ -20,6 +20,17 @@ public sealed record ProjectFile
 
     public ProjectTitle Title { get; init; } = new();
 
+    /// <summary>Ведомость рабочих чертежей основного комплекта (лист «Общие данные»).</summary>
+    public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
+    [
+        new("1", "Общие данные"),
+        new("2", "Принципиальная схема насосной станции пожаротушения"),
+        new("3", "План насосной станции"),
+        new("4", "План этажа. Расстановка оросителей, трубопроводы, пожарные краны"),
+        new("5", "Аксонометрическая схема трубопроводов"),
+        new("6", "Узлы"),
+    ];
+
     /// <summary>ID реестра литературы для списка источников; пусто — действующие нормы реестра.</summary>
     public IReadOnlyList<string> Literature { get; init; } = [];
 
@@ -211,3 +222,6 @@ public sealed record ProjectTitle
 
     public string CityYear { get; init; } = "[Город, год]";
 }
+
+/// <summary>Лист основного комплекта: номер, наименование, примечание.</summary>
+public sealed record ProjectSheet(string Sheet, string Name, string Note = "");
