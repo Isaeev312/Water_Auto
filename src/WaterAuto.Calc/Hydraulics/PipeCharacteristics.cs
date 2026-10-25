@@ -24,6 +24,12 @@ public static class PipeCharacteristics
         ArgumentNullException.ThrowIfNull(norms);
         var outerDiameterMm = outerDiameter.Millimeters;
         var wallMm = wall.Millimeters;
+        if (!double.IsFinite(outerDiameterMm) || !double.IsFinite(wallMm)
+            || outerDiameterMm <= 0 || wallMm <= 0 || outerDiameterMm <= 2 * wallMm)
+        {
+            return null;
+        }
+
         foreach (var r in norms.ByClause("табл. Б.2"))
         {
             if (r.Attributes.GetValueOrDefault("standard") == standard
@@ -43,6 +49,11 @@ public static class PipeCharacteristics
 
         var inner = outerDiameterMm - (2 * wallMm);
         var kt = 1e-8 * coefficients.Values["psi"]!.Value * Math.Pow(inner, coefficients.Values["theta"]!.Value);
+        if (!double.IsFinite(kt) || kt <= 0)
+        {
+            return null;
+        }
+
         return new ResolvedCharacteristic(new PipeCharacteristic(kt), CharacteristicSource.FormulaB8, coefficients.Id);
     }
 }
