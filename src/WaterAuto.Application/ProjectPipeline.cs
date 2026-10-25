@@ -198,7 +198,7 @@ public static class ProjectPipeline
         var t = project.Title;
         var note = ExplanatoryNoteComposer.Compose(
             new NoteInputs(
-                new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear),
+                new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
                 project.Name,
                 design.RoomGroup,
                 design.ConstructionClass,
