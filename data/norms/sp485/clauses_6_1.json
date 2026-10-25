@@ -1,0 +1,36 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "clause": "6.1.15",
+  "title": "Запас спринклерных и дренчерных оросителей",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, п. 6.1.15.",
+  "verified": false,
+  "columns": {
+    "upToTotal": "общее количество оросителей, включительно; null — «более» предыдущей строки",
+    "sprinklerSpare": "не менее, спринклерных",
+    "drencherSpare": "не менее, дренчерных"
+  },
+  "records": [
+    {
+      "id": "sp485.p6_1_15.upTo100",
+      "clause": "6.1.15",
+      "values": { "upToTotal": 100, "sprinklerSpare": 5, "drencherSpare": 1 },
+      "units": { "upToTotal": "шт.", "sprinklerSpare": "шт.", "drencherSpare": "шт." }
+    },
+    {
+      "id": "sp485.p6_1_15.upTo1000",
+      "clause": "6.1.15",
+      "values": { "upToTotal": 1000, "sprinklerSpare": 10, "drencherSpare": 2 },
+      "units": { "upToTotal": "шт.", "sprinklerSpare": "шт.", "drencherSpare": "шт." }
+    },
+    {
+      "id": "sp485.p6_1_15.over1000",
+      "clause": "6.1.15",
+      "values": { "upToTotal": null, "sprinklerSpare": 15, "drencherSpare": 3 },
+      "units": { "upToTotal": "шт.", "sprinklerSpare": "шт.", "drencherSpare": "шт." },
+      "refs": { "upToTotal": "«более 1000 шт.» — без верхней границы" }
+    }
+  ]
+}

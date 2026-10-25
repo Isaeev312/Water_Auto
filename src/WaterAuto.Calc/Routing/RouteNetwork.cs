@@ -14,39 +14,7 @@ public static class RouteNetwork
     {
         ArgumentNullException.ThrowIfNull(route);
         ArgumentNullException.ThrowIfNull(norms);
-        var issues = new List<Issue>();
-        var series = norms.ByClause("табл. Б.2")
-            .Where(r => r.Attributes.GetValueOrDefault("standard") == standard && r.Attributes.GetValueOrDefault("outdoorOnly") != "true")
-            .OrderBy(r => r.Values["dn"])
-            .ToList();
-        var resolved = new Dictionary<int, PipeCharacteristic?>();
-        PipeCharacteristic? Kt(int dn)
-        {
-            if (resolved.TryGetValue(dn, out var known))
-            {
-                return known;
-            }
-
-            var actual = series.Select(r => (int)r.Values["dn"]!.Value).Where(d => d >= dn).DefaultIfEmpty(-1).Min();
-            if (actual < 0)
-            {
-                issues.Add(new Issue("network.noPipe", IssueLevel.Error, $"В табл. Б.2 для {standard} нет трубы DN {dn} и больше.", Clause: "табл. Б.2"));
-                return resolved[dn] = null;
-            }
-
-            var rows = series.Where(r => (int)r.Values["dn"]!.Value == actual).ToList();
-            if (actual != dn)
-            {
-                issues.Add(new Issue("network.dnSubstituted", IssueLevel.Info, $"DN {dn} (табл. Б.4) нет в сортаменте {standard} — принят DN {actual}.", rows[0].Id, "табл. Б.4"));
-            }
-
-            if (rows.Count > 1)
-            {
-                issues.Add(new Issue("network.pipeAmbiguous", IssueLevel.Warning, $"Для {standard} DN {actual} в табл. Б.2 несколько труб — принята {rows[0].Id}; задайте трубу явно.", rows[0].Id, "табл. Б.2"));
-            }
-
-            return resolved[dn] = new PipeCharacteristic(rows[0].Values["Kt"]!.Value);
-        }
+        var series = new PipeSeries(norms, standard);
 
         var nodes = route.Nodes.Select(n => n.Kind switch
         {
@@ -57,12 +25,13 @@ public static class RouteNetwork
         var pipes = new List<NetworkPipe>();
         foreach (var s in route.Segments)
         {
-            if (Kt(s.Dn) is { } kt)
+            if (series.Pick(s.Dn) is { } pipe)
             {
-                pipes.Add(new NetworkPipe(s.Id, s.From, s.To, s.Length, kt, lossMultiplier));
+                pipes.Add(new NetworkPipe(s.Id, s.From, s.To, s.Length, pipe.Kt, lossMultiplier));
             }
         }
 
+        var issues = series.Issues.ToList();
         return issues.Any(i => i.Level == IssueLevel.Error)
             ? new RouteNetworkResult(null, issues)
             : new RouteNetworkResult(new HydraulicNetwork(nodes, pipes), issues);
