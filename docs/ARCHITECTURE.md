@@ -173,7 +173,7 @@ WaterAuto/
 | Разреженная линейная алгебра | MathNet.Numerics | MIT | Calc (солвер) |
 | Типизированные единицы | UnitsNet или свои типы | MIT | Core |
 | xlsx | ClosedXML 0.105.0 (ADR 0006) | MIT | Reports |
-| docx | Open XML SDK | MIT | Reports |
+| docx | Open XML SDK (DocumentFormat.OpenXml 3.1.1, ADR 0007) | MIT | Reports |
 | pdf | QuestPDF | бесплатно при выручке < 1 млн USD | Reports |
 | Проверка солвера | OWA-EPANET (через .inp или P/Invoke) | MIT | tests |
 | Плагин Revit (позже) | Nice3point RevitTemplates | MIT | plugins |

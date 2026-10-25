@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" />
+    <PackageReference Include="DocumentFormat.OpenXml" />
   </ItemGroup>
 
 </Project>
