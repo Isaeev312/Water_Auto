@@ -48,7 +48,8 @@ public class SpecificationXlsxTests
             "Фасонные части",
             "Отвод 90° DN100",
         ]);
-        rows.Select(r => r.Cell(1).GetString()).Where(s => s.Length > 0).ShouldBe(["1", "2", "3", "4"]);
+        // Позиции нумеруются заново в каждом разделе.
+        rows.Select(r => r.Cell(1).GetString()).Where(s => s.Length > 0).ShouldBe(["1", "2", "1", "1"]);
         var pipe = rows.Single(r => r.Cell(2).GetString().StartsWith("Трубы", StringComparison.Ordinal));
         pipe.Cell(3).GetString().ShouldBe("ГОСТ 3262");
         pipe.Cell(6).GetString().ShouldBe("м");
@@ -64,5 +65,14 @@ public class SpecificationXlsxTests
         ws.PageSetup.PageOrientation.ShouldBe(XLPageOrientation.Landscape);
         ws.PageSetup.FirstRowToRepeatAtTop.ShouldBe(SpecificationXlsx.HeaderRow);
         ws.PageSetup.LastRowToRepeatAtTop.ShouldBe(SpecificationXlsx.HeaderRow + 1);
+    }
+
+    [Fact]
+    public void Rows_are_8_mm_high_and_the_bottom_is_left_for_the_title_block()
+    {
+        var ws = WriteAndRead().Worksheet(1);
+        var body = ws.RowsUsed().Where(r => r.RowNumber() > SpecificationXlsx.HeaderRow + 1).ToList();
+        body.ShouldAllBe(r => Math.Abs((r.Height / SpecificationXlsx.RowHeightPt) - Math.Round(r.Height / SpecificationXlsx.RowHeightPt)) < 0.01 && r.Height >= SpecificationXlsx.RowHeightPt - 0.1);
+        (ws.PageSetup.Margins.Bottom * 25.4).ShouldBeGreaterThanOrEqualTo(55);
     }
 }

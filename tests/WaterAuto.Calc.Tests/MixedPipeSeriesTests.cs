@@ -23,4 +23,18 @@ public class MixedPipeSeriesTests
     {
         new PipeSeries(Norms, "ГОСТ 3262-75").Pick(32)!.Standard.ShouldBe("ГОСТ 3262-75");
     }
+
+    [Fact]
+    public void Accepted_size_replaces_the_table_row_and_gets_Kt_by_B8()
+    {
+        var series = new PipeSeries(Norms, "ГОСТ 10704-91", [new PipeSize("ГОСТ 10704", 50, 57, 3.5)]);
+        var pipe = series.Pick(50)!;
+        pipe.OuterDiameterMm.ShouldBe(57);
+        pipe.WallMm.ShouldBe(3.5);
+        pipe.NormId.ShouldStartWith("sp485.tB_3");
+
+        // Ø50 мм внутри меньше, чем у 57×2,5 (Ø52) — Kт меньше табличного 110.
+        pipe.Kt.Kt.ShouldBeLessThan(110);
+        pipe.Kt.Kt.ShouldBeGreaterThan(50);
+    }
 }
