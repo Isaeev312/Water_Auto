@@ -37,6 +37,10 @@ public static class NoteDocx
                     case NotePending p:
                         body.Append(Text(p.Text, highlight: true));
                         break;
+                    case NoteFormula f:
+                        body.Append(Formula(f));
+                        body.Append(f.Legend.Select(l => Text(l, indent: false)));
+                        break;
                     case NoteTable t:
                         body.Append(Text(t.Caption, indent: false));
                         body.Append(Table(t));
@@ -132,13 +136,119 @@ public static class NoteDocx
             props.Append(new Indentation { FirstLine = Mm(12.5).ToString(System.Globalization.CultureInfo.InvariantCulture) });
         }
 
-        var run = new Run(new Text(text) { Space = SpaceProcessingModeValues.Preserve });
-        if (highlight)
+        var paragraph = new Paragraph(props);
+        paragraph.Append(Runs(text, highlight));
+        return paragraph;
+    }
+
+    // Формула: табуляция по центру поля текста и номер у правого края (ширина поля A4 при полях 30 и 15 мм — 165 мм).
+    private static Paragraph Formula(NoteFormula f)
+    {
+        var width = Mm(165);
+        var props = new ParagraphProperties(
+            new Tabs(
+                new TabStop { Val = TabStopValues.Center, Position = width / 2 },
+                new TabStop { Val = TabStopValues.Right, Position = width }),
+            new SpacingBetweenLines { Before = "120", After = "120", Line = "360", LineRule = LineSpacingRuleValues.Auto },
+            new Justification { Val = JustificationValues.Left });
+        var paragraph = new Paragraph(props, new Run(new TabChar()));
+        paragraph.Append(Runs(f.Expression, false));
+        paragraph.Append(new Run(new TabChar()), new Run(new Text($"({f.Number})")));
+        return paragraph;
+    }
+
+    /// <summary>Разбор разметки: **полужирный**, *курсив*, _{нижний}, ^{верхний}, \n — перенос строки.</summary>
+    private static IEnumerable<Run> Runs(string text, bool highlight)
+    {
+        var bold = false;
+        var italic = false;
+        var buffer = new System.Text.StringBuilder();
+        Run Make(string value, VerticalPositionValues? position)
         {
-            run.PrependChild(new RunProperties(new Highlight { Val = HighlightColorValues.Yellow }));
+            var props = new RunProperties();
+            if (bold)
+            {
+                props.Append(new Bold());
+            }
+
+            if (italic)
+            {
+                props.Append(new Italic());
+            }
+
+            if (highlight)
+            {
+                props.Append(new Highlight { Val = HighlightColorValues.Yellow });
+            }
+
+            if (position is { } v)
+            {
+                props.Append(new VerticalTextAlignment { Val = v });
+            }
+
+            return new Run(props, new Text(value) { Space = SpaceProcessingModeValues.Preserve });
         }
 
-        return new Paragraph(props, run);
+        IEnumerable<Run> Flush()
+        {
+            if (buffer.Length > 0)
+            {
+                yield return Make(buffer.ToString(), null);
+                buffer.Clear();
+            }
+        }
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '*' && i + 1 < text.Length && text[i + 1] == '*')
+            {
+                foreach (var r in Flush())
+                {
+                    yield return r;
+                }
+
+                bold = !bold;
+                i++;
+            }
+            else if (c == '*')
+            {
+                foreach (var r in Flush())
+                {
+                    yield return r;
+                }
+
+                italic = !italic;
+            }
+            else if ((c == '_' || c == '^') && i + 1 < text.Length && text[i + 1] == '{' && text.IndexOf('}', i) is var end and > 0)
+            {
+                foreach (var r in Flush())
+                {
+                    yield return r;
+                }
+
+                yield return Make(text[(i + 2)..end], c == '_' ? VerticalPositionValues.Subscript : VerticalPositionValues.Superscript);
+                i = end;
+            }
+            else if (c == '\n')
+            {
+                foreach (var r in Flush())
+                {
+                    yield return r;
+                }
+
+                yield return new Run(new Break());
+            }
+            else
+            {
+                buffer.Append(c);
+            }
+        }
+
+        foreach (var r in Flush())
+        {
+            yield return r;
+        }
     }
 
     private static Table Table(NoteTable t)

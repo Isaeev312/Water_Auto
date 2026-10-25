@@ -29,6 +29,20 @@ public sealed class PipeSeries
 
     public IReadOnlyList<Issue> Issues => _issues;
 
+    /// <summary>Наименьшая труба сортамента не меньше DN <paramref name="minDn"/> с внутренним диаметром не меньше заданного, мм.</summary>
+    public SeriesPipe? WithInnerAtLeast(double innerMm, int minDn)
+    {
+        foreach (var dn in _rows.Select(r => (int)r.Values["dn"]!.Value).Where(d => d >= minDn).Distinct())
+        {
+            if (Pick(dn) is { } pipe && pipe.OuterDiameterMm - (2 * pipe.WallMm) >= innerMm - 1e-9)
+            {
+                return pipe;
+            }
+        }
+
+        return null;
+    }
+
     public SeriesPipe? Pick(int dn)
     {
         if (_cache.TryGetValue(dn, out var known))

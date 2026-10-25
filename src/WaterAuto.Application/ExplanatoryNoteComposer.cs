@@ -1,4 +1,5 @@
 using System.Globalization;
+using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Calc.Layout;
 using WaterAuto.Core;
 using WaterAuto.Reports;
@@ -16,13 +17,15 @@ public sealed record NoteInputs(
     SprinklerLayout Layout,
     RoutingResult Routing,
     MaterialTakeoff Takeoff,
+    DesignResult Design,
+    DesignSettings DesignSettings,
     IReadOnlyList<LiteratureEntry> Literature,
     IReadOnlyList<string> LiteratureIds);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
-/// Разделы, которые зависят от нерешённых вопросов по норме (гидравлика, насос, запас воды), выходят
-/// выделенными заготовками со ссылками на вопросы — без выдуманных значений.
+/// Где СП 485 допускает разные прочтения (В-01, В-02, В-03, В-08), записка прямо называет принятое — строгое —
+/// прочтение со ссылкой на пункт; сами вопросы остаются открытыми в docs/open_questions.md.
 /// </summary>
 public static class ExplanatoryNoteComposer
 {
@@ -41,21 +44,11 @@ public static class ExplanatoryNoteComposer
                 Parameters(i, norms),
                 Placement(i),
                 Routing(i),
-                new NoteSection("5", "Гидравлический расчёт", [
-                    new NoteParagraph("Расчёт выполняется по приложению Б СП 485: от диктующего оросителя к источнику, с учётом геометрии сети и потерь в трубопроводах."),
-                    new NotePending("Раздел формируется после решения вопросов: В-01 — форма диктующей площади; В-02 — к каким трубопроводам относить 20 % местных потерь; В-03 — единицы формулы Б.32 (узел управления). См. docs/open_questions.md."),
-                ]),
-                new NoteSection("6", "Насосная установка", [
-                    new NotePending("Требуемый напор по Б.30 и подбор насоса по характеристике — после гидравлического расчёта и решения вопросов В-02, В-03, В-07 (жокей-насос), В-13 (перевод МПа ↔ м вод. ст.)."),
-                ]),
-                new NoteSection("7", "Запас воды", [
-                    new NotePending(string.Create(Ru, $"Объём по расчётному расходу и продолжительности подачи {TableValue(norms, i.Rules, "t_min")} мин (табл. 6.1) — после гидравлического расчёта.")),
-                ]),
+                Hydraulics(i, norms),
+                Pump(i, norms),
+                Water(i, norms),
                 Specification(i),
-                new NoteSection("", "Заключение", [
-                    new NotePending("Заключение формируется после гидравлического расчёта и подбора насоса."),
-                    new NoteParagraph("Результаты, полученные программой Water_Auto, подлежат проверке специалистом по противопожарным системам перед выпуском."),
-                ]),
+                Conclusion(i),
             ],
             references);
     }
@@ -134,6 +127,202 @@ public static class ExplanatoryNoteComposer
         ]);
     }
 
+    private static string F(double v, string format = "0.###") => v.ToString(format, Ru);
+
+    private static NoteSection Hydraulics(NoteInputs i, INormsProvider norms)
+    {
+        var d = i.Design;
+        var s = i.DesignSettings;
+        var table = norms.Find(i.Rules.NormIds[0]);
+        var intensity = table?.Values.GetValueOrDefault("i_water") ?? 0;
+        var minArea = table?.Values.GetValueOrDefault("S") ?? 0;
+        var blocks = new List<NoteBlock>
+        {
+            new NoteParagraph("Гидравлический расчёт выполнен по приложению Б СП 485.1311500.2020 (п. Б.1.1.12) последовательно от диктующего оросителя к узлу подключения."),
+            new NoteParagraph("*Принято:*"),
+            new NoteList([
+                "диктующий ороситель — наиболее удалённый от точки подключения по трассе трубопроводов (п. Б.1.2.1);",
+                $"диктующая зона — {d.ZoneSprinklers.Count} оросителей, ближайших к диктующему, площадью не менее минимальной площади орошения по таблице 6.1 (пп. Б.1.2.1, Б.1.2.2);",
+                $"расход диктующего оросителя при отсутствии эпюр орошения — по формуле (Б.1) с верхним значением коэффициента {F(d.DictatingFactor)};",
+                $"местные сопротивления, включая потери в узле управления, — {F(d.LocalLossFactor * 100, "0")} % линейных потерь на всех участках от диктующего оросителя до насоса (п. Б.1.3.13);",
+                s.DesignVelocity is { } v
+                    ? $"диаметры участков — по формуле (Б.5) при скорости *V* = {F(v)} м/с и коэффициенте расхода μ = {F(d.DischargeCoefficient, "0.00")} (п. Б.1.2.6);"
+                    : "диаметры участков — ориентировочно по таблице Б.4 (п. Б.1.3.2);",
+                $"трубы — стальные по {s.PipeStandard}, удельные характеристики *K*_{{т}} — по таблице Б.2.",
+            ]),
+            new NoteParagraph("**5.1 Расход и давление у диктующего оросителя**"),
+            new NoteParagraph("Расход диктующего оросителя определяется по формуле (Б.1):"),
+            new NoteFormula($"*q*_{{1}} = {F(d.DictatingFactor)}·*i*·*s* = {F(d.DictatingFactor)}·{F(intensity, "0.##")}·12 = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с,", "5.1", [
+                "где *i* — нормативная интенсивность орошения по таблице 6.1, л/(с·м^{2});",
+                "*s* — круговая площадь, защищаемая диктующим оросителем, *s* = 12 м^{2} (п. Б.1.1.10).",
+            ]),
+            new NoteParagraph("Давление у диктующего оросителя:"),
+            new NoteFormula($"*p*_{{1}} = (*q*_{{1}} / 10*K*)^{{2}} = ({F(d.DictatingFlow.LitersPerSecond, "0.00")} / (10·{F(s.SprinklerK.Value)}))^{{2}} = {F(d.DictatingPressure.Mpa, "0.000")} МПа,", "5.2", [
+                $"где *K* — коэффициент производительности оросителя, *K* = {F(s.SprinklerK.Value)} л/(с·МПа^{{0,5}}) (по технической документации).",
+            ]),
+            new NoteParagraph("**5.2 Количество оросителей в диктующей зоне**"),
+            new NoteParagraph("Условная расчётная площадь на один ороситель по сетке распределительной сети (Б.3):"),
+            new NoteFormula($"*Q*_{{ор}} = *l*·*b* = {F(d.RowSpacing.Meters, "0.00")}·{F(d.LineSpacing.Meters, "0.00")} = {F(d.AreaPerSprinkler, "0.00")} м^{{2}},", "5.3", [
+                "где *l* — расстояние между оросителями в рядке, м;",
+                "*b* — расстояние между рядками, м.",
+            ]),
+            new NoteParagraph("Количество оросителей в диктующей зоне (Б.2):"),
+            new NoteFormula($"*N* = *S* / *Q*_{{ор}} = {F(minArea, "0")} / {F(d.AreaPerSprinkler, "0.00")} = {F(minArea / d.AreaPerSprinkler, "0.00")} → **{d.ZoneSprinklers.Count} шт.**,", "5.4", [
+                "где *S* — минимальная площадь орошения по таблице 6.1, м^{2}.",
+            ]),
+        };
+
+        if (s.DesignVelocity is { } velocity)
+        {
+            blocks.Add(new NoteParagraph("**5.3 Диаметры трубопроводов**"));
+            blocks.Add(new NoteParagraph("Диаметр участка определяется по формуле (Б.5); для участка 1–2:"));
+            blocks.Add(new NoteFormula($"*d* = 1000·√(4·*q*_{{1}} / (π·μ·*V*)) = 1000·√(4·{F(d.DictatingFlow.LitersPerSecond / 1000, "0.00000")} / (3,14·{F(d.DischargeCoefficient, "0.00")}·{F(velocity)})) = {F(d.FirstSegmentDiameterMm, "0.0")} мм,", "5.5", [
+                "где μ — коэффициент расхода (0,90–0,95 при отсутствии данных, п. Б.1.2.6);",
+                $"*V* — скорость движения воды, м/с (не более {F(d.VelocityLimit)} м/с, п. Б.1.2.6, п. 6.7.1.37).",
+            ]));
+            blocks.Add(new NoteParagraph($"Принимается ближайшая большая труба сортамента; остальные участки подобраны так же по фактическому расходу, расчёт повторён до установления диаметров. Диаметры участков ближе к источнику не меньше, чем на участках за ними."));
+        }
+
+        blocks.Add(new NoteParagraph("**5.4 Потери давления и расход установки**"));
+        blocks.Add(new NoteParagraph("Потери давления на участке определяются по формуле (Б.6), с учётом местных сопротивлений (п. Б.1.3.13):"));
+        blocks.Add(new NoteFormula($"Δ*P* = *Q*^{{2}}·*L* / (100·*K*_{{т}}),   Δ*P*′ = (1 + {F(d.LocalLossFactor, "0.0")})·Δ*P*,", "5.6", [
+            "где *Q* — расход на участке, л/с;",
+            "*L* — длина участка, м;",
+            "*K*_{т} — удельная характеристика трубопровода по таблице Б.2, л^{2}/с^{2}.",
+        ]));
+        blocks.Add(new NoteParagraph("Давление и расход каждого следующего оросителя: *p*_{n} = *p*_{n−1} + Δ*P*′, *q*_{n} = 10*K*·√*p*_{n} (Б.4); расходы рядков — по их характеристикам (Б.17–Б.21). Результаты по расчётному направлению — в таблице 5."));
+
+        // Расчётные точки, как в приложении Б: оросители — 1, 2, 3…, узлы — а, б, в…, точка подключения — ВВ.
+        var kinds = d.Route.Nodes.ToDictionary(n => n.Id, n => n.Kind);
+        var labels = new Dictionary<string, string>();
+        var (sprinklerNo, letterNo) = (0, 0);
+        const string Letters = "абвгдежзиклмнопрстуфхцчшэюя";
+        string Label(string id) => labels.TryGetValue(id, out var l) ? l
+            : labels[id] = kinds.GetValueOrDefault(id) switch
+            {
+                RouteNodeKind.Sprinkler => (++sprinklerNo).ToString(Ru),
+                RouteNodeKind.Inlet => "ВВ",
+                _ => letterNo < Letters.Length ? Letters[letterNo++].ToString() : $"у{++letterNo}",
+            };
+        var pressure = d.DictatingPressure.Mpa;
+        var rows = new List<IReadOnlyList<string>>();
+        foreach (var x in d.Path.Reverse())
+        {
+            pressure += x.LossWithLocal.Mpa;
+            rows.Add([
+                $"{Label(x.To)}–{Label(x.From)}",
+                $"DN{x.Dn}",
+                F(x.Length.Meters, "0.00"),
+                F(x.Kt.Kt, "0.##"),
+                F(x.Flow.LitersPerSecond, "0.00"),
+                F(x.LinearLoss.Mpa, "0.0000"),
+                F(x.LossWithLocal.Mpa, "0.0000"),
+                F(pressure, "0.000"),
+                F(x.Velocity, "0.00"),
+            ]);
+        }
+
+        blocks.Add(new NoteTable("Таблица 5 — Гидравлический расчёт по расчётному направлению (от диктующего оросителя 1 к точке подключения ВВ)",
+            ["Участок", "DN", "L, м", "Kт, л²/с²", "Q, л/с", "ΔP, МПа", "ΔP′, МПа", "P в конце, МПа", "v, м/с"], rows));
+        blocks.Add(new NoteParagraph("Обозначения расчётных точек: 1, 2, 3… — оросители по ходу от диктующего; а, б, в… — узлы ответвлений; ВВ — точка подключения (ПТ_ВВОД). *P в конце* — давление в конце участка по ходу к источнику: *p*_{1} плюс сумма Δ*P*′."));
+
+        blocks.Add(new NoteParagraph("Расчётный расход установки — сумма расходов оросителей диктующей зоны (Б.23):"));
+        blocks.Add(new NoteFormula($"*Q*_{{р}} = Σ*q*_{{n}} = **{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с**,", "5.7", [
+            $"где *n* — количество оросителей в диктующей зоне, *n* = {d.ZoneSprinklers.Count}.",
+        ]));
+        blocks.Add(new NoteParagraph(d.PumpFlowClause == "Б.24"
+            ? $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с ≤ *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.24), насос должен обеспечивать нормативный расход: *Q*_{{нас}} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**."
+            : $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с > *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.25), насос выбирается с расходом не менее расчётного (Б.26): *Q*_{{нас}} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**."));
+        blocks.Add(new NoteParagraph("Давление в точке подключения распределительной сети:"));
+        blocks.Add(new NoteFormula($"*P*_{{вв}} = *p*_{{1}} + ΣΔ*P*′ = {F(d.DictatingPressure.Mpa, "0.000")} + {F(d.Path.Sum(x => x.LossWithLocal.Mpa), "0.000")} = **{F(d.InletNodePressure.Mpa, "0.000")} МПа**.", "5.8", []));
+        var vMax = d.Path.Max(x => x.Velocity);
+        blocks.Add(new NoteParagraph(vMax <= d.VelocityLimit
+            ? $"Наибольшая скорость на расчётном направлении — {F(vMax, "0.00")} м/с, что не превышает {F(d.VelocityLimit)} м/с для напорных трубопроводов (п. 6.7.1.37)."
+            : $"*Внимание:* скорость {F(vMax, "0.00")} м/с больше {F(d.VelocityLimit)} м/с (п. 6.7.1.37) — диаметры требуется увеличить."));
+        return new NoteSection("5", "Гидравлический расчёт", blocks);
+    }
+
+    private static NoteSection Pump(NoteInputs i, INormsProvider norms)
+    {
+        var d = i.Design;
+        var s = i.DesignSettings;
+        var supplyDn = d.SupplyPipe?.Dn ?? s.SupplyDn;
+        var kt = d.SupplyPipe?.Kt.Kt ?? 0;
+        var m3h = d.PumpFlow.LitersPerSecond * 3.6;
+        var jockey = norms.Find("sp485.p6_9_4.jockeyTank");
+        return new NoteSection("6", "Насосная установка", [
+            new NoteParagraph("Требуемое давление пожарного насоса определяется по формуле (Б.30):"),
+            new NoteFormula("*P*_{н} = Δ*P*_{г} + Δ*P*_{в} + ΣΔ*P*_{м} + *P*_{уу} + *p*_{д} + *Z* − *P*_{вх},", "6.1", [
+                "где Δ*P*_{г}, Δ*P*_{в} — потери давления на горизонтальных и вертикальных участках трубопровода, МПа;",
+                "ΣΔ*P*_{м} — потери в местных сопротивлениях, МПа;",
+                "*P*_{уу} — потери в узле управления, МПа;",
+                "*p*_{д} — давление у диктующего оросителя, МПа;",
+                "*Z* — пьезометрическое давление (геометрическая высота диктующего оросителя над осью насоса), *Z* = *H*/100, МПа;",
+                "*P*_{вх} — давление на входе насоса, МПа.",
+            ]),
+            new NoteParagraph($"*Принято:* потери в местных сопротивлениях и в узле управления — {F(d.LocalLossFactor * 100, "0")} % линейных потерь (п. Б.1.3.13); потери распределительной сети от диктующего оросителя до точки подключения учтены в *P*_{{вв}} (формула 5.8)."),
+            new NoteParagraph($"Потери в подводящем трубопроводе от насоса до точки подключения (DN{supplyDn}, *L* = {F(s.SupplyLength.Meters, "0.0")} м, *K*_{{т}} = {F(kt, "0.##")}) при расходе насоса:"),
+            new NoteFormula($"Δ*P*_{{подв}} = *Q*_{{нас}}^{{2}}·*L* / (100·*K*_{{т}}) = {F(d.PumpFlow.LitersPerSecond, "0.00")}^{{2}}·{F(s.SupplyLength.Meters, "0.0")} / (100·{F(kt, "0.##")}) = {F(d.SupplyLinearLoss.Mpa, "0.0000")} МПа.", "6.2", []),
+            new NoteFormula($"*Z* = *H* / 100 = {F(s.DictatingAboveAxis.Meters, "0.00")} / 100 = {F(d.Elevation.Mpa, "0.000")} МПа.", "6.3", [
+                "где *H* — высота диктующего оросителя над осью насоса, м.",
+            ]),
+            new NoteParagraph("Требуемое давление насоса:"),
+            new NoteFormula($"*P*_{{н}} = *P*_{{вв}} + (1 + {F(d.LocalLossFactor, "0.0")})·Δ*P*_{{подв}} + *Z* − *P*_{{вх}} = {F(d.InletNodePressure.Mpa, "0.000")} + {F((1 + d.LocalLossFactor) * d.SupplyLinearLoss.Mpa, "0.000")} + {F(d.Elevation.Mpa, "0.000")} − {F(s.InletPressure.Mpa, "0.000")} = **{F(d.PumpPressure.Mpa, "0.000")} МПа**,", "6.4", [
+                $"где *P*_{{вх}} — гарантированное давление в наружной сети на входе насоса, *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа (по техническим условиям).",
+            ]),
+            new NoteFormula($"*H*_{{н}} = 100·*P*_{{н}} = **{F(d.PumpHead.Meters, "0.0")} м**.", "6.5", []),
+            new NoteParagraph($"Скорость в подводящем трубопроводе — {F(d.SupplyVelocity, "0.00")} м/с ({(d.SupplyVelocity <= d.VelocityLimit ? "не более" : "*больше*")} {F(d.VelocityLimit)} м/с, п. 6.7.1.37)."),
+            new NoteParagraph("**Подбор насосов.** Рабочий насос подбирается по каталогу производителя так, чтобы рабочая точка на его характеристике была не ниже требуемой:"),
+            new NoteList([
+                $"подача *Q* ≥ {F(d.PumpFlow.LitersPerSecond, "0.00")} л/с ({F(m3h, "0.0")} м³/ч);",
+                $"напор *H* ≥ {F(d.PumpHead.Meters, "0.0")} м.",
+            ]),
+            new NoteParagraph("Требования к насосной установке по СП 485:"),
+            new NoteList([
+                "при любом количестве рабочих агрегатов предусматривается не менее одного резервного, обеспечивающего подачу и напор наиболее производительного рабочего; резервный включается автоматически (п. 6.10.3);",
+                $"автоматический водопитатель — жокей-насос с мембранной ёмкостью вместимостью не менее {F(jockey?.Values["minVolume"] ?? 0)} л, вода — от {F(jockey?.Values["waterShareMin"] ?? 0)} до {F(jockey?.Values["waterShareMax"] ?? 0)} % вместимости (п. 6.9.4); при включении пожарного насоса он отключается (п. 6.9.5);",
+                "вспомогательный водопитатель — если выход пожарного насоса на режим занимает более 60 с (п. 6.9.8);",
+                "насосы относятся ко II категории по обеспеченности подачи воды и к I категории надёжности электроснабжения (п. 6.10.5);",
+                "насосная станция — на первом, цокольном или первом подземном этаже, отделена противопожарными стенами (перегородками) 1-го типа и перекрытиями 2-го типа (пп. 6.10.9, 6.10.11);",
+                "не менее двух выведенных наружу патрубков DN 80 с соединительными головками для передвижной пожарной техники (п. 6.10.17).",
+            ]),
+        ]);
+    }
+
+    private static NoteSection Water(NoteInputs i, INormsProvider norms)
+    {
+        var d = i.Design;
+        var s = i.DesignSettings;
+        var limit = norms.Find("sp485.p6_9_12.minNetworkPressure")?.Values["pressure"] ?? 0;
+        var needed = s.InletPressure.Mpa < limit;
+        return new NoteSection("7", "Запас воды", [
+            new NoteParagraph($"Продолжительность подачи воды для группы помещений {i.RoomGroup} — *t* = {F(d.Duration)} мин (таблица 6.1). Расчётный объём воды на пожаротушение:"),
+            new NoteFormula($"*W* = *Q*_{{нас}}·*t*·60 / 1000 = {F(d.PumpFlow.LitersPerSecond, "0.00")}·{F(d.Duration)}·60 / 1000 = **{F(d.WaterVolume, "0.0")} м³**.", "7.1", []),
+            new NoteParagraph($"Заполнение пожарного резервуара — не более {F(d.TankMaxFill)} % вместимости (п. 6.9.13), поэтому вместимость резервуара:"),
+            new NoteFormula($"*V* = *W* / {F(d.TankMaxFill / 100, "0.00")} = {F(d.WaterVolume, "0.0")} / {F(d.TankMaxFill / 100, "0.00")} = **{F(d.TankVolume, "0.0")} м³**.", "7.2", []),
+            new NoteParagraph(needed
+                ? $"Давление в наружной сети *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа меньше {F(limit, "0.00")} МПа, поэтому перед насосной установкой **предусматривается пожарный резервуар** (п. 6.9.12)."
+                : $"Давление в наружной сети *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа не меньше {F(limit, "0.00")} МПа: пожарный резервуар по п. 6.9.12 не обязателен; приведённый объём — для варианта с резервуаром или при требовании технических условий."),
+            new NoteParagraph("В резервуарах предусматриваются устройства, не допускающие расход пожарного запаса воды на другие нужды (п. 6.9.11); учитывается расчётный полезный объём — объём, который способен перекачать насос (п. 6.9.13). Водоснабжение — по 1 категории надёжности (п. 6.9.2)."),
+        ]);
+    }
+
+    private static NoteSection Conclusion(NoteInputs i)
+    {
+        var d = i.Design;
+        return new NoteSection("", "Заключение", [
+            new NoteParagraph($"Для объекта «{i.ObjectName}» запроектирована спринклерная водозаполненная установка водяного пожаротушения по СП 485.1311500.2020:"),
+            new NoteList([
+                $"оросителей — **{i.Layout.Sprinklers.Count} шт.** (*K* = {F(i.DesignSettings.SprinklerK.Value)}), запас — по п. 6.1.15;",
+                $"расчётный расход — {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с, расход насоса — **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с** ({F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч);",
+                $"требуемый напор насоса — **{F(d.PumpHead.Meters, "0.0")} м** ({F(d.PumpPressure.Mpa, "0.000")} МПа);",
+                $"объём воды на пожаротушение — {F(d.WaterVolume, "0.0")} м³, вместимость резервуара — {F(d.TankVolume, "0.0")} м³.",
+            ]),
+            new NoteParagraph("Прочтения норм, принятые в расчёте (диктующая зона, местные сопротивления, расход диктующего оросителя), указаны в разделе 5 и подлежат согласованию с руководителем. Результаты, полученные программой Water_Auto, подлежат проверке специалистом по противопожарным системам перед выпуском."),
+        ]);
+    }
+
+
     private static NoteSection Specification(NoteInputs i)
     {
         var rows = i.Takeoff.Items
@@ -158,9 +347,6 @@ public static class ExplanatoryNoteComposer
         yield return new NoteParagraph("Замечания программы, требующие решения проектировщика:");
         yield return new NoteList(issues.Select(x => x.Clause is null ? x.Message : $"{x.Message} (п. {x.Clause})").ToList());
     }
-
-    private static string? TableValue(INormsProvider norms, LayoutRules rules, string key) =>
-        norms.Find(rules.NormIds[0])?.Values.GetValueOrDefault(key) is { } v ? v.ToString("0.###", Ru) : "[—]";
 
     private static string Role(RouteSegmentRole role) => role switch
     {
