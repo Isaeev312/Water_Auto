@@ -93,87 +93,130 @@ public static class SprinklerLayouter
             .Select(c => (Column: c, Box: Box.Of(frame.ToLocal(c.Outline))))
             .Where(c => rects.Any(r => r.Overlaps(c.Box)))
             .ToList();
+        PlanPoint Center(Rect r) => frame.ToWorld(new PlanPoint((r.X0 + r.X1) / 2, (r.Y0 + r.Y1) / 2));
 
-        // Линии поперёк разрезов (Y) — общие; концы отрезков — всегда стены.
-        var ySpans = rects.Select(r => new AxisSpan(r.Y0, r.Y1, wall, wall, LineSolver.StepMm, LineSolver.StepMm)).Distinct().ToList();
-        var ys = SolveAvoiding(ySpans, s, m, columns.Select(c => (c.Box.Y0 - Tol, c.Box.Y1 + Tol)).ToList());
+        // Линии вдоль разрезов (X) — свои у каждой зоны. Зона, в которой не помещается ни одна линия (ниша, ступенька
+        // стены), своих оросителей не получает: её дальнюю сторону обслуживают соседи, их предел у общей стороны уменьшается.
+        var xSpans = rects.Select(r => XSpan(r, boundary, wall, s, m)).ToList();
+        var absorbed = rects.Select((r, i) => LineSolver.Solve([xSpans[i]], s, m, []) is null).ToArray();
+        for (var i = 0; i < rects.Count; i++)
+        {
+            if (!absorbed[i])
+            {
+                continue;
+            }
+
+            var r = rects[i];
+            var width = r.X1 - r.X0;
+            var served = false;
+            for (var j = 0; j < rects.Count; j++)
+            {
+                if (absorbed[j] || !rects[j].SharesYRange(r))
+                {
+                    continue;
+                }
+
+                if (Math.Abs(rects[j].X1 - r.X0) <= Tol)
+                {
+                    // Сосед слева обслуживает зону до её правой стороны.
+                    xSpans[j] = xSpans[j] with { EndLimitHi = Math.Min(xSpans[j].EndLimitHi, Across(Share(boundary, r.X1, r), width, wall, s)) };
+                    served = true;
+                }
+                else if (Math.Abs(rects[j].X0 - r.X1) <= Tol)
+                {
+                    xSpans[j] = xSpans[j] with { EndLimitLo = Math.Min(xSpans[j].EndLimitLo, Across(Share(boundary, r.X0, r), width, wall, s)) };
+                    served = true;
+                }
+            }
+
+            if (!served)
+            {
+                issues.Add(Sliver(room, r, Center(r)));
+            }
+        }
+
+        // Линии поперёк разрезов (Y) — общие; концы отрезков — всегда стены. Зона тоньше, чем нужно для линии, пропускается.
+        var active = new List<int>();
+        for (var i = 0; i < rects.Count; i++)
+        {
+            if (absorbed[i])
+            {
+                continue;
+            }
+
+            if (LineSolver.Solve([YSpan(rects[i], wall)], s, m, []) is null)
+            {
+                issues.Add(Sliver(room, rects[i], Center(rects[i])));
+                continue;
+            }
+
+            active.Add(i);
+        }
+
+        var ySpans = active.Select(i => YSpan(rects[i], wall)).Distinct().ToList();
+        var ys = ySpans.Count == 0 ? [] : SolveAvoiding(ySpans, s, m, columns.Select(c => (c.Box.Y0 - Tol, c.Box.Y1 + Tol)).ToList());
         if (ys is null)
         {
-            issues.Add(Infeasible(room, frame.ToWorld(new PlanPoint(rects[0].X0, rects[0].Y0))));
+            issues.Add(Infeasible(room, Center(rects[active[0]])));
             return new RoomLayout([], [], issues);
         }
 
-        var grid = new List<Cell>();
-        var zones = new List<(Rect Rect, int Count)>();
-        foreach (var r in rects)
+        var placed = new List<(PlanPoint Local, Rect Rect)>();
+        var zones = new List<Rect>();
+        foreach (var i in active)
         {
+            var r = rects[i];
             var rows = ys.Where(y => y > r.Y0 && y < r.Y1).ToList();
-            var (loLimit, loMin) = SideLimit(Coverage(boundary, r.X0, r.Y0, r.Y1) / (r.Y1 - r.Y0), wall, s, m);
-            var (hiLimit, hiMin) = SideLimit(Coverage(boundary, r.X1, r.Y0, r.Y1) / (r.Y1 - r.Y0), wall, s, m);
-            var span = new AxisSpan(r.X0, r.X1, loLimit, hiLimit, loMin, hiMin);
 
             // Колонны, на ряды которых попадают линии зоны, обходятся сдвигом линий X.
             var blocking = columns
                 .Where(c => r.Overlaps(c.Box) && rows.Any(y => y >= c.Box.Y0 - Tol && y <= c.Box.Y1 + Tol))
                 .Select(c => (c.Box.X0 - Tol, c.Box.X1 + Tol))
                 .ToList();
-            var xs = SolveAvoiding([span], s, m, blocking);
+            var xs = SolveAvoiding([xSpans[i]], s, m, blocking);
             if (xs is null)
             {
-                issues.Add(Infeasible(room, frame.ToWorld(new PlanPoint((r.X0 + r.X1) / 2, (r.Y0 + r.Y1) / 2))));
+                issues.Add(Infeasible(room, Center(r)));
                 continue;
             }
 
-            var before = grid.Count;
-            for (var j = 0; j < rows.Count; j++)
+            zones.Add(r);
+            foreach (var y in rows)
             {
-                for (var i = 0; i < xs.Count; i++)
+                foreach (var x in xs)
                 {
-                    grid.Add(new Cell(r, new PlanPoint(xs[i], rows[j]), xs, rows, i, j, loLimit, hiLimit));
+                    placed.Add((new PlanPoint(x, y), r));
                 }
             }
-
-            zones.Add((r, grid.Count - before));
         }
 
-        var points = grid.Select(c => c.At).ToList();
-        for (var k = 0; k < grid.Count; k++)
+        var kept = new List<(PlanPoint Local, Rect Rect, PlanPoint World)>();
+        foreach (var (local, rect) in placed)
         {
-            var hit = columns.FirstOrDefault(c => c.Column.Outline.Contains(frame.ToWorld(points[k])));
-            if (hit.Column is null)
+            var world = frame.ToWorld(local);
+            var hit = columns.FirstOrDefault(c => c.Column.Outline.Contains(world));
+            if (hit.Column is not null)
             {
+                issues.Add(new Issue(
+                    "layout.columnConflict",
+                    IssueLevel.Error,
+                    "Ороситель попадает в колонну, а сдвиг линий в пределах шага и расстояния до стен невозможен — ороситель не поставлен, нужна ручная правка.",
+                    hit.Column.Id,
+                    "6.2.21",
+                    world));
                 continue;
             }
 
-            var moved = Nudge(grid[k], k, points, s, m, wall, p => columns.Any(c => c.Column.Outline.Contains(frame.ToWorld(p))));
-            if (moved is { } p)
+            if (!skippedZones.Any(z => z.Outline.Contains(world)))
             {
-                points[k] = p;
-                continue;
+                kept.Add((local, rect, world));
             }
-
-            issues.Add(new Issue(
-                "layout.columnConflict",
-                IssueLevel.Error,
-                "Ороситель попадает в колонну, а сдвиг в пределах шага и расстояния до стен невозможен — ороситель не поставлен, нужна ручная правка.",
-                hit.Column.Id,
-                "6.2.21",
-                frame.ToWorld(points[k])));
-            points[k] = new PlanPoint(double.NaN, double.NaN);
         }
 
-        var placed = points
-            .Select((p, k) => (Local: p, Rect: grid[k].Rect))
-            .Where(x => !double.IsNaN(x.Local.XMm))
-            .Select(x => (x.Local, x.Rect, World: frame.ToWorld(x.Local)))
-            .Where(x => !skippedZones.Any(z => z.Outline.Contains(x.World)))
-            .OrderBy(x => frame.Unswapped(x.Local).YMm)
-            .ThenBy(x => frame.Unswapped(x.Local).XMm)
-            .ToList();
-
-        var sprinklers = placed.Select((x, k) => new PlacedSprinkler($"{room.Id}.S{k + 1}", room.Id, x.World)).ToList();
+        var ordered = kept.OrderBy(x => frame.Unswapped(x.Local).YMm).ThenBy(x => frame.Unswapped(x.Local).XMm).ToList();
+        var sprinklers = ordered.Select((x, k) => new PlacedSprinkler($"{room.Id}.S{k + 1}", room.Id, x.World)).ToList();
         var outZones = zones
-            .Select(z => new LayoutZone(room.Id, frame.ToWorld(z.Rect.Polygon()), placed.Count(x => x.Rect == z.Rect)))
+            .Select(z => new LayoutZone(room.Id, frame.ToWorld(z.Polygon()), ordered.Count(x => x.Rect == z)))
             .ToList();
         return new RoomLayout(sprinklers, outZones, issues);
     }
@@ -203,43 +246,33 @@ public static class SprinklerLayouter
         return avoiding is not null && avoiding.Count <= plain.Count ? avoiding : plain;
     }
 
+    private static AxisSpan YSpan(Rect r, double wall) => new(r.Y0, r.Y1, wall, wall, LineSolver.StepMm, LineSolver.StepMm);
+
     // Сторона зоны: стена (доля длины на границе ≈ 1) — предел 6.2.21; разрез (≈ 0) — полшага;
-    // частично стена — меньшее из двух. У разреза линия не ближе полунаименьшего шага: через разрез не ближе нормы.
-    private static (double Limit, double MinOffset) SideLimit(double wallShare, double wall, double s, double m) =>
-        wallShare >= 1 - 1e-6 ? (wall, LineSolver.StepMm)
-        : wallShare <= 1e-6 ? (s / 2, m / 2)
-        : (Math.Min(wall, s / 2), m / 2);
-
-    // Сдвиг оросителя из колонны вдоль осей на наименьшее расстояние, при котором соблюдены шаг, наименьший шаг и пределы до стен.
-    private static PlanPoint? Nudge(Cell cell, int index, List<PlanPoint> points, double s, double m, double wall, Func<PlanPoint, bool> inColumn)
+    // частично стена — меньшее из двух. У разреза линия не ближе половины наименьшего шага: через разрез не ближе нормы.
+    private static AxisSpan XSpan(Rect r, List<(PlanPoint A, PlanPoint B)> boundary, double wall, double s, double m)
     {
-        var r = cell.Rect;
-        for (var d = LineSolver.StepMm; d <= s; d += LineSolver.StepMm)
+        (double Limit, double MinOffset) Side(double x)
         {
-            foreach (var (dx, dy) in new[] { (d, 0.0), (-d, 0.0), (0.0, d), (0.0, -d) })
-            {
-                var c = new PlanPoint(cell.At.XMm + dx, cell.At.YMm + dy);
-                if (c.XMm <= r.X0 + LineSolver.StepMm - 1e-6 || c.XMm >= r.X1 - LineSolver.StepMm + 1e-6
-                    || c.YMm <= r.Y0 + LineSolver.StepMm - 1e-6 || c.YMm >= r.Y1 - LineSolver.StepMm + 1e-6
-                    || inColumn(c))
-                {
-                    continue;
-                }
-
-                var ok = (cell.I > 0 ? Dist(c, new(cell.Xs[cell.I - 1], cell.At.YMm)) <= s : c.XMm - r.X0 <= cell.LoLimit)
-                    && (cell.I < cell.Xs.Count - 1 ? Dist(c, new(cell.Xs[cell.I + 1], cell.At.YMm)) <= s : r.X1 - c.XMm <= cell.HiLimit)
-                    && (cell.J > 0 ? Dist(c, new(cell.At.XMm, cell.Rows[cell.J - 1])) <= s : c.YMm - r.Y0 <= wall)
-                    && (cell.J < cell.Rows.Count - 1 ? Dist(c, new(cell.At.XMm, cell.Rows[cell.J + 1])) <= s : r.Y1 - c.YMm <= wall)
-                    && points.Where((p, k) => k != index && !double.IsNaN(p.XMm)).All(p => Dist(c, p) >= m);
-                if (ok)
-                {
-                    return c;
-                }
-            }
+            var share = Share(boundary, x, r);
+            return share >= 1 - 1e-6 ? (wall, LineSolver.StepMm)
+                : share <= 1e-6 ? (s / 2, m / 2)
+                : (Math.Min(wall, s / 2), m / 2);
         }
 
-        return null;
+        var (loLimit, loMin) = Side(r.X0);
+        var (hiLimit, hiMin) = Side(r.X1);
+        return new AxisSpan(r.X0, r.X1, loLimit, hiLimit, loMin, hiMin);
     }
+
+    // Предел соседа у стороны узкой зоны шириной width, если дальняя сторона зоны — стена (до неё не дальше предела 6.2.21),
+    // разрез (через зону шаг не больше нормы — поровну с соседом за ней) или частично стена (меньшее из двух).
+    private static double Across(double farShare, double width, double wall, double s) =>
+        farShare >= 1 - 1e-6 ? wall - width
+        : farShare <= 1e-6 ? (s - width) / 2
+        : Math.Min(wall - width, (s - width) / 2);
+
+    private static double Share(List<(PlanPoint A, PlanPoint B)> boundary, double x, Rect r) => Coverage(boundary, x, r.Y0, r.Y1) / (r.Y1 - r.Y0);
 
     private static IEnumerable<Issue> ObstacleIssues(FloorPlan plan, LayoutRules rules)
     {
@@ -270,6 +303,14 @@ public static class SprinklerLayouter
             }
         }
     }
+
+    private static Issue Sliver(Room room, Rect r, PlanPoint at) => new(
+        "layout.sliver",
+        IssueLevel.Warning,
+        $"Помещение «{room.Name}»: участок {r.X1 - r.X0:0} × {r.Y1 - r.Y0:0} мм слишком узок для оросителя и не обслуживается соседними зонами — проверьте чертёж.",
+        room.Id,
+        "6.2.21",
+        at);
 
     private static Issue Infeasible(Room room, PlanPoint at) => new(
         "layout.infeasible",
@@ -360,11 +401,23 @@ public static class SprinklerLayouter
         return result.Where(iv => iv.Item2 - iv.Item1 > Tol).ToList();
     }
 
-    // Доля отрезка x = const, y ∈ [y0, y1], лежащая на вертикальных сторонах границы.
-    private static double Coverage(List<(PlanPoint A, PlanPoint B)> boundary, double x, double y0, double y1) =>
-        boundary
+    // Длина отрезка x = const, y ∈ [y0, y1], лежащая на вертикальных сторонах границы (наложения сторон — один раз).
+    private static double Coverage(List<(PlanPoint A, PlanPoint B)> boundary, double x, double y0, double y1)
+    {
+        var parts = boundary
             .Where(e => Math.Abs(e.A.XMm - x) <= Tol && Math.Abs(e.B.XMm - x) <= Tol)
-            .Sum(e => Math.Max(0, Math.Min(y1, Math.Max(e.A.YMm, e.B.YMm)) - Math.Max(y0, Math.Min(e.A.YMm, e.B.YMm))));
+            .Select(e => (Lo: Math.Max(y0, Math.Min(e.A.YMm, e.B.YMm)), Hi: Math.Min(y1, Math.Max(e.A.YMm, e.B.YMm))))
+            .Where(p => p.Hi > p.Lo)
+            .OrderBy(p => p.Lo);
+        double total = 0, reach = double.NegativeInfinity;
+        foreach (var (lo, hi) in parts)
+        {
+            total += Math.Max(0, hi - Math.Max(lo, reach));
+            reach = Math.Max(reach, hi);
+        }
+
+        return total;
+    }
 
     private static IEnumerable<(PlanPoint A, PlanPoint B)> Segments(List<PlanPoint> poly) =>
         poly.Select((p, i) => (p, poly[(i + 1) % poly.Count]));
@@ -377,6 +430,8 @@ public static class SprinklerLayouter
     {
         public bool Overlaps(Box b) => b.X1 > X0 && b.X0 < X1 && b.Y1 > Y0 && b.Y0 < Y1;
 
+        public bool SharesYRange(Rect o) => Math.Min(Y1, o.Y1) - Math.Max(Y0, o.Y0) > Tol;
+
         public List<PlanPoint> Polygon() => [new(X0, Y0), new(X1, Y0), new(X1, Y1), new(X0, Y1)];
     }
 
@@ -385,8 +440,6 @@ public static class SprinklerLayouter
         public static Box Of(List<PlanPoint> poly) =>
             new(poly.Min(p => p.XMm), poly.Max(p => p.XMm), poly.Min(p => p.YMm), poly.Max(p => p.YMm));
     }
-
-    private sealed record Cell(Rect Rect, PlanPoint At, IReadOnlyList<double> Xs, IReadOnlyList<double> Rows, int I, int J, double LoLimit, double HiLimit);
 
     // Координаты, отличающиеся меньше допуска, сводятся к одной — стены чертежа становятся строго параллельными.
     private sealed class Snapper

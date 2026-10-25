@@ -107,6 +107,44 @@ public class SprinklerLayoutTests
         LayoutChecks.ShouldSatisfy(layout, plan, rules);
     }
 
+    public static TheoryData<string, (double X, double Y)[]> NarrowZones => new()
+    {
+        // Ниша 1000 × 300 мм в верхней стене: своей линии в нише нет, верхний ряд ставится не дальше 1,75 м от дна ниши.
+        { "ниша", [(0, 0), (30000, 0), (30000, 20000), (15000, 20000), (15000, 20300), (14000, 20300), (14000, 20000), (0, 20000)] },
+        // Ступенька 15 мм в верхней стене — неточность чертежа.
+        { "ступенька сверху", [(0, 0), (30000, 0), (30000, 20015), (15000, 20015), (15000, 20000), (0, 20000)] },
+        // Ступенька 15 мм в левой стене.
+        { "ступенька слева", [(15, 0), (30000, 0), (30000, 20000), (0, 20000), (0, 10000), (15, 10000)] },
+    };
+
+    [Theory]
+    [MemberData(nameof(NarrowZones))]
+    public void Narrow_zones_are_served_by_their_neighbours(string name, (double X, double Y)[] vertices)
+    {
+        var plan = Plan(Poly(vertices));
+        var rules = Rules();
+        foreach (var cut in new[] { CutDirection.Vertical, CutDirection.Horizontal })
+        {
+            var room = SprinklerLayouter.LayoutRoom(plan.Rooms[0], plan, rules, cut);
+            room.Issues.ShouldBeEmpty($"{name}, {cut}");
+            LayoutChecks.ShouldSatisfy(new SprinklerLayout(room.Sprinklers, room.Zones, room.Issues), plan, rules);
+        }
+
+        SprinklerLayouter.Layout(plan, rules).Sprinklers.Count.ShouldBe(54, name);
+    }
+
+    [Fact]
+    public void Sliver_between_two_walls_is_a_warning_with_location()
+    {
+        // Зона запрета не доходит до стены на 15 мм: щель между двумя стенами никто не обслуживает.
+        var plan = Plan(Rect(0, 0, 30000, 20000), zones: [new NoSprinklerZone("Z1", Rect(5000, 5000, 10000, 19985))]);
+        var layout = SprinklerLayouter.Layout(plan, Rules());
+        var issue = layout.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("layout.sliver");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.Location.ShouldNotBeNull().YMm.ShouldBe(19992.5, 1);
+    }
+
     [Fact]
     public void Rotated_room_is_laid_out_along_its_walls()
     {
