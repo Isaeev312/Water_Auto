@@ -59,4 +59,21 @@ public class FormulaTests
         // Табл. Б.3 — для DN 20–200; ВГП DN15 с нестандартной стенкой формулой не считается.
         PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 15, Length.FromMillimeters(21.3), Length.FromMillimeters(3.2)).ShouldBeNull();
     }
+
+    [Fact]
+    public void Formula_B8_rejects_invalid_dimensions_and_results()
+    {
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(22)).ShouldBeNull();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(-2.8)).ShouldBeNull();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(double.NaN), Length.FromMillimeters(2.8)).ShouldBeNull();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(double.PositiveInfinity)).ShouldBeNull();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(1e60), Length.FromMillimeters(1)).ShouldBeNull();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(1e-100), Length.FromMillimeters(1e-101)).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Norm_record_preserves_file_edition()
+    {
+        Norms.Find("sp485.tB_3.Kt.gost3262")!.Edition.ShouldBe("с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)");
+    }
 }

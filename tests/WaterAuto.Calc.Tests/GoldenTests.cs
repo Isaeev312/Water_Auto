@@ -96,7 +96,7 @@ public class GoldenTests
             };
             var value = check.GetProperty("value").GetDouble();
             var tol = check.GetProperty("tol").GetDouble();
-            if (Math.Abs(actual - value) > tol + 1e-12)
+            if (!double.IsFinite(actual) || Math.Abs(actual - value) > tol + 1e-12)
             {
                 failures.Add($"{what} {node ?? pipe}: ждали {value} ± {tol}, получили {actual:G9}");
             }
