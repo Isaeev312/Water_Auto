@@ -1,0 +1,58 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "title": "Размещение спринклерных оросителей (п. 6.2)",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, пп. 6.2.10, 6.2.14, 6.2.21.",
+  "verified": false,
+  "records": [
+    {
+      "id": "sp485.p6_2_21.wallMaxK0K1",
+      "clause": "6.2.21",
+      "values": { "ratioToTableSpacing": 0.5 },
+      "units": { "ratioToTableSpacing": "доля maxSpacing табл. 6.1" },
+      "attrs": { "constructionClasses": "К0,К1", "ofKey": "maxSpacing" },
+      "note": "«Расстояние по горизонтали между спринклерными оросителями и стенами не должно превышать… половины расстояния между спринклерными оросителями, указанными в таблице 6.1». Это предел, а не отступ. Половина табличного шага или фактического, если шаг уменьшен (профиль заказчика), — не решено: open_questions.md В-16."
+    },
+    {
+      "id": "sp485.p6_2_21.wallMaxOther",
+      "clause": "6.2.21",
+      "values": { "wallMax": 1.2 },
+      "units": { "wallMax": "м" },
+      "attrs": { "constructionClasses": "К2,К3,ненормируемый" },
+      "note": "Предел расстояния по горизонтали от оросителя до стены (перегородки)."
+    },
+    {
+      "id": "sp485.p6_2_21.minSpacing",
+      "clause": "6.2.21",
+      "values": { "minSpacing": 1.5 },
+      "units": { "minSpacing": "м" },
+      "attrs": { "extinguishant": "вода" },
+      "note": "«Расстояние между спринклерными оросителями установок водяного пожаротушения должно быть не менее 1,5 м (по горизонтали)»."
+    },
+    {
+      "id": "sp485.p6_2_10.beamHeightK0K1",
+      "clause": "6.2.10",
+      "values": { "beamHeight": 0.3 },
+      "units": { "beamHeight": "м" },
+      "attrs": { "constructionClasses": "К0,К1" },
+      "note": "Выступающие части перекрытия высотой более этого значения — оросители между ними."
+    },
+    {
+      "id": "sp485.p6_2_10.beamHeightOther",
+      "clause": "6.2.10",
+      "values": { "beamHeight": 0.2 },
+      "units": { "beamHeight": "м" },
+      "attrs": { "constructionClasses": "К2,К3,ненормируемый" },
+      "note": "«…а в остальных случаях — более 0,2 м»."
+    },
+    {
+      "id": "sp485.p6_2_14.duct",
+      "clause": "6.2.14",
+      "values": { "minWidth": 0.75, "minHeightAboveFloor": 0.7 },
+      "units": { "minWidth": "м", "minHeightAboveFloor": "м" },
+      "note": "Воздуховоды и площадки шириной (диаметром) свыше 0,75 м на высоте не менее 0,7 м от пола, если препятствуют орошению, — дополнительные оросители под ними."
+    }
+  ]
+}
