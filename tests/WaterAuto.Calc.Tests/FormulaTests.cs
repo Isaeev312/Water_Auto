@@ -1,0 +1,55 @@
+using WaterAuto.Calc.Hydraulics;
+using WaterAuto.Core;
+using WaterAuto.Norms;
+
+namespace WaterAuto.Calc.Tests;
+
+public class FormulaTests
+{
+    private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
+
+    [Fact]
+    public void Emitter_flow_is_10_K_sqrt_P()
+    {
+        // ГидРаВПТ R2, л. 9: K = 0,47, P = 0,188 → q = 2,038 л/с.
+        TreeSolver.EmitterFlow(new KFactor(0.47), new Pressure(0.188)).LitersPerSecond.ShouldBe(2.0379, 1e-4);
+    }
+
+    [Fact]
+    public void Emitter_flow_is_zero_without_pressure()
+    {
+        TreeSolver.EmitterFlow(new KFactor(0.47), new Pressure(-0.01)).ShouldBe(Flow.Zero);
+    }
+
+    [Fact]
+    public void Pipe_loss_is_Q2_L_over_100_Kt()
+    {
+        // ГидРаВПТ R2 из файла .hvd (без множителя): ветвь 1, участок 1-2 — 0,008536 МПа.
+        var pipe = new NetworkPipe("1-2", "a", "b", new Length(2.31), new PipeCharacteristic(11.238334));
+        var q = 2.0379;
+        (TreeSolver.Resistance(pipe) * q * q).ShouldBe(0.008536, 1e-6);
+    }
+
+    [Fact]
+    public void Kt_comes_from_table_B2_when_the_row_exists()
+    {
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 42.3, 2.8)!;
+        kt.Source.ShouldBe(CharacteristicSource.TableB2);
+        kt.Value.Kt.ShouldBe(16.5);
+    }
+
+    [Fact]
+    public void Kt_comes_from_formula_B8_by_inner_diameter_otherwise()
+    {
+        // ВГП 42,3×4,0 нет в табл. Б.2; ГидРаВПТ даёт 11,238334 (Ø 34,3 мм, ψ = 5,363, θ = 5,42).
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 42.3, 4.0)!;
+        kt.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        kt.Value.Kt.ShouldBe(11.238334, 1e-6);
+    }
+
+    [Fact]
+    public void Kt_is_null_for_unknown_standard()
+    {
+        PipeCharacteristics.Resolve(Norms, "PPR", 40, 3.7).ShouldBeNull();
+    }
+}
