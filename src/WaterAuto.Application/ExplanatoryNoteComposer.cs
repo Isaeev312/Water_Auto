@@ -26,7 +26,9 @@ public sealed record NoteInputs(
     string? Joints = null,
     PipeSupportsResult? Supports = null,
     TemperatureChoice? Temperature = null,
-    double? MaxAmbient = null);
+    double? MaxAmbient = null,
+    int HydrantCount = 0,
+    Length? HydrantReach = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -354,6 +356,10 @@ public static class ExplanatoryNoteComposer
         if (d.Hydrants is { } h)
         {
             blocks.AddRange(HydrantBlocks(d, h, qAup));
+            if (i.HydrantCount > 0 && i.HydrantReach is { } reach)
+            {
+                blocks.Add(new NoteParagraph($"**Размещение пожарных кранов.** Краны размещены у стен так, чтобы каждая точка помещения орошалась {h.Demand.Jets} струями (п. 7.14 СН КР 40-04:2025); струя достаёт точку в пределах радиуса действия {F(reach.Meters, "0.#")} м по прямой внутри помещения — длина рукава {h.Settings.HoseLength} м плюс радиус компактной части струи {F(h.Demand.TableJetHeight.Meters, "0")} м (п. 7.9). Принято **{i.HydrantCount}** пожарных кранов; места кранов — на плане (слой ПТ_ПК), клапаны — на высоте {F(norms.Find("snkr4004.p7_16.valveHeight")?.Values["height"] ?? 0, "0.00")} м от пола (п. 7.16)."));
+            }
         }
 
         var vMax = d.Path.Max(x => x.Velocity);
