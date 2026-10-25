@@ -1,0 +1,565 @@
+{
+  "schemaVersion": 1,
+  "name": "ГидРаВПТ R2: 2025-2023-ИОС2, секция 4 «1.1 (-1 этаж по верху)» — расчёт без множителя из Расчет1.2.hvd",
+  "normsSnapshot": {
+    "doc": "СП 485.1311500.2020",
+    "edition": "как в отчёте ГидРаВПТ-2.9.6 (редакция не указана)"
+  },
+  "settings": {
+    "localLossFactor": 0.0,
+    "note": "Местные потери 20 % добавляются не в трубы, а по правилу compat.localLosses."
+  },
+  "parameters": {
+    "group": "2",
+    "i": 0.12,
+    "Qnorm": 30.0,
+    "S": 120.0,
+    "t_min": 60.0,
+    "maxSpacing": 3.5,
+    "roomHeight": 3.9,
+    "hydrants": {
+      "count": 2,
+      "qNorm": 2.6
+    }
+  },
+  "sprinklers": [
+    {
+      "id": "sa.svv-12",
+      "model": "СВВ-12 (СВО0-РВо(д)0,47-R1/2/P57.В3)",
+      "maker": "ЗАО «ПО «Спецавтоматика»",
+      "K": 0.47
+    }
+  ],
+  "dictating": {
+    "node": "B1-S1",
+    "P": 0.188
+  },
+  "controlValve": {
+    "node": "UU",
+    "xi": 4.6296e-08,
+    "formula": "P_уу[МПа] = ξ·9,80665·Q[м³/ч]²  (Б.32 в прочтении ГидРаВПТ)"
+  },
+  "pump": {
+    "axisZ": 1.0,
+    "inletPressure": 0.437,
+    "supplyPipes": [
+      {
+        "id": "S1",
+        "length": 7.8,
+        "standard": "ГОСТ 3262",
+        "od": 165.0,
+        "wall": 4.0,
+        "dn": 150
+      },
+      {
+        "id": "S2",
+        "length": 7.8,
+        "standard": "ГОСТ 3262",
+        "od": 165.0,
+        "wall": 4.0,
+        "dn": 150
+      }
+    ]
+  },
+  "network": {
+    "nodes": [
+      {
+        "id": "F1",
+        "type": "tee",
+        "z": 3.35,
+        "note": "конец ветви 1, начало участка 1.1"
+      },
+      {
+        "id": "F2",
+        "type": "tee",
+        "z": 3.35,
+        "note": "подключение ветви 2"
+      },
+      {
+        "id": "F3",
+        "type": "tee",
+        "z": 3.35,
+        "note": "подключение ветвей 3 и 4 (участок 3.1 пуст)"
+      },
+      {
+        "id": "F4",
+        "type": "tee",
+        "z": 3.35,
+        "note": "подключение ветвей 5 и 6 (участок 5.1 пуст)"
+      },
+      {
+        "id": "F5",
+        "type": "tee",
+        "z": 0.0,
+        "note": "конец 6.1, отметка следующего участка 7.1; подключение ПК-6"
+      },
+      {
+        "id": "F6",
+        "type": "tee",
+        "z": 0.0,
+        "note": "конец 7.1; подключение ПК-7; далее подъём на 3,35"
+      },
+      {
+        "id": "F7",
+        "type": "tee",
+        "z": 3.35,
+        "note": "конец 8.1"
+      },
+      {
+        "id": "UU",
+        "type": "source",
+        "z": 1.5,
+        "note": "узел управления УУ-С150/1,6Вз-ВФМ.04; точка привязки секции"
+      },
+      {
+        "id": "B1-S1",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B1-S2",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B1-S3",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B2-S1",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B2-S2",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B2-S3",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B3-S1",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B3-S2",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B3-S3",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B4-S1",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B4-S2",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B4-S3",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B5-S1",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B5-S2",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B5-S3",
+        "type": "sprinkler",
+        "z": 3.6,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B6-S1",
+        "type": "sprinkler",
+        "z": 3.52,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B6-S2",
+        "type": "sprinkler",
+        "z": 3.52,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "B6-S3",
+        "type": "sprinkler",
+        "z": 3.52,
+        "sprinkler": "sa.svv-12",
+        "K": 0.47
+      },
+      {
+        "id": "PK6",
+        "type": "hydrant",
+        "z": -2.0,
+        "K": 0.822192,
+        "qNorm": 2.6,
+        "pNorm": 0.1
+      },
+      {
+        "id": "PK7",
+        "type": "hydrant",
+        "z": -2.0,
+        "K": 0.822192,
+        "qNorm": 2.6,
+        "pNorm": 0.1
+      }
+    ],
+    "pipes": [
+      {
+        "id": "B1-34",
+        "from": "F1",
+        "to": "B1-S3",
+        "length": 1.84,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 1
+      },
+      {
+        "id": "B1-23",
+        "from": "B1-S3",
+        "to": "B1-S2",
+        "length": 2.14,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 1
+      },
+      {
+        "id": "B1-12",
+        "from": "B1-S2",
+        "to": "B1-S1",
+        "length": 2.31,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 1
+      },
+      {
+        "id": "B2-34",
+        "from": "F2",
+        "to": "B2-S3",
+        "length": 0.87,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 2
+      },
+      {
+        "id": "B2-23",
+        "from": "B2-S3",
+        "to": "B2-S2",
+        "length": 2.15,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 2
+      },
+      {
+        "id": "B2-12",
+        "from": "B2-S2",
+        "to": "B2-S1",
+        "length": 2.15,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 2
+      },
+      {
+        "id": "B3-34",
+        "from": "F3",
+        "to": "B3-S3",
+        "length": 1.28,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 3
+      },
+      {
+        "id": "B3-23",
+        "from": "B3-S3",
+        "to": "B3-S2",
+        "length": 2.14,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 3
+      },
+      {
+        "id": "B3-12",
+        "from": "B3-S2",
+        "to": "B3-S1",
+        "length": 2.31,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 3
+      },
+      {
+        "id": "B4-34",
+        "from": "F3",
+        "to": "B4-S3",
+        "length": 0.87,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 4
+      },
+      {
+        "id": "B4-23",
+        "from": "B4-S3",
+        "to": "B4-S2",
+        "length": 2.15,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 4
+      },
+      {
+        "id": "B4-12",
+        "from": "B4-S2",
+        "to": "B4-S1",
+        "length": 2.15,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 4
+      },
+      {
+        "id": "B5-34",
+        "from": "F4",
+        "to": "B5-S3",
+        "length": 1.28,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 5
+      },
+      {
+        "id": "B5-23",
+        "from": "B5-S3",
+        "to": "B5-S2",
+        "length": 2.14,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 5
+      },
+      {
+        "id": "B5-12",
+        "from": "B5-S2",
+        "to": "B5-S1",
+        "length": 2.31,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 4.0,
+        "branch": 5
+      },
+      {
+        "id": "B6-34",
+        "from": "F4",
+        "to": "B6-S3",
+        "length": 0.87,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 6
+      },
+      {
+        "id": "B6-23",
+        "from": "B6-S3",
+        "to": "B6-S2",
+        "length": 2.15,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 6
+      },
+      {
+        "id": "B6-12",
+        "from": "B6-S2",
+        "to": "B6-S1",
+        "length": 2.15,
+        "standard": "ГОСТ 3262",
+        "dn": 32,
+        "od": 42.3,
+        "wall": 2.8,
+        "branch": 6
+      },
+      {
+        "id": "1.1",
+        "from": "F2",
+        "to": "F1",
+        "length": 0.56,
+        "standard": "ГОСТ 10704",
+        "dn": 100,
+        "od": 108.0,
+        "wall": 2.8,
+        "ring": true
+      },
+      {
+        "id": "2.1",
+        "from": "F3",
+        "to": "F2",
+        "length": 3.5,
+        "standard": "ГОСТ 10704",
+        "dn": 100,
+        "od": 108.0,
+        "wall": 2.8,
+        "ring": true
+      },
+      {
+        "id": "4.1",
+        "from": "F4",
+        "to": "F3",
+        "length": 3.426,
+        "standard": "ГОСТ 10704",
+        "dn": 100,
+        "od": 108.0,
+        "wall": 2.8,
+        "ring": true
+      },
+      {
+        "id": "6.1",
+        "from": "F5",
+        "to": "F4",
+        "length": 7.1,
+        "standard": "ГОСТ 10704",
+        "dn": 100,
+        "od": 108.0,
+        "wall": 2.8,
+        "ring": true
+      },
+      {
+        "id": "7.1",
+        "from": "F6",
+        "to": "F5",
+        "length": 6.5,
+        "standard": "ГОСТ 10704",
+        "dn": 100,
+        "od": 108.0,
+        "wall": 2.8,
+        "ring": true
+      },
+      {
+        "id": "8.1",
+        "from": "F7",
+        "to": "F6",
+        "length": 17.39,
+        "standard": "ГОСТ 10704",
+        "dn": 100,
+        "od": 108.0,
+        "wall": 2.8,
+        "ring": true
+      },
+      {
+        "id": "9.1",
+        "from": "UU",
+        "to": "F7",
+        "length": 9.42,
+        "standard": "ГОСТ 3262",
+        "dn": 150,
+        "od": 165.0,
+        "wall": 4.0
+      },
+      {
+        "id": "PK6-pipe",
+        "from": "F5",
+        "to": "PK6",
+        "length": 2.5,
+        "standard": "ГОСТ 3262",
+        "dn": 50,
+        "od": 60.0,
+        "wall": 3.0,
+        "kind": "hydrant"
+      },
+      {
+        "id": "PK7-pipe",
+        "from": "F6",
+        "to": "PK7",
+        "length": 2.5,
+        "standard": "ГОСТ 3262",
+        "dn": 50,
+        "od": 60.0,
+        "wall": 3.0,
+        "kind": "hydrant"
+      }
+    ]
+  },
+  "compat": {
+    "engine": "ГидРаВПТ",
+    "ringHalfFlow": true,
+    "ringNote": "участок с ring=true считается на Q/2 (потери и скорость); второе полукольцо не моделируется",
+    "localLosses": "0,2·(потери труб диктующего пути: ветвь 1 + питающие 1.1…9.1, без УУ) → в P секции; ещё 0,2·(потери подводящих) → в давление у насоса",
+    "branchEqualization": "Q испр = Q усл·√((P узла − ΔZ/100)/(P усл − ΔZ/100)) — Б.21 с учётом отметки ветви",
+    "hydrant": "эмиттер при фактическом давлении, потери в трубе ПК при фактическом расходе",
+    "version": "версия не записана в .hvd (до обновления)"
+  }
+}
