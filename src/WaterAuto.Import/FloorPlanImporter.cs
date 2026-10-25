@@ -93,40 +93,59 @@ public static class FloorPlanImporter
             }
 
             var id = Id(entity);
+
+            // Объекты с нормалью (0, 0, −1) — зеркальные: их координаты в системе объекта (OCS), где ось X направлена против мировой.
+            // Иные нормали (наклонные плоскости) не поддерживаются.
+            var mirror = false;
+            if (NormalOf(entity) is { } normal)
+            {
+                var flat = Math.Abs(normal.X) < 1e-9 && Math.Abs(normal.Y) < 1e-9;
+                if (!flat)
+                {
+                    issues.Add(new Issue("import.tilted", IssueLevel.Error, $"Объект {entity.ObjectName} на слое {layer} лежит не в плоскости плана.", id, null, Anchor(entity)));
+                    continue;
+                }
+
+                mirror = normal.Z < 0;
+            }
+
             switch (layer, entity)
             {
                 case (ContourLayer, TextEntity t):
-                    texts.Add((P(t.InsertPoint), t.Value));
+                    texts.Add((W(P(t.InsertPoint), mirror), t.Value));
                     break;
                 case (ContourLayer, MText t):
-                    texts.Add((P(t.InsertPoint), t.Value));
+                    texts.Add((P(t.InsertPoint), t.PlainText));
+                    break;
+                case (_, TextEntity or MText or Dimension):
+                    issues.Add(new Issue("import.annotationSkipped", IssueLevel.Warning, $"Надпись или размер на слое {layer} пропущены: имя помещения пишется на слое {ContourLayer}.", id, null, Anchor(entity)));
                     break;
                 case (ContourLayer, LwPolyline pl):
-                    if (Closed(pl, id, layer, issues) is { } contour)
+                    if (Closed(pl, id, layer, mirror, issues) is { } contour)
                     {
                         contours.Add((id, contour));
                     }
 
                     break;
                 case (ColumnLayer, LwPolyline pl):
-                    if (Closed(pl, id, layer, issues) is { } column)
+                    if (Closed(pl, id, layer, mirror, issues) is { } column)
                     {
                         columns.Add(new Column(id, column));
                     }
 
                     break;
                 case (ColumnLayer, Circle c):
-                    columns.Add(new Column(id, CirclePolygon(P(c.Center), c.Radius)));
+                    columns.Add(new Column(id, CirclePolygon(W(P(c.Center), mirror), c.Radius)));
                     break;
                 case (ColumnLayer, Insert ins):
-                    if (BlockOutline(ins, id, issues) is { } blockColumn)
+                    if (BlockOutline(ins, id, mirror, issues) is { } blockColumn)
                     {
                         columns.Add(new Column(id, blockColumn));
                     }
 
                     break;
                 case (BeamLayer, LwPolyline pl):
-                    if (Closed(pl, id, layer, issues) is { } beam)
+                    if (Closed(pl, id, layer, mirror, issues) is { } beam)
                     {
                         if (pl.Thickness <= 0)
                         {
@@ -142,14 +161,14 @@ public static class FloorPlanImporter
 
                     break;
                 case (DuctLayer, LwPolyline pl):
-                    if (Closed(pl, id, layer, issues) is { } duct)
+                    if (Closed(pl, id, layer, mirror, issues) is { } duct)
                     {
                         ducts.Add(new Duct(id, duct, Length.FromMillimeters(pl.Elevation)));
                     }
 
                     break;
                 case (NoSprinklerLayer, LwPolyline pl):
-                    if (Closed(pl, id, layer, issues) is { } zone)
+                    if (Closed(pl, id, layer, mirror, issues) is { } zone)
                     {
                         zones.Add(new NoSprinklerZone(id, zone));
                     }
@@ -159,7 +178,7 @@ public static class FloorPlanImporter
                     inlets.Add(new Inlet(id, P(pt.Location), null));
                     break;
                 case (InletLayer, Insert ins):
-                    inlets.Add(new Inlet(id, P(ins.InsertPoint), ins.Block?.Name));
+                    inlets.Add(new Inlet(id, W(P(ins.InsertPoint), mirror), ins.Block?.Name));
                     break;
                 default:
                     issues.Add(new Issue("import.unsupportedEntity", IssueLevel.Error,
@@ -222,7 +241,18 @@ public static class FloorPlanImporter
         }
     }
 
-    private static Polygon? Closed(LwPolyline pl, string id, string layer, List<Issue> issues)
+    private static Polygon? Closed(LwPolyline pl, string id, string layer, bool mirror, List<Issue> issues)
+    {
+        if (ClosedOcs(pl, id, layer, issues) is not { } ocs)
+        {
+            return null;
+        }
+
+        return mirror ? new Polygon([.. ocs.Vertices.Select(v => W(v, mirror))]) : ocs;
+    }
+
+    // Контур в координатах объекта (OCS); дуги разбиты на хорды.
+    private static Polygon? ClosedOcs(LwPolyline pl, string id, string layer, List<Issue> issues)
     {
         var vertices = pl.Vertices.ToList();
         if (vertices.Count < 2)
@@ -299,21 +329,29 @@ public static class FloorPlanImporter
             center.XMm + (radius * Math.Cos(2 * Math.PI * k / n)), center.YMm + (radius * Math.Sin(2 * Math.PI * k / n))))]);
     }
 
-    // Колонна-блок: первая замкнутая полилиния или окружность блока с учётом точки вставки, масштаба и поворота.
-    private static Polygon? BlockOutline(Insert ins, string id, List<Issue> issues)
+    // Колонна-блок: первая замкнутая полилиния (с дугами) или окружность блока;
+    // мир = точка вставки + поворот·масштаб·(локальная − базовая точка блока), затем OCS вставки → мир.
+    private static Polygon? BlockOutline(Insert ins, string id, bool mirror, List<Issue> issues)
     {
+        var at = W(P(ins.InsertPoint), mirror);
+        if (ins.ColumnCount > 1 || ins.RowCount > 1)
+        {
+            issues.Add(new Issue("import.minsert", IssueLevel.Error, "Массив блоков (MINSERT) на слое колонн не поддерживается: разбейте массив на отдельные вставки.", id, null, at));
+            return null;
+        }
+
         Polygon? local = null;
         foreach (var e in ins.Block?.Entities ?? Enumerable.Empty<Entity>())
         {
             if (e is Insert)
             {
-                issues.Add(new Issue("import.nestedBlock", IssueLevel.Error, "Вложенные блоки на слое колонн не поддерживаются: взорвите блок.", id, null, P(ins.InsertPoint)));
+                issues.Add(new Issue("import.nestedBlock", IssueLevel.Error, "Вложенные блоки на слое колонн не поддерживаются: взорвите блок.", id, null, at));
                 return null;
             }
 
             local ??= e switch
             {
-                LwPolyline pl when pl.IsClosed && pl.Vertices.Count >= 3 => new Polygon([.. pl.Vertices.Select(v => P(v.Location))]),
+                LwPolyline pl when pl.IsClosed => ClosedOcs(pl, id, ColumnLayer, issues),
                 Circle c => CirclePolygon(P(c.Center), c.Radius),
                 _ => null,
             };
@@ -321,15 +359,16 @@ public static class FloorPlanImporter
 
         if (local is null)
         {
-            issues.Add(new Issue("import.emptyBlock", IssueLevel.Error, $"В блоке «{ins.Block?.Name}» нет замкнутой полилинии или окружности сечения колонны.", id, null, P(ins.InsertPoint)));
+            issues.Add(new Issue("import.emptyBlock", IssueLevel.Error, $"В блоке «{ins.Block?.Name}» нет замкнутой полилинии или окружности сечения колонны.", id, null, at));
             return null;
         }
 
+        var basePoint = ins.Block?.BlockEntity?.BasePoint ?? XYZ.Zero;
         double cos = Math.Cos(ins.Rotation), sin = Math.Sin(ins.Rotation);
         return new Polygon([.. local.Vertices.Select(v =>
         {
-            double x = v.XMm * ins.XScale, y = v.YMm * ins.YScale;
-            return new PlanPoint(ins.InsertPoint.X + (x * cos) - (y * sin), ins.InsertPoint.Y + (x * sin) + (y * cos));
+            double x = (v.XMm - basePoint.X) * ins.XScale, y = (v.YMm - basePoint.Y) * ins.YScale;
+            return W(new PlanPoint(ins.InsertPoint.X + (x * cos) - (y * sin), ins.InsertPoint.Y + (x * sin) + (y * cos)), mirror);
         })]);
     }
 
@@ -409,6 +448,18 @@ public static class FloorPlanImporter
     private static string Id(Entity e) => "H" + e.Handle.ToString("X", CultureInfo.InvariantCulture);
 
     private static PlanPoint P(XY v) => new(v.X, v.Y);
+
+    // OCS → мир для нормали (0, 0, ±1): при −1 ось X объекта противоположна мировой (правило произвольной оси AutoCAD).
+    private static PlanPoint W(PlanPoint ocs, bool mirror) => mirror ? new PlanPoint(-ocs.XMm, ocs.YMm) : ocs;
+
+    private static XYZ? NormalOf(Entity e) => e switch
+    {
+        LwPolyline pl => pl.Normal,
+        Circle c => c.Normal,
+        Insert i => i.Normal,
+        TextEntity t => t.Normal,
+        _ => null,
+    };
 
     private static PlanPoint P(XYZ v) => new(v.X, v.Y);
 

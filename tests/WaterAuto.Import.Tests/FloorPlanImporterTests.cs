@@ -195,6 +195,98 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
+    public void Block_rotation_is_stored_in_degrees_in_the_file()
+    {
+        // API принимает радианы; в DXF код 50 у INSERT — градусы. Проверяем сам файл, а не обратное чтение тем же API.
+        var b = DrawingBuilder.ValidFloor();
+        b.Block(FloorPlanImporter.ColumnLayer, "COL", 20000, 10000, Math.PI / 2, 1, (0, 0), (400, 0), (400, 200), (0, 200));
+        var lines = File.ReadAllLines(b.WriteDxf());
+
+        var insert = Array.FindIndex(lines, l => l.Trim() == "INSERT");
+        insert.ShouldBeGreaterThan(0);
+        var code50 = Enumerable.Range(insert, 40).First(i => lines[i].Trim() == "50");
+        double.Parse(lines[code50 + 1].Trim(), System.Globalization.CultureInfo.InvariantCulture).ShouldBe(90, 1e-9);
+    }
+
+    [Fact]
+    public void Block_base_point_is_subtracted()
+    {
+        // Сечение 400×400 нарисовано вокруг базовой точки (200, 200): вставка в (20000, 10000) — центр колонны там же.
+        var b = DrawingBuilder.ValidFloor();
+        var square = new ACadSharp.Entities.LwPolyline(new CSMath.XY[] { new(0, 0), new(400, 0), new(400, 400), new(0, 400) }) { IsClosed = true };
+        b.Block(FloorPlanImporter.ColumnLayer, "COLC", 20000, 10000, 0, 1, (200, 200), square);
+
+        var r = ImportDxf(b);
+
+        var column = r.Plan!.Columns.Single(c => c.Outline.Centroid.XMm > 15000);
+        column.Outline.Centroid.ShouldBe(new PlanPoint(20000, 10000), new PlanPointComparer(1));
+    }
+
+    [Fact]
+    public void Arcs_inside_a_column_block_are_tessellated()
+    {
+        // Круглая колонна, нарисованная полилинией из двух дуг (bulge 1): диаметр 600.
+        var b = DrawingBuilder.ValidFloor();
+        var round = new ACadSharp.Entities.LwPolyline(new CSMath.XY[] { new(-300, 0), new(300, 0) }) { IsClosed = true };
+        round.Vertices[0].Bulge = 1;
+        round.Vertices[1].Bulge = 1;
+        b.Block(FloorPlanImporter.ColumnLayer, "ROUND", 20000, 10000, 0, 1, (0, 0), round);
+
+        var r = ImportDxf(b);
+
+        var column = r.Plan!.Columns.Single(c => c.Outline.Centroid.XMm > 15000);
+        column.Outline.AreaMm2.ShouldBe(Math.PI * 300 * 300, Math.PI * 300 * 300 * 0.01);
+    }
+
+    [Fact]
+    public void Block_array_is_an_error()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        var insert = b.Block(FloorPlanImporter.ColumnLayer, "COL", 5000, 5000, 0, 1, (0, 0), (400, 0), (400, 400), (0, 400));
+        insert.ColumnCount = 3;
+        insert.ColumnSpacing = 6000;
+
+        Single(ImportDxf(b), "import.minsert").Location.ShouldBe(new PlanPoint(5000, 5000));
+    }
+
+    [Fact]
+    public void Mirrored_polyline_is_placed_in_world_coordinates()
+    {
+        // Нормаль (0, 0, −1): в OCS X = −10000…−9600 соответствует миру X = 9600…10000.
+        var b = DrawingBuilder.ValidFloor();
+        var pl = b.Rect(FloorPlanImporter.ColumnLayer, -10000, 15000, -9600, 15400);
+        pl.Normal = new CSMath.XYZ(0, 0, -1);
+
+        var r = ImportDxf(b);
+
+        r.HasErrors.ShouldBeFalse(string.Join("; ", r.Issues.Select(i => i.Message)));
+        r.Plan!.Columns.Single(c => c.Outline.Centroid.YMm > 14000).Outline.Centroid.XMm.ShouldBe(9800, 1);
+    }
+
+    [Fact]
+    public void Mtext_room_name_has_no_formatting_codes()
+    {
+        var b = new DrawingBuilder();
+        b.Rect(FloorPlanImporter.ContourLayer, 0, 0, 10000, 10000);
+        b.MText(FloorPlanImporter.ContourLayer, 5000, 5000, @"{\fArial|b1;Рампа}");
+        b.Point(FloorPlanImporter.InletLayer, 500, 500);
+
+        ImportDxf(b).Plan!.Rooms.ShouldHaveSingleItem().Name.ShouldBe("Рампа");
+    }
+
+    [Fact]
+    public void Annotation_on_a_geometry_layer_is_a_warning_not_an_error()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Text(FloorPlanImporter.ColumnLayer, 10000, 10500, "К-1");
+
+        var r = ImportDxf(b);
+
+        Single(r, "import.annotationSkipped").Level.ShouldBe(IssueLevel.Warning);
+        r.Plan.ShouldNotBeNull();
+    }
+
+    [Fact]
     public void Round_column_is_read_from_a_circle()
     {
         var b = DrawingBuilder.ValidFloor();

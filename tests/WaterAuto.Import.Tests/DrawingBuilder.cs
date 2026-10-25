@@ -55,20 +55,29 @@ internal sealed class DrawingBuilder
     public void Line(string layer, double x0, double y0, double x1, double y1) =>
         _doc.Entities.Add(new Line(new XYZ(x0, y0, 0), new XYZ(x1, y1, 0)) { Layer = Layer(layer) });
 
-    public void Block(string layer, string blockName, double x, double y, double rotationRad, double scale, params (double X, double Y)[] outline)
+    public Insert Block(string layer, string blockName, double x, double y, double rotationRad, double scale, params (double X, double Y)[] outline) =>
+        Block(layer, blockName, x, y, rotationRad, scale, (0, 0), new LwPolyline(outline.Select(p => new XY(p.X, p.Y))) { IsClosed = true });
+
+    public Insert Block(string layer, string blockName, double x, double y, double rotationRad, double scale, (double X, double Y) basePoint, Entity shape)
     {
         var block = new BlockRecord(blockName);
-        block.Entities.Add(new LwPolyline(outline.Select(p => new XY(p.X, p.Y))) { IsClosed = true });
+        block.BlockEntity.BasePoint = new XYZ(basePoint.X, basePoint.Y, 0);
+        block.Entities.Add(shape);
         _doc.BlockRecords.Add(block);
-        _doc.Entities.Add(new Insert(block)
+        var insert = new Insert(block)
         {
             InsertPoint = new XYZ(x, y, 0),
             Rotation = rotationRad,
             XScale = scale,
             YScale = scale,
             Layer = Layer(layer),
-        });
+        };
+        _doc.Entities.Add(insert);
+        return insert;
     }
+
+    public void MText(string layer, double x, double y, string value) =>
+        _doc.Entities.Add(new MText { Value = value, InsertPoint = new XYZ(x, y, 0), Height = 250, Layer = Layer(layer) });
 
     public string WriteDxf()
     {
