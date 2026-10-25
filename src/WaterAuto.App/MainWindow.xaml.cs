@@ -89,6 +89,14 @@ public partial class MainWindow : Window
         {
             Summary.Text = $"Ошибка: {ex.Message}";
         }
+#pragma warning disable CA1031 // окно не должно закрываться из-за сбоя расчёта: показываем причину и пишем её в журнал
+        catch (Exception ex)
+        {
+            var log = Path.Combine(Path.GetTempPath(), "WaterAuto-crash.log");
+            File.WriteAllText(log, ex.ToString());
+            Summary.Text = $"Внутренняя ошибка программы ({ex.GetType().Name}): {ex.Message} Подробности — {log}.";
+        }
+#pragma warning restore CA1031
         finally
         {
             RunButton.IsEnabled = true;
