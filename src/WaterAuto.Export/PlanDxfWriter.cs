@@ -40,16 +40,17 @@ public static class PlanDxfWriter
     public const string IssueLayer = "ПТ_ЗАМЕЧАНИЯ";
     public const string ZoneLayer = "ПТ_ДИКТ_ЗОНА";
     public const string SummaryLayer = "ПТ_РАСЧЁТ";
+    public const string SupportLayer = "ПТ_КРЕПЛЕНИЯ";
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
     /// <param name="basePath">Исходный чертёж этажа: план труб рисуется поверх него в одном файле; null — только слои программы.</param>
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null)
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null)
     {
         var source = basePath is null ? null : DxfDrawing.Read(basePath);
-        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source));
+        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source, supports));
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
@@ -145,6 +146,18 @@ public static class PlanDxfWriter
         if (summary is not null)
         {
             AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer);
+        }
+
+        // Опоры: косой крест на трубе (слой ПТ_КРЕПЛЕНИЯ).
+        if (supports is { Count: > 0 })
+        {
+            var supportLayer = DxfDrawing.AddLayer(doc, SupportLayer, 8);
+            var d = style.SprinklerRadiusMm * 0.75;
+            foreach (var s in supports)
+            {
+                doc.Entities.Add(new Line(new XYZ(s.At.XMm - d, s.At.YMm - d, 0), new XYZ(s.At.XMm + d, s.At.YMm + d, 0)) { Layer = supportLayer });
+                doc.Entities.Add(new Line(new XYZ(s.At.XMm - d, s.At.YMm + d, 0), new XYZ(s.At.XMm + d, s.At.YMm - d, 0)) { Layer = supportLayer });
+            }
         }
 
         // Выноска у ввода: наклонная линия и полка, над полкой — текст (DN, отметка, ссылка на раздел НС).

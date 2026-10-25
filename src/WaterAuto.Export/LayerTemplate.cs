@@ -21,7 +21,7 @@ public static class LayerTemplate
     [
         ("ПТ_КОНТУР", 3), ("ПТ_КОЛОННЫ", 8), ("ПТ_БАЛКИ", 30), ("ПТ_КОРОБА", 40), ("ПТ_ЗАПРЕТ", 210), ("ПТ_ВВОД", 5),
         (PlanDxfWriter.SprinklerLayer, 1), (PlanDxfWriter.PipeLayer, 4), (PlanDxfWriter.SegmentLayer, 7), (PlanDxfWriter.IssueLayer, 6),
-        (PlanDxfWriter.ZoneLayer, 2), (PlanDxfWriter.SummaryLayer, 7),
+        (PlanDxfWriter.ZoneLayer, 2), (PlanDxfWriter.SummaryLayer, 7), (PlanDxfWriter.SupportLayer, 8),
         (AxonometryDxfWriter.PipeLayer, 4), (AxonometryDxfWriter.SprinklerLayer, 1), (AxonometryDxfWriter.LabelLayer, 7),
     ];
 

@@ -7,6 +7,7 @@ public enum TakeoffGroup
     Pipes,
     Fittings,
     Hydrants,
+    Supports,
 }
 
 /// <summary>

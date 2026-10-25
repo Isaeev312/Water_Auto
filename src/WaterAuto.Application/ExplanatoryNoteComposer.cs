@@ -1,6 +1,7 @@
 using System.Globalization;
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Calc.Layout;
+using WaterAuto.Calc.Routing;
 using WaterAuto.Core;
 using WaterAuto.Reports;
 
@@ -22,7 +23,8 @@ public sealed record NoteInputs(
     IReadOnlyList<LiteratureEntry> Literature,
     IReadOnlyList<string> LiteratureIds,
     SprinklerSelectionResult? Selection = null,
-    string? Joints = null);
+    string? Joints = null,
+    PipeSupportsResult? Supports = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -172,6 +174,25 @@ public static class ExplanatoryNoteComposer
         yield return new NoteParagraph(string.Create(Ru, $"Под воздуховодами (площадками, оборудованием) шириной более {i.Rules.DuctMinWidth.Meters:0.##} м ({ducts} шт.) дополнительно установлено **{under.Count}** оросителей (п. 6.2.14); расстояние от термочувствительного элемента до плоскости воздуховода — по п. 6.2.11. *Принято:* такие воздуховоды препятствуют орошению защищаемой поверхности."));
     }
 
+    // Крепление трубопроводов: шаг опор по табл. 6.7.1, держатель у последнего оросителя, стыки у опор.
+    private static List<NoteBlock> SupportBlocks(NoteInputs i)
+    {
+        if (i.Supports is not { } s || s.Points.Count == 0)
+        {
+            return [];
+        }
+
+        return
+        [
+            new NoteParagraph("**Крепление трубопроводов.** Трубопроводы крепятся к конструкциям здания держателями из негорючих материалов (пп. 6.7.1.9, 6.7.1.13 СП 485). Расстояние между опорами стальных трубопроводов принято по таблице 6.7.1 по наружному диаметру трубы (для диаметра, которого нет в таблице, — по ближайшему меньшему, в запас); расстояние от держателя до последнего оросителя — не более 0,9 м для DN 25 и менее и 1,2 м для большего (п. 6.7.1.26); сварные стыки — не ближе 500 мм, соединения — не ближе 200 мм от опор (п. 6.7.1.31). Тип опор (подвижные, неподвижные) назначается по условию компенсации температурных удлинений (п. 6.7.1.10)."),
+            new NoteTable("Таблица 7 — Опоры трубопроводов", ["Диаметр", "Шаг опор, м, не более", "Количество опор, шт."],
+                s.Points.GroupBy(p => p.Dn).OrderBy(g => g.Key)
+                    .Select(g => (IReadOnlyList<string>)[$"DN{g.Key}", string.Create(Ru, $"{s.MaxSpacing(g.Key):0.0#}"), g.Count().ToString(Ru)])
+                    .Append([ "Итого", "", s.Points.Count.ToString(Ru) ])
+                    .ToList()),
+        ];
+    }
+
     private static NoteSection Routing(NoteInputs i)
     {
         var segments = i.Routing.Routes.SelectMany(r => r.Segments.Concat(r.Loops)).ToList();
@@ -185,6 +206,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Распределительные трубопроводы (рядки) проложены вдоль рядов оросителей, питающий — поперёк рядов, подводящий — от точки подключения. Начальные диаметры приняты ориентировочно по таблице Б.4 СП 485 по числу оросителей за участком и уточняются гидравлическим расчётом (п. Б.1.3.2)."),
             .. (i.Joints is { } joints ? [new NoteParagraph(joints)] : Array.Empty<NoteBlock>()),
             new NoteTable("Таблица 3 — Трубопроводы по назначению и диаметрам", ["Назначение", "Диаметр", "Участков", "Длина, м"], rows),
+            .. SupportBlocks(i),
             .. Remarks(i.Routing.Issues),
         ]);
     }

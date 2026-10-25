@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/pipe_support.schema.json",
+  "title": "Узел крепления трубопровода для спецификации",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "threads",
+    "items"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "threads": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Резьба крепежа по DN трубы: до dnMax включительно.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dnMax",
+          "thread"
+        ],
+        "properties": {
+          "dnMax": {
+            "type": "integer"
+          },
+          "thread": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "unit",
+          "perSupport"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Шаблон: {dn}, {thread}, {rod} — длина шпильки, мм."
+          },
+          "designation": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "perSupport": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        }
+      }
+    }
+  }
+}

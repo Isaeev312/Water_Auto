@@ -165,6 +165,15 @@ public static class ProjectPipeline
             takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings)] };
         }
 
+        // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
+        var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard);
+        issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
+        var supportSet = SupportEquipment.PathFor(normsDir);
+        if (File.Exists(supportSet))
+        {
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. SupportEquipment.Items(supportSet, supports, design.HangerRodLength)] };
+        }
+
         var outIssues = issues.ToList();
         var summary = Summary(worst);
         var ru = CultureInfo.GetCultureInfo("ru-RU");
@@ -175,8 +184,8 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing));
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes));
+        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points));
+        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation)));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов")));
 
@@ -203,7 +212,8 @@ public static class ProjectPipeline
                 literature,
                 ids,
                 selection,
-                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}."),
+                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}.",
+                supports),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));

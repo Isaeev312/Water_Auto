@@ -81,6 +81,9 @@ public sealed record ProjectDesign
     /// <summary>Стандарт приварных деталей трубопроводов (отводы, тройники, переходы).</summary>
     public string FittingStandard { get; init; } = "ГОСТ 17375-2001";
 
+    /// <summary>Длина резьбовой шпильки подвеса (от перекрытия до хомута), мм.</summary>
+    public double HangerRodLength { get; init; } = 300;
+
     /// <summary>Стандарт сварных соединений трубопроводов.</summary>
     public string WeldStandard { get; init; } = "ГОСТ 16037-80";
 
