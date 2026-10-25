@@ -1,0 +1,14 @@
+name: Задача разработки
+description: Что сделать, критерий готовности, тесты
+body:
+  - type: textarea
+    id: what
+    attributes: { label: Что сделать }
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes: { label: Критерий готовности }
+    validations: { required: true }
+  - type: textarea
+    id: tests
+    attributes: { label: Тесты }

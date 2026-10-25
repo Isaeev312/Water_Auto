@@ -33,11 +33,11 @@
 
 ## 2. Быстрый старт
 
-Требуется Windows 10/11, .NET SDK 8 или новее, Git.
+Требуется Windows 10/11, .NET SDK 10 (библиотеки собираются под `net8.0`, см. `docs/adr/0001-stack.md`), Git.
 
 ```bash
-git clone https://github.com/<owner>/WaterAuto.git
-cd WaterAuto
+git clone https://github.com/Isaeev312/Water_Auto.git
+cd Water_Auto
 dotnet restore
 dotnet build
 dotnet test
@@ -78,6 +78,8 @@ WaterAuto/
 │  ├─ WaterAuto.Import.Tests/
 │  ├─ WaterAuto.Architecture.Tests/
 │  └─ Golden/                  # эталонные объекты
+├─ tools/
+│  └─ ValidateData/            # проверка всех JSON в data/ по схемам (шаг CI)
 ├─ docs/
 ├─ .github/                    # CI, шаблоны задач и PR
 ├─ Directory.Build.props
@@ -207,22 +209,27 @@ Q_new = Q − D⁻¹ · (r·Q·|Q| − A12·h_new − A10·h₀)
 
 ```json
 {
+  "$schema": "../../schemas/norms.schema.json",
   "schemaVersion": 1,
   "doc": "СП 485.1311500.2020",
-  "edition": "с изм. № 1 (01.01.2026) и № 2 (26.05.2026)",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "clause": "табл. 6.1",
+  "source": "откуда перенесено и как сверено",
+  "verified": false,
   "records": [
     {
-      "id": "sp485.t6_1.group2",
+      "id": "sp485.t6_1.group4_2",
       "clause": "табл. 6.1",
-      "values": { "i": 0.12, "Q": 30, "S": 120, "t_min": 60, "maxSpacing": 3.5 },
-      "units": { "i": "л/(с·м²)", "Q": "л/с", "S": "м²", "t_min": "мин", "maxSpacing": "м" },
-      "note": ""
+      "values": { "i_water": null, "i_foam": 0.17, "Q_water": null, "Q_foam": 65, "S": 180, "t_min": 60, "maxSpacing": 3 },
+      "units": { "i_water": "л/(с·м²)", "i_foam": "л/(с·м²)", "Q_water": "л/с", "Q_foam": "л/с", "S": "м²", "t_min": "мин", "maxSpacing": "м" },
+      "attrs": { "group": "4.2" },
+      "note": "i_water, Q_water: в таблице «-»."
     }
   ]
 }
 ```
 
-Правила: одна запись — одно значение или одна строка таблицы; `id` неизменен; в коде нет ни одного нормативного числа.
+Правила: одна запись — одно значение или одна строка таблицы; `id` неизменен; в коде нет ни одного нормативного числа. В `values` только числа и `null`; `null` — значения в ячейке нет, причина в `note` или ссылка в `refs` (`"refs": { "i_water": "табл. 6.2" }`). Нечисловые признаки строки (стандарт трубы, группа) — в `attrs`. У каждого ключа `values` есть единица в `units`. `verified: false` — значения перенесены, но не сверены специалистом с официальным текстом. Схема — `data/schemas/norms.schema.json`; то, что схема выразить не может (единицы, `null`, уникальность `id` во всех файлах), проверяет `tools/ValidateData`.
 
 ### 6.2 Каталог — `data/catalog/sprinklers.json`, `pumps.json`
 

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/norms.schema.json",
+  "title": "Нормы как данные (одна таблица или группа пунктов одного документа)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "doc", "edition", "records"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "doc": { "type": "string", "minLength": 1, "description": "Обозначение документа, напр. «СП 485.1311500.2020»." },
+    "edition": { "type": "string", "minLength": 1, "description": "Редакция: какие изменения учтены и с какой даты они действуют." },
+    "clause": { "type": "string", "description": "Таблица или пункт, общий для всех записей файла." },
+    "title": { "type": "string" },
+    "source": { "type": "string", "description": "Откуда перенесены значения и как сверены." },
+    "verified": { "type": "boolean", "description": "Сверены ли данные специалистом с официальным текстом." },
+    "columns": {
+      "type": "object",
+      "description": "Пояснения к ключам values.",
+      "additionalProperties": { "type": "string" }
+    },
+    "footnotes": {
+      "type": "object",
+      "description": "Сноски и примечания таблицы, общие для всех записей.",
+      "additionalProperties": { "type": "string" }
+    },
+    "records": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/record" }
+    }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "clause", "values", "units"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[A-Za-z0-9_]+)+$",
+          "description": "Постоянный ID записи; после выпуска не меняется."
+        },
+        "clause": { "type": "string", "minLength": 1 },
+        "values": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Числовые значения в единицах из units. null — значения в этой ячейке нет (см. refs или note).",
+          "additionalProperties": { "type": ["number", "null"] }
+        },
+        "units": {
+          "type": "object",
+          "description": "Единица для каждого ключа values.",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "attrs": {
+          "type": "object",
+          "description": "Нечисловые признаки строки: стандарт трубы, группа помещений и т. п.",
+          "additionalProperties": { "type": ["string", "boolean"] }
+        },
+        "refs": {
+          "type": "object",
+          "description": "Для значений null: где норма задаёт это значение (напр. «табл. 6.2»).",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

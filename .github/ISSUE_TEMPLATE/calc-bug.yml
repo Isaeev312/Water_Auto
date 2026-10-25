@@ -1,0 +1,20 @@
+name: Ошибка расчёта
+description: Программа посчитала не так, как должна
+labels: [calc]
+body:
+  - type: input
+    id: object
+    attributes: { label: Объект, description: Проект или эталон, на котором видна ошибка }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Ожидалось }
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes: { label: Получено }
+    validations: { required: true }
+  - type: input
+    id: source
+    attributes: { label: Источник ожидаемого значения, description: Пункт нормы, эталон, другая программа }
+    validations: { required: true }
