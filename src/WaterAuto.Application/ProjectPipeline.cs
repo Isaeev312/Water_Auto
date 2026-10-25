@@ -63,7 +63,7 @@ public static class ProjectPipeline
             return Stop();
         }
 
-        var layout = SprinklerLayouter.Layout(plan, rules);
+        var layout = SprinklerLayouter.Layout(plan, rules, design.FloorElevation is { } floor ? new Length(floor) : null);
         issues.AddRange(layout.Issues);
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.

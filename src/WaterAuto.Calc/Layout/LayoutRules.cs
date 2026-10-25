@@ -11,13 +11,15 @@ namespace WaterAuto.Calc.Layout;
 /// <param name="BeamHeightLimit">Балки выше этого значения делят перекрытие на поля (6.2.10).</param>
 /// <param name="DuctMinWidth">Короба шире этого значения требуют оросителей под собой (6.2.14).</param>
 /// <param name="NormIds">ID записей норм, из которых взяты значения, — для журнала расчёта.</param>
+/// <param name="DuctMinHeightAboveFloor">Короба ниже этой высоты над полом оросителей под собой не требуют (6.2.14).</param>
 public sealed record LayoutRules(
     Length MaxSpacing,
     Length MinSpacing,
     Length MaxWallDistance,
     Length BeamHeightLimit,
     Length DuctMinWidth,
-    IReadOnlyList<string> NormIds)
+    IReadOnlyList<string> NormIds,
+    Length? DuctMinHeightAboveFloor = null)
 {
     /// <summary>
     /// Правила для группы помещений и класса конструкций. <paramref name="maxSpacing"/> — шаг строже табл. 6.1
@@ -74,7 +76,8 @@ public sealed record LayoutRules(
             new Length(wallMax),
             new Length(beam.Values["beamHeight"]!.Value),
             new Length(duct.Values["minWidth"]!.Value),
-            [table.Id, wall.Id, min.Id, beam.Id, duct.Id]);
+            [table.Id, wall.Id, min.Id, beam.Id, duct.Id],
+            duct.Values.GetValueOrDefault("minHeightAboveFloor") is { } h ? new Length(h) : null);
         return new LayoutRulesResult(rules, issues);
     }
 

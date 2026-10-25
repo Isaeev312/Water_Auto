@@ -22,7 +22,8 @@ public static class SprinklerLayouter
 {
     private const double Tol = Polygon.ToleranceMm;
 
-    public static SprinklerLayout Layout(FloorPlan plan, LayoutRules rules)
+    /// <param name="floorElevation">Отметка пола этажа — для условия 6.2.14 «не менее … от пола»; null — условие считается выполненным.</param>
+    public static SprinklerLayout Layout(FloorPlan plan, LayoutRules rules, Length? floorElevation = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(rules);
@@ -40,6 +41,7 @@ public static class SprinklerLayouter
         }
 
         issues.AddRange(ObstacleIssues(plan, rules));
+        sprinklers.AddRange(UnderDucts(plan, rules, floorElevation, issues));
         return new SprinklerLayout(sprinklers, zones, issues);
     }
 
@@ -344,20 +346,49 @@ public static class SprinklerLayouter
                 "6.2.10",
                 beam.Outline.Centroid);
         }
+    }
 
+    /// <summary>
+    /// 6.2.14: под коробами (площадками, оборудованием) шире предела на высоте не менее предела от пола — дополнительные
+    /// оросители. Раскладка по контуру короба по тем же правилам, что под перекрытием: шаг не больше нормы, до краёв —
+    /// не дальше предела 6.2.21. «Препятствует орошению» принимается для всех таких коробов (строже).
+    /// </summary>
+    private static IEnumerable<PlacedSprinkler> UnderDucts(FloorPlan plan, LayoutRules rules, Length? floor, List<Issue> issues)
+    {
         foreach (var duct in plan.Ducts)
         {
             var longest = duct.Outline.Edges().Max(e => Dist(e.A, e.B));
             var width = longest > 0 ? duct.Outline.AreaMm2 / longest : 0;
-            if (width > rules.DuctMinWidth.Millimeters + 1e-6)
+            if (width <= rules.DuctMinWidth.Millimeters + 1e-6)
             {
-                yield return new Issue(
-                    "layout.duct",
-                    IssueLevel.Warning,
-                    $"Короб шириной {Length.FromMillimeters(width)} больше {rules.DuctMinWidth}: если он препятствует орошению и расположен на высоте по п. 6.2.14, под ним нужны дополнительные оросители. Автоматически не проверяется.",
-                    duct.Id,
-                    "6.2.14",
-                    duct.Outline.Centroid);
+                continue;
+            }
+
+            if (floor is { } f && rules.DuctMinHeightAboveFloor is { } h && duct.Bottom.Meters - f.Meters < h.Meters - 1e-9)
+            {
+                continue;
+            }
+
+            var room = plan.Rooms.FirstOrDefault(r => r.Contour.Contains(duct.Outline.Centroid));
+            var under = new Room(duct.Id, "под коробом", duct.Outline);
+            var empty = new FloorPlan([under], [], [], [], [], []);
+            var vertical = LayoutRoom(under, empty, rules, CutDirection.Vertical);
+            var horizontal = LayoutRoom(under, empty, rules, CutDirection.Horizontal);
+            var best = Better(horizontal, vertical) ? horizontal : vertical;
+            issues.AddRange(best.Issues);
+            var roomId = room?.Id ?? duct.Id;
+            var placed = best.Sprinklers.Select((s, k) => new PlacedSprinkler($"{roomId}.D{duct.Id}.{k + 1}", roomId, s.Location, duct.Id)).ToList();
+            var note = floor is null ? " Отметка пола не задана — условие «не менее … от пола» принято выполненным." : "";
+            issues.Add(new Issue(
+                "layout.ductSprinklers",
+                IssueLevel.Info,
+                $"Короб шириной {Length.FromMillimeters(width)} больше {rules.DuctMinWidth}: под ним дополнительно {placed.Count} оросит. (принято, что короб препятствует орошению).{note}",
+                duct.Id,
+                "6.2.14",
+                duct.Outline.Centroid));
+            foreach (var s in placed)
+            {
+                yield return s;
             }
         }
     }
