@@ -5,6 +5,8 @@
   <ItemGroup>
     <!-- Чертежи -->
     <PackageVersion Include="ACadSharp" Version="3.7.16" />
+    <!-- Отчёты -->
+    <PackageVersion Include="ClosedXML" Version="0.105.0" />
     <!-- Данные -->
     <PackageVersion Include="JsonSchema.Net" Version="9.4.1" />
     <!-- Тесты -->

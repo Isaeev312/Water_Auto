@@ -172,7 +172,7 @@ WaterAuto/
 | Полигоны: отступы, вычитание | Clipper2 | Boost | Calc (раскладка по полям между балками, наклонные стены — ADR 0004) |
 | Разреженная линейная алгебра | MathNet.Numerics | MIT | Calc (солвер) |
 | Типизированные единицы | UnitsNet или свои типы | MIT | Core |
-| xlsx | ClosedXML | MIT | Reports |
+| xlsx | ClosedXML 0.105.0 (ADR 0006) | MIT | Reports |
 | docx | Open XML SDK | MIT | Reports |
 | pdf | QuestPDF | бесплатно при выручке < 1 млн USD | Reports |
 | Проверка солвера | OWA-EPANET (через .inp или P/Invoke) | MIT | tests |

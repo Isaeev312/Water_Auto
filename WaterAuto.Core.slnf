@@ -15,6 +15,7 @@
       "tests\\WaterAuto.Calc.Tests\\WaterAuto.Calc.Tests.csproj",
       "tests\\WaterAuto.Export.Tests\\WaterAuto.Export.Tests.csproj",
       "tests\\WaterAuto.Import.Tests\\WaterAuto.Import.Tests.csproj",
+      "tests\\WaterAuto.Reports.Tests\\WaterAuto.Reports.Tests.csproj",
       "tools\\ValidateData\\ValidateData.csproj"
     ]
   }

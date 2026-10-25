@@ -8,4 +8,8 @@
     <ProjectReference Include="..\WaterAuto.Core\WaterAuto.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" />
+  </ItemGroup>
+
 </Project>
