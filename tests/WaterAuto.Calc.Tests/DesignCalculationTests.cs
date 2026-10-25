@@ -110,6 +110,25 @@ public class DesignCalculationTests
     }
 
     [Fact]
+    public void Warehouse_parameters_drive_the_calculation()
+    {
+        // Склад группы 5, складирование 3,5 м, помещение 14 м: i = 0,384, Q_н = 72 л/с (табл. 6.2, прим. 3), S = 90 м².
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Склад", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var rules = LayoutRules.Resolve(Norms, "5", ConstructionClass.K0).Rules!;
+        var layout = SprinklerLayouter.Layout(plan, rules);
+        var route = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3)).Routes[0];
+        var parameters = FireParameters.Resolve(Norms, "5", new Length(14), new Length(3.5)).Parameters!;
+        var r = DesignCalculation.Run(route, Norms, rules, Settings with { DesignVelocity = 5 }, parameters);
+
+        r.Parameters.ShouldBe(parameters);
+        r.DictatingFlow.LitersPerSecond.ShouldBe(1.5 * 0.384 * 12, 1e-9);
+        r.NormativeFlow.LitersPerSecond.ShouldBe(72, 1e-9);
+        r.ZoneSprinklers.Count.ShouldBe((int)Math.Ceiling(90 / r.AreaPerSprinkler));
+        r.PumpFlow.LitersPerSecond.ShouldBeGreaterThanOrEqualTo(72);
+    }
+
+    [Fact]
     public void Tank_volume_is_flow_times_duration_with_95_percent_fill()
     {
         var r = Calculate();

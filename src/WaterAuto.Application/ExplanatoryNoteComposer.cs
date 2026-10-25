@@ -76,24 +76,48 @@ public static class ExplanatoryNoteComposer
 
     private static NoteSection Parameters(NoteInputs i, INormsProvider norms)
     {
+        var p = i.Design.Parameters;
         var table = norms.Find(i.Rules.NormIds[0]);
-        string V(string key, string unit) => table?.Values.GetValueOrDefault(key) is { } v ? string.Create(Ru, $"{v:0.###} {unit}") : "—";
         var tableSpacing = table?.Values.GetValueOrDefault("maxSpacing");
         var spacing = tableSpacing is { } ts && Math.Abs(ts - i.Rules.MaxSpacing.Meters) > 1e-9
             ? string.Create(Ru, $"{i.Rules.MaxSpacing.Meters:0.###} м (строже табл. 6.1: {ts:0.###} м)")
             : string.Create(Ru, $"{i.Rules.MaxSpacing.Meters:0.###} м");
-        return new NoteSection("2", "Параметры установки", [
-            new NoteParagraph($"Параметры приняты для группы помещений {i.RoomGroup} по таблице 6.1 СП 485, расстояния — по п. 6.2.21."),
-            new NoteTable("Таблица 1 — Параметры спринклерной установки", ["Параметр", "Значение", "Основание"], [
-                ["Интенсивность орошения", V("i_water", "л/(с·м²)"), "табл. 6.1"],
-                ["Расход, не менее", V("Q_water", "л/с"), "табл. 6.1"],
-                ["Минимальная площадь срабатывания", V("S", "м²"), "табл. 6.1"],
-                ["Продолжительность подачи", V("t_min", "мин"), "табл. 6.1"],
-                ["Наибольшее расстояние между оросителями", spacing, "табл. 6.1"],
-                ["Наименьшее расстояние между оросителями", string.Create(Ru, $"{i.Rules.MinSpacing.Meters:0.###} м"), "п. 6.2.21"],
-                ["Наибольшее расстояние до стен", string.Create(Ru, $"{i.Rules.MaxWallDistance.Meters:0.###} м"), "п. 6.2.21"],
-            ]),
-        ]);
+        var heights = new List<string>();
+        if (p.RoomHeight is { } rh)
+        {
+            heights.Add(string.Create(Ru, $"высота помещения — {rh.Meters:0.##} м"));
+        }
+
+        if (p.StorageHeight is { } sh)
+        {
+            heights.Add(string.Create(Ru, $"высота складирования — {sh.Meters:0.##} м"));
+        }
+
+        var blocks = new List<NoteBlock>
+        {
+            new NoteParagraph($"Параметры приняты для группы помещений {i.RoomGroup} по {p.Source} СП 485 (п. 6.1.4), расстояния — по п. 6.2.21{(heights.Count > 0 ? "; " + string.Join(", ", heights) : "")}."),
+        };
+        if (Math.Abs(p.HeightFactor - 1) > 1e-12 && p.RoomHeight is { } h)
+        {
+            var baseI = p.Intensity / p.HeightFactor;
+            var baseQ = p.Flow.LitersPerSecond / p.HeightFactor;
+            blocks.Add(new NoteParagraph("Высота помещения склада более 10 м — интенсивность и расход по примечанию 3 к таблице 6.2:"));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*i*_{{h}} = [1 + 0,05·(*H* − 10)]·*i* = [1 + 0,05·({h.Meters:0.##} − 10)]·{baseI:0.###} = {p.Intensity:0.###} л/(с·м^{{2}}),"), "2.1", []));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*Q*_{{h}} = [1 + 0,05·(*H* − 10)]·*Q* = {p.HeightFactor:0.###}·{baseQ:0.##} = {p.Flow.LitersPerSecond:0.##} л/с,"), "2.2", [
+                "где *i*, *Q* — по таблице 6.2 при высоте помещения не более 10 м; *H* — высота помещения, м.",
+            ]));
+        }
+
+        blocks.Add(new NoteTable("Таблица 1 — Параметры спринклерной установки", ["Параметр", "Значение", "Основание"], [
+            ["Интенсивность орошения", string.Create(Ru, $"{p.Intensity:0.###} л/(с·м²)"), p.Source],
+            ["Расход, не менее", string.Create(Ru, $"{p.Flow.LitersPerSecond:0.##} л/с"), p.Source],
+            ["Минимальная площадь срабатывания", string.Create(Ru, $"{p.MinArea:0.###} м²"), p.Source == "табл. 6.3" ? "табл. 6.3" : "табл. 6.1"],
+            ["Продолжительность подачи", string.Create(Ru, $"{p.Duration:0.###} мин"), "табл. 6.1"],
+            ["Наибольшее расстояние между оросителями", spacing, "табл. 6.1"],
+            ["Наименьшее расстояние между оросителями", string.Create(Ru, $"{i.Rules.MinSpacing.Meters:0.###} м"), "п. 6.2.21"],
+            ["Наибольшее расстояние до стен", string.Create(Ru, $"{i.Rules.MaxWallDistance.Meters:0.###} м"), "п. 6.2.21"],
+        ]));
+        return new NoteSection("2", "Параметры установки", blocks);
     }
 
     private static NoteSection Placement(NoteInputs i)
@@ -163,16 +187,15 @@ public static class ExplanatoryNoteComposer
     {
         var d = i.Design;
         var s = i.DesignSettings;
-        var table = norms.Find(i.Rules.NormIds[0]);
-        var intensity = table?.Values.GetValueOrDefault("i_water") ?? 0;
-        var minArea = table?.Values.GetValueOrDefault("S") ?? 0;
+        var intensity = d.Parameters.Intensity;
+        var minArea = d.Parameters.MinArea;
         var blocks = new List<NoteBlock>
         {
             new NoteParagraph("Гидравлический расчёт выполнен по приложению Б СП 485.1311500.2020 (п. Б.1.1.12) последовательно от диктующего оросителя к узлу подключения."),
             new NoteParagraph("*Принято:*"),
             new NoteList([
                 "диктующий ороситель — наиболее удалённый от точки подключения по трассе трубопроводов (п. Б.1.2.1);",
-                $"диктующая зона — {d.ZoneSprinklers.Count} оросителей, ближайших к диктующему, площадью не менее минимальной площади орошения по таблице 6.1 (пп. Б.1.2.1, Б.1.2.2);",
+                $"диктующая зона — {d.ZoneSprinklers.Count} оросителей, ближайших к диктующему, площадью не менее минимальной площади орошения ({d.Parameters.Source}) (пп. Б.1.2.1, Б.1.2.2);",
                 $"расход диктующего оросителя при отсутствии эпюр орошения — по формуле (Б.1) с верхним значением коэффициента {F(d.DictatingFactor)};",
                 $"местные сопротивления, включая потери в узле управления, — {F(d.LocalLossFactor * 100, "0")} % линейных потерь на всех участках от диктующего оросителя до насоса (п. Б.1.3.13);",
                 s.DesignVelocity is { } v
@@ -183,7 +206,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("**5.1 Расход и давление у диктующего оросителя**"),
             new NoteParagraph("Расход диктующего оросителя определяется по формуле (Б.1):"),
             new NoteFormula($"*q*_{{1}} = {F(d.DictatingFactor)}·*i*·*s* = {F(d.DictatingFactor)}·{F(intensity, "0.##")}·12 = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с,", "5.1", [
-                "где *i* — нормативная интенсивность орошения по таблице 6.1, л/(с·м^{2});",
+                $"где *i* — нормативная интенсивность орошения ({d.Parameters.Source}), л/(с·м^{{2}});",
                 "*s* — круговая площадь, защищаемая диктующим оросителем, *s* = 12 м^{2} (п. Б.1.1.10).",
             ]),
             new NoteParagraph("Давление у диктующего оросителя:"),
@@ -198,7 +221,7 @@ public static class ExplanatoryNoteComposer
             ]),
             new NoteParagraph("Количество оросителей в диктующей зоне (Б.2):"),
             new NoteFormula($"*N* = *S* / *Q*_{{ор}} = {F(minArea, "0")} / {F(d.AreaPerSprinkler, "0.00")} = {F(minArea / d.AreaPerSprinkler, "0.00")} → **{d.ZoneSprinklers.Count} шт.**,", "5.4", [
-                "где *S* — минимальная площадь орошения по таблице 6.1, м^{2}.",
+                $"где *S* — минимальная площадь орошения ({(d.Parameters.Source == "табл. 6.3" ? "табл. 6.3" : "табл. 6.1")}), м^{{2}}.",
             ]),
         };
 

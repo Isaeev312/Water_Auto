@@ -51,6 +51,7 @@ public sealed record DesignResult(
     double TankMaxFill,
     double JockeyTankMinLiters,
     IReadOnlyList<string> NormIds,
+    FireParameters Parameters,
     PipeRoute Route,
     double? DesignVelocity,
     double DischargeCoefficient,
@@ -67,7 +68,8 @@ public sealed record DesignResult(
 /// </summary>
 public static class DesignCalculation
 {
-    public static DesignResult Run(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings)
+    /// <param name="parameters">i, Q, S, t по группе и высотам (<see cref="FireParameters"/>); null — по табл. 6.1 для группы правил раскладки.</param>
+    public static DesignResult Run(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters = null)
     {
         ArgumentNullException.ThrowIfNull(route);
         ArgumentNullException.ThrowIfNull(norms);
@@ -75,6 +77,8 @@ public static class DesignCalculation
         ArgumentNullException.ThrowIfNull(settings);
         var issues = new List<Issue>();
         var table = norms.Find(rules.NormIds[0])!;
+        parameters ??= FireParameters.Resolve(norms, table.Attributes["group"], null, null).Parameters
+            ?? throw new InvalidOperationException("Для группы правил раскладки нет параметров по табл. 6.1 — передайте FireParameters.");
         var factorRecord = norms.Find("sp485.b1_1_12.dictatingFlowFactor")!;
         var circle = norms.Find("sp485.b1_1_10.dictatingArea")!;
         var local = norms.Find("sp485.b1_3_13.localLossFactor")!;
@@ -82,10 +86,10 @@ public static class DesignCalculation
         var jockey = norms.Find("sp485.p6_9_4.jockeyTank")!;
         var fill = norms.Find("sp485.p6_9_13.tankFill")!;
 
-        var i = table.Values["i_water"]!.Value;
-        var s = table.Values["S"]!.Value;
-        var qNorm = table.Values["Q_water"]!.Value;
-        var t = table.Values["t_min"]!.Value;
+        var i = parameters.Intensity;
+        var s = parameters.MinArea;
+        var qNorm = parameters.Flow.LitersPerSecond;
+        var t = parameters.Duration;
         var factor = factorRecord.Values["max"]!.Value;
         var k = local.Values["localLossFactor"]!.Value;
         var vMax = velocity.Values["pressureMax"]!.Value;
@@ -206,7 +210,8 @@ public static class DesignCalculation
             water / (maxFill / 100),
             maxFill,
             jockey.Values["minVolume"]!.Value,
-            [table.Id, factorRecord.Id, circle.Id, local.Id, velocity.Id, jockey.Id, fill.Id, diameter.Id],
+            [.. parameters.NormIds, factorRecord.Id, circle.Id, local.Id, velocity.Id, jockey.Id, fill.Id, diameter.Id],
+            parameters,
             current,
             settings.DesignVelocity,
             mu,
