@@ -55,8 +55,8 @@ public class HydrantDemandTests
     [Fact]
     public void Dash_cell_is_an_error()
     {
-        // Спрыск 13 мм при струе 6 м — «--».
-        var r = HydrantDemand.Resolve(Norms, Parking with { NozzleMm = 13 });
+        // Спрыск 19 мм при DN50 и струе 14 м — «--».
+        var r = HydrantDemand.Resolve(Norms, Parking with { NozzleMm = 19, RoomHeight = new Length(13) });
         r.Demand.ShouldBeNull();
         r.Issues.ShouldContain(i => i.Code == "vpv.noTableValue" && i.Level == IssueLevel.Error);
     }
@@ -64,8 +64,8 @@ public class HydrantDemandTests
     [Fact]
     public void Stream_flow_below_Zh2_is_an_error()
     {
-        // IV, В, С0, свыше 150 тыс. м³ → 2×5 л/с; ствол 16 мм даёт 2,6 л/с.
-        var r = HydrantDemand.Resolve(Norms, Parking with { FireResistance = "IV", VolumeThousandM3 = 200 });
+        // IV, В, С0, свыше 150 тыс. м³ → 2×5 л/с; ствол 13 мм при DN50 даёт не более 3,6 л/с ни при какой высоте струи.
+        var r = HydrantDemand.Resolve(Norms, Parking with { FireResistance = "IV", VolumeThousandM3 = 200, NozzleMm = 13, RoomHeight = new Length(11) });
         r.Issues.ShouldContain(i => i.Code == "vpv.jetFlowLow" && i.Level == IssueLevel.Error);
     }
 
@@ -90,5 +90,27 @@ public class HydrantDemandTests
     public void Latin_look_alike_letters_are_accepted()
     {
         HydrantDemand.Resolve(Norms, Parking with { Category = "B", HazardClass = "C0" }).Demand.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void Parking_jets_follow_SNiP_21_02_6_4()
+    {
+        // Отсек 40 тыс. м³ > 5 → 2 струи по 5 л/с; ствол 19 мм, DN65, рукав 20 м: первая строка Ж.3 с q ≥ 5 — 12 м, 5,2 л/с, 19,9 м.
+        var r = HydrantDemand.Resolve(Norms, Parking with { IsParking = true, ValveDn = 65, NozzleMm = 19 });
+        var d = r.Demand!;
+        d.Jets.ShouldBe(2);
+        d.MinJetFlow.LitersPerSecond.ShouldBe(5);
+        d.TableJetHeight.Meters.ShouldBe(12);
+        d.JetFlow.LitersPerSecond.ShouldBe(5.2);
+        d.Head.Meters.ShouldBe(19.9);
+        d.Source.ShouldContain("СНиП 21-02-99*");
+    }
+
+    [Fact]
+    public void Small_parking_takes_two_jets_of_2_5()
+    {
+        var d = HydrantDemand.Resolve(Norms, Parking with { IsParking = true, VolumeThousandM3 = 4 }).Demand!;
+        d.MinJetFlow.LitersPerSecond.ShouldBe(2.5);
+        d.JetFlow.LitersPerSecond.ShouldBe(2.6);
     }
 }

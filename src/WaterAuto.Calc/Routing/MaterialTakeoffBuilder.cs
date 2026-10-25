@@ -27,7 +27,8 @@ public static class MaterialTakeoffBuilder
         return (int)row.Values["sprinklerSpare"]!.Value;
     }
 
-    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler)
+    /// <param name="fittingStandard">Стандарт приварных деталей (отводы, тройники, переходы), например ГОСТ 17375-2001; null — не указывается.</param>
+    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, string? fittingStandard = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(sprinkler);
@@ -91,14 +92,16 @@ public static class MaterialTakeoffBuilder
         items.AddRange(pipes.OrderBy(p => p.Key).Select(p => new TakeoffItem(
             TakeoffGroup.Pipes,
             string.Create(Ru, $"Трубы {p.Value.Pipe.PipeType} DN{p.Key}, Ø{p.Value.Pipe.OuterDiameterMm:0.##}×{p.Value.Pipe.WallMm:0.##} мм"),
-            pipeStandard,
+            p.Value.Pipe.Standard,
             Math.Round(p.Value.Meters, 2),
             "м")));
         items.AddRange(fittings
             .OrderBy(f => FittingOrder(f.Key))
             .ThenBy(f => Diameters(f.Key).First)
             .ThenBy(f => Diameters(f.Key).Second)
-            .Select(f => new TakeoffItem(TakeoffGroup.Fittings, f.Key, null, f.Value, "шт.", "уточняется при оформлении узлов")));
+            .Select(f => f.Key.StartsWith("Крестовина", StringComparison.Ordinal) || fittingStandard is null
+                ? new TakeoffItem(TakeoffGroup.Fittings, f.Key, null, f.Value, "шт.", "уточняется при оформлении узлов")
+                : new TakeoffItem(TakeoffGroup.Fittings, f.Key, fittingStandard, f.Value, "шт.")));
         return new MaterialTakeoff(items, series.Issues.ToList());
     }
 

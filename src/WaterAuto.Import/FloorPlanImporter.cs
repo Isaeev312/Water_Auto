@@ -229,7 +229,9 @@ public static class FloorPlanImporter
     // Слой «почти ПТ_»: латинские буквы вместо кириллических или опечатка — пользователь иначе увидит только «нет ПТ_ВВОД».
     private static void WarnAboutLookalikeLayers(CadDocument doc, List<Issue> issues)
     {
-        foreach (var layer in doc.Layers)
+        // Пустые слои (например, слои результатов из шаблона чертежа) ни на что не влияют — о них не предупреждаем.
+        var used = doc.Entities.Select(e => e.Layer.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var layer in doc.Layers.Where(l => used.Contains(l.Name)))
         {
             var upper = layer.Name.Trim().ToUpperInvariant();
             var normalized = upper.Replace('P', 'Р').Replace('T', 'Т').Replace('K', 'К').Replace('O', 'О').Replace('A', 'А').Replace('B', 'В').Replace('E', 'Е');

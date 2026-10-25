@@ -121,7 +121,19 @@ public static class PipeRouter
                 return null;
             }
 
-            foreach (var run in runs.Where(r => !best.Reached.Contains(r)))
+            // Ряды, которые питающий не достал (их отрезали зоны запрета или контур), — дополнительные питающие,
+            // каждый подключён к уже проложенному горизонтальной перемычкой по свободному коридору между рядами.
+            var mains = new List<(double X, double Lo, double Hi, List<Run> Reached, int Imbalance)> { best };
+            var links = new List<(int Parent, double Y)>();
+            var remaining = runs.Where(r => !best.Reached.Contains(r)).ToList();
+            while (remaining.Count > 0 && Extra(remaining, mains, inlet) is { } extra)
+            {
+                mains.Add(extra.Main);
+                links.Add((extra.Parent, extra.Y));
+                remaining.RemoveAll(extra.Main.Reached.Contains);
+            }
+
+            foreach (var run in remaining)
             {
                 _issues.Add(new Issue(
                     "routing.rowNotReached",
@@ -139,7 +151,46 @@ public static class PipeRouter
                 return null;
             }
 
-            return Assemble(best, rowYs, supply);
+            return Assemble(mains, links, supply);
+        }
+
+        // Дополнительный питающий: больше достигнутых рядов, затем короче перемычка; перемычка не ложится на ряды.
+        private ((double X, double Lo, double Hi, List<Run> Reached, int Imbalance) Main, int Parent, double Y)? Extra(
+            List<Run> remaining, List<(double X, double Lo, double Hi, List<Run> Reached, int Imbalance)> mains, PlanPoint inlet)
+        {
+            var xs = Cluster(remaining.SelectMany(r => r.Items.Select(i => i.At.XMm)));
+            var candidates = xs.Zip(xs.Skip(1), (a, b) => (a + b) / 2).Concat(remaining.SelectMany(r => new[] { r.X0 - (_s / 4), r.X1 + (_s / 4) }));
+            var rowYs = mains.SelectMany(m => m.Reached).Concat(remaining).Select(r => r.Y).Distinct().Order().ToList();
+            var corridors = rowYs.Zip(rowYs.Skip(1), (a, b) => (a + b) / 2).Append(rowYs[0] - (_s / 2)).Append(rowYs[^1] + (_s / 2)).ToList();
+            ((double X, double Lo, double Hi, List<Run> Reached, int Imbalance) Main, int Parent, double Y)? best = null;
+            var bestLength = double.PositiveInfinity;
+            foreach (var x in candidates)
+            {
+                if (Main(x, remaining, inlet) is not { } m || (best is { } b && m.Reached.Count < b.Main.Reached.Count))
+                {
+                    continue;
+                }
+
+                for (var p = 0; p < mains.Count; p++)
+                {
+                    foreach (var y in corridors.Where(y => y > m.Lo + Tol && y < m.Hi - Tol && y > mains[p].Lo + Tol && y < mains[p].Hi - Tol))
+                    {
+                        var length = Math.Abs(mains[p].X - x);
+                        if (length < Tol)
+                        {
+                            continue;
+                        }
+
+                        var better = best is null || m.Reached.Count > best.Value.Main.Reached.Count || length < bestLength;
+                        if (better && Clear(new PlanPoint(mains[p].X, y), new PlanPoint(x, y)))
+                        {
+                            (best, bestLength) = ((m, p, y), length);
+                        }
+                    }
+                }
+            }
+
+            return best;
         }
 
         // Ряды: оросители на одной горизонтали; ряд рвётся, где шаг больше нормы или труба вышла бы из помещения.
@@ -256,7 +307,7 @@ public static class PipeRouter
             return best;
         }
 
-        private PipeRoute Assemble((double X, double Lo, double Hi, List<Run> Reached, int Imbalance) main, List<double> rowYs, List<PlanPoint> supply)
+        private PipeRoute Assemble(List<(double X, double Lo, double Hi, List<Run> Reached, int Imbalance)> mains, List<(int Parent, double Y)> links, List<PlanPoint> supply)
         {
             var nodes = new Dictionary<string, (RouteNodeKind Kind, PlanPoint At, string? Sprinkler)>();
             var edges = new List<(string A, string B, RouteSegmentRole Role)>();
@@ -278,34 +329,62 @@ public static class PipeRouter
                 prev = junction = id;
             }
 
-            // Питающий: узлы на рядах и узел подводящего, по порядку вдоль питающего.
+            // Питающие: узлы на рядах, узел подводящего и концы перемычек, по порядку вдоль каждого питающего.
             var junctionY = nodes[junction].At.YMm;
-            var mainNodes = new List<(double Y, string Id)> { (junctionY, junction) };
-            var rowTees = new Dictionary<Run, string>();
-            foreach (var run in main.Reached)
+            var mainNodes = mains.Select(_ => new List<(double Y, string Id)>()).ToList();
+            mainNodes[0].Add((junctionY, junction));
+            // Узел на питающем m на отметке y; совпадающий по месту узел используется повторно (без участков нулевой длины).
+            string On(int m, double y)
             {
-                var id = NewNode(RouteNodeKind.Tee, new PlanPoint(main.X, run.Y), "T");
-                rowTees[run] = id;
-                mainNodes.Add((run.Y, id));
+                var existing = mainNodes[m].FirstOrDefault(n => Math.Abs(n.Y - y) < Tol);
+                if (existing.Id is not null)
+                {
+                    return existing.Id;
+                }
+
+                var id = NewNode(RouteNodeKind.Tee, new PlanPoint(mains[m].X, y), "T");
+                mainNodes[m].Add((y, id));
+                return id;
             }
 
-            mainNodes = [.. mainNodes.OrderBy(m => m.Y)];
-            for (var k = 1; k < mainNodes.Count; k++)
+            var rowTees = new Dictionary<Run, string>();
+            for (var m = 0; m < mains.Count; m++)
             {
-                edges.Add((mainNodes[k - 1].Id, mainNodes[k].Id, RouteSegmentRole.Main));
+                foreach (var run in mains[m].Reached)
+                {
+                    rowTees[run] = On(m, run.Y);
+                }
+            }
+
+            for (var k = 0; k < links.Count; k++)
+            {
+                var (parent, y) = links[k];
+                edges.Add((On(parent, y), On(k + 1, y), RouteSegmentRole.Main));
+            }
+
+            for (var m = 0; m < mains.Count; m++)
+            {
+                var ordered = mainNodes[m].OrderBy(n => n.Y).ToList();
+                for (var k = 1; k < ordered.Count; k++)
+                {
+                    edges.Add((ordered[k - 1].Id, ordered[k].Id, RouteSegmentRole.Main));
+                }
             }
 
             // Рядки: от узла на питающем в обе стороны по порядку.
-            foreach (var run in main.Reached)
+            foreach (var main in mains)
             {
-                foreach (var side in new[] { run.Items.Where(i => i.At.XMm < main.X).OrderByDescending(i => i.At.XMm), run.Items.Where(i => i.At.XMm > main.X).OrderBy(i => i.At.XMm) })
+                foreach (var run in main.Reached)
                 {
-                    var from = rowTees[run];
-                    foreach (var (at, s) in side)
+                    foreach (var side in new[] { run.Items.Where(i => i.At.XMm < main.X).OrderByDescending(i => i.At.XMm), run.Items.Where(i => i.At.XMm > main.X).OrderBy(i => i.At.XMm) })
                     {
-                        nodes[s.Id] = (RouteNodeKind.Sprinkler, at, s.Id);
-                        edges.Add((from, s.Id, RouteSegmentRole.Row));
-                        from = s.Id;
+                        var from = rowTees[run];
+                        foreach (var (at, s) in side)
+                        {
+                            nodes[s.Id] = (RouteNodeKind.Sprinkler, at, s.Id);
+                            edges.Add((from, s.Id, RouteSegmentRole.Row));
+                            from = s.Id;
+                        }
                     }
                 }
             }

@@ -50,7 +50,7 @@ public static class AxonometryDxfWriter
         ArgumentNullException.ThrowIfNull(style);
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
-        var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4);
+        var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4, LineWeightType.W40); // трубопроводы — 0,40 мм
         var sprinklers = DxfDrawing.AddLayer(doc, SprinklerLayer, 1);
         var labels = DxfDrawing.AddLayer(doc, LabelLayer, 7);
         var z = pipeElevation.Millimeters;

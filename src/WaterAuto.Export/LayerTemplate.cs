@@ -43,7 +43,7 @@ public static class LayerTemplate
         doc.Header.InsUnits = UnitsType.Millimeters;
         foreach (var (name, color) in Layers)
         {
-            DxfDrawing.AddLayer(doc, name, color);
+            DxfDrawing.AddLayer(doc, name, color, name is PlanDxfWriter.PipeLayer or AxonometryDxfWriter.PipeLayer ? LineWeightType.W40 : LineWeightType.Default);
         }
 
         var inlet = new BlockRecord(InletBlock);

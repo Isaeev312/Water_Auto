@@ -209,6 +209,24 @@ public class PipeRouterTests
     }
 
     [Fact]
+    public void Rows_behind_a_zone_get_a_second_main_through_a_free_corridor()
+    {
+        // Зона перекрывает зал, кроме коридора внизу: ряды справа от зоны — второй питающий, подключённый через коридор.
+        var zone = new NoSprinklerZone("Z1", Rect(18000, 4000, 22000, 20000));
+        var plan = Plan(Rect(0, 0, 40000, 20000), new PlanPoint(500, 500), zones: [zone]);
+        var (_, layout, routing) = Route(plan);
+        var route = routing.Routes.ShouldHaveSingleItem();
+        RouteChecks.ShouldBeTree(route);
+        routing.Issues.ShouldNotContain(i => i.Code == "routing.rowNotReached");
+        route.Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
+        var nodes = route.Nodes.ToDictionary(n => n.Id);
+        foreach (var s in route.Segments)
+        {
+            RouteChecks.Crosses(zone.Outline, nodes[s.From].Location, nodes[s.To].Location).ShouldBeFalse($"{s.Id} проходит через зону запрета");
+        }
+    }
+
+    [Fact]
     public void Routed_network_solves_with_the_tree_solver()
     {
         var (_, _, routing) = Route(Plan(Rect(0, 0, 30000, 20000), new PlanPoint(500, 500)));

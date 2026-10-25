@@ -111,6 +111,16 @@ public class PlanDxfWriterTests
     }
 
     [Fact]
+    public void Pipes_are_0_40_mm_and_texts_use_GOST_Common()
+    {
+        var doc = WriteAndRead();
+        doc.Layers[PlanDxfWriter.PipeLayer].LineWeight.ShouldBe(LineWeightType.W40);
+        var texts = doc.Entities.OfType<TextEntity>().Select(x => x.Style).Concat(doc.Entities.OfType<MText>().Select(x => x.Style)).ToList();
+        texts.ShouldNotBeEmpty();
+        texts.ShouldAllBe(s => s.Filename == "GOST Common.ttf");
+    }
+
+    [Fact]
     public void Drawing_is_in_millimetres_with_the_output_layers()
     {
         var doc = WriteAndRead();

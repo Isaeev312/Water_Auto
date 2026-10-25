@@ -65,10 +65,27 @@ public sealed record ProjectDesign
 
     public string SprinklerModel { get; init; } = "";
 
-    /// <summary>K оросителя, л/(с·МПа^0,5) — по технической документации изделия.</summary>
+    /// <summary>K оросителя, л/(с·МПа^0,5) — по технической документации изделия; 0 — автоподбор из каталога data/catalog.</summary>
     public double SprinklerK { get; init; }
 
-    public string PipeStandard { get; init; } = "ГОСТ 3262";
+    /// <summary>Положение розетки для автоподбора: up (вверх), down (вниз), horizontal, concealed.</summary>
+    public string SprinklerDeflector { get; init; } = "up";
+
+    public string PipeStandard { get; init; } = "ГОСТ 3262-75";
+
+    /// <summary>Стандарт труб, начиная с <see cref="PipeStandardLargeFromDn"/>; пусто — все трубы по <see cref="PipeStandard"/>.</summary>
+    public string PipeStandardLarge { get; init; } = "ГОСТ 10704-91";
+
+    public int PipeStandardLargeFromDn { get; init; } = 50;
+
+    /// <summary>Стандарт приварных деталей трубопроводов (отводы, тройники, переходы).</summary>
+    public string FittingStandard { get; init; } = "ГОСТ 17375-2001";
+
+    /// <summary>Сортамент для расчёта и спецификации.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string PipeSeriesStandard => PipeStandardLarge.Length > 0
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn)
+        : PipeStandard;
 
     /// <summary>Высота помещения, м — для табл. 6.3 и примечания 3 к табл. 6.2; null — до 10 м.</summary>
     public double? RoomHeight { get; init; }
@@ -90,8 +107,8 @@ public sealed record ProjectDesign
 
     public int SupplyDn { get; init; } = 100;
 
-    /// <summary>Давление на входе насоса (гарантированный напор по ТУ), МПа.</summary>
-    public double InletPressure { get; init; }
+    /// <summary>Давление на входе насоса (гарантированный напор по ТУ), МПа; по умолчанию 0,10 МПа (10 м вод. ст.) — уточнить по ТУ.</summary>
+    public double InletPressure { get; init; } = 0.10;
 
     /// <summary>Скорость для подбора диаметров по Б.5, м/с; null — диаметры по табл. Б.4.</summary>
     public double? DesignVelocity { get; init; }
@@ -139,6 +156,9 @@ public sealed class ProjectHydrants
     public double PipeLength { get; init; }
 
     public int PipeDn { get; init; } = 65;
+
+    /// <summary>Отапливаемая автостоянка закрытого типа: струи по п. 6.4 СНиП 21-02-99* (ADR 0010).</summary>
+    public bool IsParking { get; init; }
 }
 
 /// <summary>Титульный лист записки.</summary>

@@ -20,7 +20,8 @@ public sealed record NoteInputs(
     DesignResult Design,
     DesignSettings DesignSettings,
     IReadOnlyList<LiteratureEntry> Literature,
-    IReadOnlyList<string> LiteratureIds);
+    IReadOnlyList<string> LiteratureIds,
+    SprinklerSelectionResult? Selection = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -117,6 +118,15 @@ public static class ExplanatoryNoteComposer
             ["Наименьшее расстояние между оросителями", string.Create(Ru, $"{i.Rules.MinSpacing.Meters:0.###} м"), "п. 6.2.21"],
             ["Наибольшее расстояние до стен", string.Create(Ru, $"{i.Rules.MaxWallDistance.Meters:0.###} м"), "п. 6.2.21"],
         ]));
+        if (i.Selection is { Chosen: { } chosen } sel)
+        {
+            blocks.Add(new NoteParagraph(string.Create(Ru, $"**Подбор оросителя.** Ороситель подобран по каталогу производителя: для каждой модели выполнен полный гидравлический расчёт. Модель допускается, если давление у оросителей диктующей зоны лежит в её рабочем диапазоне, средняя интенсивность по каталогу при давлении у диктующего оросителя не меньше нормативной ({i.Design.Parameters.Intensity:0.###} л/(с·м²)) и защищаемая площадь не меньше площади на ороситель. Из допустимых принята модель с наименьшим произведением расхода и давления насоса: **{chosen.Maker} {chosen.Model}**, *K* = {chosen.K:0.###} л/(с·МПа^{{0,5}}). Данные каталога подлежат сверке с паспортом изделия.")));
+            blocks.Add(new NoteTable("Таблица 6 — Подбор оросителя по каталогу", ["Модель", "K", "Q_нас, л/с", "P_нас, МПа", "Результат"],
+                sel.Rows.GroupBy(r => r.Candidate.K).Select(g => g.FirstOrDefault(r => r.Candidate.Id == chosen.Id) ?? g.First()).OrderBy(r => r.Candidate.K)
+                    .Select(r => (IReadOnlyList<string>)[r.Candidate.Model, string.Create(Ru, $"{r.Candidate.K:0.###}"), string.Create(Ru, $"{r.PumpFlow.LitersPerSecond:0.00}"), string.Create(Ru, $"{r.PumpPressure.Mpa:0.000}"), r.Candidate.Id == chosen.Id ? "принят" : r.Reason])
+                    .ToList()));
+        }
+
         return new NoteSection("2", "Параметры установки", blocks);
     }
 
@@ -318,8 +328,10 @@ public static class ExplanatoryNoteComposer
         return
         [
             new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."),
-            new NoteParagraph($"По таблице Ж.2 (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
-            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м, строка {F(v.TableJetHeight.Meters, "0")} м, без интерполяции): *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
+            new NoteParagraph(s.IsParking
+                ? $"Для отапливаемой автостоянки закрытого типа по {v.Source} (объём пожарного отсека {F(s.VolumeThousandM3, "0.#")} тыс. м³) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
+                : $"По {v.Source} (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
+            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м) принята первая строка с высотой струи не меньше требуемой и расходом ствола не меньше *q*_{{min}} — {F(v.TableJetHeight.Meters, "0")} м, без интерполяции: *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
             new NoteParagraph("Пожарные краны включены в расчётную сеть АУП как потребители с характеристикой:"),
             new NoteFormula($"*K*_{{ПК}} = *q*_{{ПК}} / √(*H*_{{ПК}}/100) = {F(v.JetFlow.LitersPerSecond)} / √{F(v.Head.Meters / 100, "0.000")} = {F(h.K, "0.000")} л/(с·МПа^{{0,5}}).", "5.9", []),
             new NoteParagraph($"*Принято:* {n} крана диктующей секции присоединены в точке подключения трубопроводом DN{h.Pipe.Dn} длиной {F(s.PipeLength.Meters, "0.0")} м (*K*_{{т}} = {F(h.Pipe.Kt.Kt, "0.##")}), по которому идёт весь расход кранов; местные потери — {F(d.LocalLossFactor * 100, "0")} % (п. Б.1.3.13). Клапан диктующего ПК — на {F(s.AboveAxis.Meters, "0.00")} м над осью насоса."),
