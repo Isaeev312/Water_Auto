@@ -38,7 +38,7 @@ public static class PipeRouter
             var inlet = plan.Inlets.FirstOrDefault(i => room.Contour.Contains(i.Location));
             if (inlet is null)
             {
-                issues.Add(new Issue("routing.noInlet", IssueLevel.Error, $"Помещение «{room.Name}»: внутри нет точки ПТ_ВВОД — трасса не строится.", room.Id, Location: room.Contour.Centroid));
+                issues.Add(new Issue("routing.noInlet", IssueLevel.Error, $"Помещение «{room.Name}»: внутри нет точки ПТ_ВВОД — трасса не строится. Соглашение: в каждом защищаемом помещении своя точка ПТ_ВВОД там, где в него входит питающий трубопровод (трасса между помещениями — позже).", room.Id, Location: room.Contour.Centroid));
                 continue;
             }
 

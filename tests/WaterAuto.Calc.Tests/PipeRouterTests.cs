@@ -120,6 +120,21 @@ public class PipeRouterTests
     }
 
     [Fact]
+    public void Each_room_needs_its_own_inlet()
+    {
+        // Два помещения, ввод только в одном: второе — явная ошибка, трассы между помещениями пока нет.
+        var hall = new Room("R1", "Автостоянка", Rect(0, 0, 30000, 20000));
+        var pumps = new Room("R2", "Насосная", Rect(30000, 0, 36000, 6000));
+        var plan = new FloorPlan([hall, pumps], [], [], [], [], [new Inlet("I1", new PlanPoint(35000, 1000), "Узел управления")]);
+        var (_, _, routing) = Route(plan);
+        routing.Routes.ShouldHaveSingleItem().RoomId.ShouldBe("R2");
+        var issue = routing.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("routing.noInlet");
+        issue.ElementId.ShouldBe("R1");
+        issue.Message.ShouldContain("ПТ_ВВОД");
+    }
+
+    [Fact]
     public void Row_through_a_column_is_a_warning()
     {
         // Раскладка сама уводит ряды от колонн, поэтому раскладка задана вручную: колонна между оросителями ряда.
