@@ -59,7 +59,7 @@ public static class GeneralDataComposer
         var references = designations
             .Where(x => kinds.Any(k => x.StartsWith(k, StringComparison.Ordinal)))
             .Distinct(StringComparer.Ordinal)
-            .Select(x => new ReferenceRow(x, names.GetValueOrDefault(x, ""), names.ContainsKey(x) ? "" : "наименование уточнить"))
+            .Select(x => new ReferenceRow(x, names.TryGetValue(x, out var n) ? n.Name : "", !names.TryGetValue(x, out var m) ? "наименование уточнить" : m.Checked ? "" : "наименование сверить"))
             .ToList();
 
         var area = i.Plan.Rooms.Sum(r => r.Contour.AreaMm2) / 1e6;
@@ -117,7 +117,8 @@ public static class GeneralDataComposer
             instructions);
     }
 
-    private static Dictionary<string, string> LoadNames(string? path)
+    // Наименование и признак «сверено с источником» (поле source в справочнике).
+    private static Dictionary<string, (string Name, bool Checked)> LoadNames(string? path)
     {
         if (path is null || !File.Exists(path))
         {
@@ -126,7 +127,10 @@ public static class GeneralDataComposer
 
         using var doc = JsonDocument.Parse(File.ReadAllText(path));
         return doc.RootElement.GetProperty("documents").EnumerateArray()
-            .ToDictionary(x => x.GetProperty("designation").GetString()!, x => x.GetProperty("name").GetString()!, StringComparer.Ordinal);
+            .ToDictionary(
+                x => x.GetProperty("designation").GetString()!,
+                x => (x.GetProperty("name").GetString()!, x.TryGetProperty("source", out _)),
+                StringComparer.Ordinal);
     }
 
     private static string F(double v, string format) => v.ToString(format, Ru);
