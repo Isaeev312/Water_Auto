@@ -15,6 +15,8 @@ var dataDir = Path.GetFullPath(args[0]);
 var schemasDir = Path.Combine(dataDir, "schemas");
 var schemas = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
 var normIds = new Dictionary<string, string>(StringComparer.Ordinal);
+var normValues = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
+var profiles = new List<(string Rel, JsonNode Doc)>();
 var errors = new List<string>();
 var checkedFiles = 0;
 
@@ -77,7 +79,21 @@ foreach (var file in Directory.EnumerateFiles(dataDir, "*.json", SearchOption.Al
     if (Path.GetFileName(schemaPath).Equals("norms.schema.json", StringComparison.OrdinalIgnoreCase))
     {
         CheckNorms(rel, doc!, normIds, errors);
+        foreach (var record in doc!["records"]!.AsArray())
+        {
+            normValues[record!["id"]!.GetValue<string>()] = record["values"]!.AsObject();
+        }
     }
+    else if (Path.GetFileName(schemaPath).Equals("profile.schema.json", StringComparison.OrdinalIgnoreCase))
+    {
+        profiles.Add((rel, doc!));
+    }
+}
+
+// Профили проверяются после всех норм: профиль может только ужесточать норму (ARCHITECTURE §9.1).
+foreach (var (rel, doc) in profiles)
+{
+    CheckProfile(rel, doc, normValues, errors);
 }
 
 foreach (var error in errors)
@@ -87,6 +103,55 @@ foreach (var error in errors)
 
 Console.WriteLine($"Проверено файлов: {checkedFiles}, записей норм: {normIds.Count}, ошибок: {errors.Count}.");
 return errors.Count == 0 ? 0 : 1;
+
+static void CheckProfile(string rel, JsonNode doc, Dictionary<string, JsonObject> norms, List<string> errors)
+{
+    var ids = new HashSet<string>(StringComparer.Ordinal);
+    foreach (var record in doc["records"]!.AsArray())
+    {
+        var id = record!["id"]!.GetValue<string>();
+        if (!ids.Add(id))
+        {
+            errors.Add($"{rel}: id {id} повторяется");
+        }
+
+        var values = record["values"]?.AsObject();
+        var units = record["units"]?.AsObject();
+        foreach (var (key, _) in values ?? [])
+        {
+            if (units?.ContainsKey(key) != true)
+            {
+                errors.Add($"{rel}: {id}: нет единицы для {key}");
+            }
+        }
+
+        var tightens = record["tightens"];
+        if (tightens is null)
+        {
+            continue;
+        }
+
+        var normId = tightens["norm"]!.GetValue<string>();
+        var key2 = tightens["key"]!.GetValue<string>();
+        var bound = tightens["bound"]!.GetValue<string>();
+        if (!norms.TryGetValue(normId, out var normRecord))
+        {
+            errors.Add($"{rel}: {id}: нет записи нормы {normId}");
+            continue;
+        }
+
+        var normValue = normRecord[key2]?.GetValue<double>();
+        var profileValue = values?[key2]?.GetValue<double>();
+        if (normValue is null || profileValue is null)
+        {
+            errors.Add($"{rel}: {id}: нет значения для сравнения с {normId}.{key2}");
+        }
+        else if (bound == "max" ? profileValue > normValue : profileValue < normValue)
+        {
+            errors.Add($"{rel}: {id}: профиль ослабляет норму {normId}.{key2} ({profileValue} против {normValue})");
+        }
+    }
+}
 
 static void CheckNorms(string rel, JsonNode doc, Dictionary<string, string> ids, List<string> errors)
 {
