@@ -242,6 +242,29 @@ public class SprinklerLayoutTests
         SprinklerLayouter.Layout(plan, Rules(ConstructionClass.K2)).Issues.Count(i => i.Code == "layout.beamFields").ShouldBe(2);
     }
 
+    [Theory]
+    [InlineData(14900, 15100)] // балка 200 мм
+    [InlineData(14700, 15300)] // балка 600 мм: при 1,75 м до каждой грани зазор был бы 4,1 м > 3,5 м
+    public void Spacing_across_a_beam_stays_within_the_norm_and_rows_stay_connected(double x0, double x1)
+    {
+        // Балка поперёк рядов: зазор между оросителями по обе стороны балки на одном ряду — не больше шага.
+        var beam = new Beam("B1", Rect(x0, 0, x1, 20000), new Length(0.35), new Length(-0.4));
+        var plan = Plan(Rect(0, 0, 30000, 20000), beams: [beam]) with { Inlets = [new Inlet("I1", new PlanPoint(500, 500), null)] };
+        var rules = Rules();
+        var layout = SprinklerLayouter.Layout(plan, rules);
+        LayoutChecks.ShouldSatisfy(layout, plan, rules, extraWalls: [beam.Outline]);
+        foreach (var row in layout.Sprinklers.GroupBy(s => Math.Round(s.Location.YMm)))
+        {
+            var left = row.Where(s => s.Location.XMm < x0).Max(s => s.Location.XMm);
+            var right = row.Where(s => s.Location.XMm > x1).Min(s => s.Location.XMm);
+            (right - left).ShouldBeLessThanOrEqualTo(rules.MaxSpacing.Millimeters + 0.5, $"ряд y = {row.Key}: через балку {right - left} мм");
+        }
+
+        var routing = WaterAuto.Calc.Routing.PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3));
+        routing.Issues.ShouldNotContain(i => i.Code == "routing.rowNotReached");
+        routing.Routes.Single().Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
+    }
+
     [Fact]
     public void Pipes_cross_beams_to_reach_every_field()
     {

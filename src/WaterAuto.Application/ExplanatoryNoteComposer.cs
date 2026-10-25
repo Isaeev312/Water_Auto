@@ -106,9 +106,21 @@ public static class ExplanatoryNoteComposer
         return new NoteSection("3", "Размещение оросителей", [
             new NoteParagraph("Помещение делится на прямоугольные зоны; линии оросителей подбираются так, чтобы расстояние между оросителями не превышало нормы и было не меньше наименьшего, а до стен — не больше предела п. 6.2.21. Колонны обходятся сдвигом линий. Из двух направлений деления выбирается вариант с меньшим числом оросителей."),
             new NoteParagraph($"Всего установлено оросителей — {i.Layout.Sprinklers.Count} шт., зон раскладки — {i.Layout.Zones.Count}."),
+            .. Beams(i),
             new NoteTable("Таблица 2 — Оросители по помещениям", ["Помещение", "Площадь, м²", "Оросителей, шт.", "Площадь на ороситель, м²"], rows),
             .. Remarks(i.Layout.Issues),
         ]);
+    }
+
+    private static IEnumerable<NoteBlock> Beams(NoteInputs i)
+    {
+        var high = i.Plan.Beams.Count(b => b.Height.Meters > i.Rules.BeamHeightLimit.Meters + 1e-9);
+        if (high == 0)
+        {
+            yield break;
+        }
+
+        yield return new NoteParagraph(string.Create(Ru, $"*Принято:* балки высотой более {i.Rules.BeamHeightLimit.Meters:0.##} м ({high} шт.) делят перекрытие на поля, оросители размещаются между балками (п. 6.2.10). У граней балок расстояние до грани — не более предела п. 6.2.21, а расстояние между оросителями через балку — не более нормативного; трубопроводы проходят под балками."));
     }
 
     private static NoteSection Routing(NoteInputs i)
