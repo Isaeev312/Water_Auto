@@ -333,11 +333,49 @@ public static class NoteDocx
                 new TabStop { Val = TabStopValues.Right, Position = width }),
             new SpacingBetweenLines { Before = "120", After = "120", Line = "360", LineRule = LineSpacingRuleValues.Auto },
             new Justification { Val = JustificationValues.Left });
-        var paragraph = new Paragraph(props, new Run(new TabChar()));
-        paragraph.Append(Runs(f.Expression, false, null));
+        var paragraph = new Paragraph(props);
+        var lines = WrapFormula(f.Expression);
+        for (var k = 0; k < lines.Count; k++)
+        {
+            if (k > 0)
+            {
+                paragraph.Append(new Run(new Break()));
+            }
+
+            paragraph.Append(new Run(new TabChar()));
+            paragraph.Append(Runs(lines[k], false, null));
+        }
+
         paragraph.Append(new Run(new TabChar()), new Run(new Text($"({f.Number})")));
         return paragraph;
     }
+
+    // Длинная формула переносится на знаке равенства, знак повторяется в начале следующей строки (ГОСТ 2.105);
+    // номер — в последней строке. Длина строки — по числу видимых знаков (разметка не считается).
+    private static List<string> WrapFormula(string expression)
+    {
+        const int maxChars = 58;
+        var parts = expression.Split(" = ");
+        var lines = new List<string>();
+        var current = parts[0];
+        foreach (var part in parts.Skip(1))
+        {
+            if (Visible(current) + Visible(part) + 3 > maxChars)
+            {
+                lines.Add(current + " =");
+                current = "= " + part;
+            }
+            else
+            {
+                current += " = " + part;
+            }
+        }
+
+        lines.Add(current);
+        return lines;
+    }
+
+    private static int Visible(string markup) => Regex.Replace(markup, @"\\\*|[*{}]|[_^](?=\{)", m => m.Value == "\\*" ? "*" : "").Length;
 
     /// <summary>Разбор разметки: **полужирный**, *курсив*, _{нижний}, ^{верхний}, \n — перенос строки, \* — звёздочка.</summary>
     private static IEnumerable<Run> Runs(string text, bool highlight, string? size)

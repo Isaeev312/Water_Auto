@@ -17,6 +17,7 @@ public class NoteDocxTests
                 new NotePending("Раздел формируется после решения вопросов В-01, В-02, В-03."),
                 new NoteParagraph("Расход **диктующего** оросителя *q*_{1} по формуле Б.1:\nвторая строка, м^{2}."),
                 new NoteFormula("*q* = 1,5·*i*·*s* = 1,5·0,12·12 = 2,16 л/с", "5.1", ["где *i* — интенсивность орошения, л/(с·м^{2});", "*s* — площадь, м^{2}."]),
+                new NoteFormula("*P*_{вв} = *H*/100 + Δ*Z* + (1 + 0,2)·(*n*·*q*)^{2}·*L* / (100·*K*_{т}) = 0,199 + (−0,027) + 0,022 = 0,194 МПа", "5.2", []),
             ]),
         ],
         ["СП 485.1311500.2020. Установки пожаротушения автоматические."]);
@@ -94,6 +95,15 @@ public class NoteDocxTests
         var legend = body.Elements<Paragraph>().SkipWhile(x => x != f).Skip(1).Take(2).Select(x => x.InnerText).ToList();
         legend[0].ShouldStartWith("где i — интенсивность");
         legend[1].ShouldStartWith("s — площадь");
+    }
+
+    [Fact]
+    public void Long_formula_wraps_at_the_equals_sign_repeating_it()
+    {
+        using var doc = WriteAndOpen();
+        var f = doc.MainDocumentPart!.Document.Body!.Elements<Paragraph>().Single(x => x.InnerText.EndsWith("(5.2)", StringComparison.Ordinal));
+        f.Descendants<Break>().Count().ShouldBe(1);
+        f.InnerText.ShouldContain("100·Kт) == 0,199");
     }
 
     [Fact]
