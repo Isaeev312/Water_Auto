@@ -24,7 +24,14 @@ public sealed record RouteNode(string Id, RouteNodeKind Kind, PlanPoint Location
 /// </summary>
 public sealed record RouteSegment(string Id, string From, string To, RouteSegmentRole Role, Length Length, int Fed, int Dn);
 
-/// <summary>Трасса одного помещения: дерево от ввода до оросителей.</summary>
-public sealed record PipeRoute(string RoomId, string InletId, IReadOnlyList<RouteNode> Nodes, IReadOnlyList<RouteSegment> Segments);
+/// <summary>
+/// Трасса одного помещения: дерево от ввода до оросителей (Segments) и замыкающие участки колец (Closures) —
+/// участки, которые соединяют два узла дерева и образуют кольцо (этап 4, ADR 0011).
+/// </summary>
+public sealed record PipeRoute(string RoomId, string InletId, IReadOnlyList<RouteNode> Nodes, IReadOnlyList<RouteSegment> Segments, IReadOnlyList<RouteSegment>? Closures = null)
+{
+    /// <summary>Замыкающие участки колец; пусто — тупиковая сеть.</summary>
+    public IReadOnlyList<RouteSegment> Loops => Closures ?? [];
+}
 
 public sealed record RoutingResult(IReadOnlyList<PipeRoute> Routes, IReadOnlyList<Issue> Issues);
