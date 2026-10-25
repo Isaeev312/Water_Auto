@@ -216,7 +216,7 @@ public static class SprinklerLayouter
         var ordered = kept.OrderBy(x => frame.Unswapped(x.Local).YMm).ThenBy(x => frame.Unswapped(x.Local).XMm).ToList();
         var sprinklers = ordered.Select((x, k) => new PlacedSprinkler($"{room.Id}.S{k + 1}", room.Id, x.World)).ToList();
         var outZones = zones
-            .Select(z => new LayoutZone(room.Id, frame.ToWorld(z.Polygon()), ordered.Count(x => x.Rect == z)))
+            .Select(z => new LayoutZone(room.Id, frame.ToWorld(z.Polygon()), ordered.Count(x => x.Rect == z), frame.RowAngle))
             .ToList();
         return new RoomLayout(sprinklers, outZones, issues);
     }
@@ -484,6 +484,7 @@ public static class SprinklerLayouter
         private Frame(double angle, PlanPoint origin, bool swap)
         {
             (_cos, _sin, _origin, _swap) = (Math.Cos(angle), Math.Sin(angle), origin, swap);
+            RowAngle = angle + (swap ? Math.PI / 2 : 0);
             if (angle == 0)
             {
                 (_cos, _sin, _origin) = (1, 0, new PlanPoint(0, 0));
@@ -511,6 +512,9 @@ public static class SprinklerLayouter
             var local = new PlanPoint((dx * _cos) + (dy * _sin), (-dx * _sin) + (dy * _cos));
             return _swap ? new PlanPoint(local.YMm, local.XMm) : local;
         }
+
+        /// <summary>Направление общих линий (рядов) на плане: ось X системы помещения, при перестановке осей — ось Y.</summary>
+        public double RowAngle { get; }
 
         public PlanPoint Unswapped(PlanPoint local) => _swap ? new PlanPoint(local.YMm, local.XMm) : local;
 
