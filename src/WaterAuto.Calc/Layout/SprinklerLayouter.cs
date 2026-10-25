@@ -59,20 +59,24 @@ public static class SprinklerLayouter
             return new RoomLayout([], [], issues);
         }
 
+        // Вырезы раскладки: зоны без оросителей и балки выше предела 6.2.10 — их грани работают как стены (В-17).
+        // Для трассы балки не препятствие: трубы проходят под ними.
         var holes = new List<List<PlanPoint>>();
-        var skippedZones = new List<NoSprinklerZone>();
-        foreach (var zone in plan.NoSprinklerZones.Where(z => z.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint))
+        var skippedZones = new List<Polygon>();
+        var cutouts = plan.NoSprinklerZones.Select(z => (z.Id, z.Outline, What: "Зона без оросителей"))
+            .Concat(plan.Beams.Where(b => b.Height.Meters > rules.BeamHeightLimit.Meters + 1e-9).Select(b => (b.Id, b.Outline, What: "Балка")));
+        foreach (var (id, outline, what) in cutouts.Where(c => c.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint))
         {
-            var local = frame.ToLocal(zone.Outline);
+            var local = frame.ToLocal(outline);
             if (NonOrthogonalEdge(local) is { } zoneBad)
             {
                 issues.Add(new Issue(
                     "layout.nonOrthogonal",
                     IssueLevel.Error,
-                    "Зона без оросителей не прямоугольная относительно стен помещения: оросители внутри неё удалены, расстояния у её границ не проверены.",
-                    zone.Id,
+                    $"{what} не прямоугольная относительно стен помещения: оросители внутри неё удалены, расстояния у её границ не проверены.",
+                    id,
                     Location: frame.ToWorld(zoneBad)));
-                skippedZones.Add(zone);
+                skippedZones.Add(outline);
                 continue;
             }
 
@@ -207,7 +211,7 @@ public static class SprinklerLayouter
                 continue;
             }
 
-            if (!skippedZones.Any(z => z.Outline.Contains(world)))
+            if (!skippedZones.Any(z => z.Contains(world)))
             {
                 kept.Add((local, rect, world));
             }
@@ -280,8 +284,8 @@ public static class SprinklerLayouter
         {
             yield return new Issue(
                 "layout.beamFields",
-                IssueLevel.Error,
-                $"Балка высотой {beam.Height} больше {rules.BeamHeightLimit}: оросители размещаются между балками. Раскладка по полям между балками ещё не реализована — оросители расставлены без учёта этой балки.",
+                IssueLevel.Info,
+                $"Балка высотой {beam.Height} больше {rules.BeamHeightLimit}: оросители размещены в полях между балками, грани балки приняты как стены — до них не дальше предела п. 6.2.21 (прочтение В-17).",
                 beam.Id,
                 "6.2.10",
                 beam.Outline.Centroid);

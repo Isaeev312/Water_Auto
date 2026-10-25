@@ -218,20 +218,39 @@ public class SprinklerLayoutTests
     }
 
     [Fact]
-    public void High_beams_are_reported_until_fields_are_implemented()
+    public void High_beams_split_the_ceiling_into_fields_with_beam_faces_as_walls()
     {
+        // 6.2.10: балка выше 0,3 м (К0) — оросители между балками; грани приняты как стены (В-17): до них не дальше 6.2.21.
         var high = new Beam("B1", Rect(0, 5900, 30000, 6100), new Length(0.35), new Length(-0.4));
         var low = new Beam("B2", Rect(0, 12900, 30000, 13100), new Length(0.25), new Length(-0.4));
         var plan = Plan(Rect(0, 0, 30000, 20000), beams: [high, low]);
-        var layout = SprinklerLayouter.Layout(plan, Rules());
+        var rules = Rules();
+        var layout = SprinklerLayouter.Layout(plan, rules);
         var issue = layout.Issues.ShouldHaveSingleItem();
         issue.Code.ShouldBe("layout.beamFields");
-        issue.Level.ShouldBe(IssueLevel.Error);
+        issue.Level.ShouldBe(IssueLevel.Info);
         issue.ElementId.ShouldBe("B1");
         issue.Clause.ShouldBe("6.2.10");
+        layout.Sprinklers.ShouldNotContain(s => high.Outline.Contains(s.Location));
+        LayoutChecks.ShouldSatisfy(layout, plan, rules, extraWalls: [high.Outline]);
+
+        // Поле 30 × 5,9 м и поле 30 × 13,9 м: ряды по обе стороны балки.
+        layout.Sprinklers.ShouldContain(s => s.Location.YMm < 5900);
+        layout.Sprinklers.ShouldContain(s => s.Location.YMm > 6100 && s.Location.YMm < 6100 + rules.MaxWallDistance.Millimeters + 1);
 
         // Для К2 предел 0,2 м — обе балки делят перекрытие.
         SprinklerLayouter.Layout(plan, Rules(ConstructionClass.K2)).Issues.Count(i => i.Code == "layout.beamFields").ShouldBe(2);
+    }
+
+    [Fact]
+    public void Pipes_cross_beams_to_reach_every_field()
+    {
+        var high = new Beam("B1", Rect(0, 5900, 30000, 6100), new Length(0.35), new Length(-0.4));
+        var plan = Plan(Rect(0, 0, 30000, 20000), beams: [high]) with { Inlets = [new Inlet("I1", new PlanPoint(500, 500), null)] };
+        var layout = SprinklerLayouter.Layout(plan, Rules());
+        var routing = WaterAuto.Calc.Routing.PipeRouter.Route(plan, layout, Norms, Rules(), new Pressure(0.3));
+        routing.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty();
+        routing.Routes.Single().Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
     }
 
     [Fact]
