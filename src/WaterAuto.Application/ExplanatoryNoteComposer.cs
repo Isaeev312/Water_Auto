@@ -257,7 +257,9 @@ public static class ExplanatoryNoteComposer
                 RouteNodeKind.Inlet => "ВВ",
                 _ => letterNo < Letters.Length ? Letters[letterNo++].ToString() : $"у{++letterNo}",
             };
-        var pressure = d.DictatingPressure.Mpa;
+        // При ВПВ, требующем большего давления, сеть рассчитана от поднятого давления диктующего оросителя (ADR 0010).
+        var pStart = d.Hydrants is { Raised: true } raised ? raised.DictatingPressureActual.Mpa : d.DictatingPressure.Mpa;
+        var pressure = pStart;
         var rows = new List<IReadOnlyList<string>>();
         foreach (var x in d.Path.Reverse())
         {
@@ -289,7 +291,12 @@ public static class ExplanatoryNoteComposer
             ? $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с ≤ *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.24), установка должна обеспечивать нормативный расход: {aupName} = **{F(qAup, "0.00")} л/с**."
             : $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с > *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.25), расход принимается не менее расчётного (Б.26): {aupName} = **{F(qAup, "0.00")} л/с**."));
         blocks.Add(new NoteParagraph("Давление в точке подключения распределительной сети:"));
-        blocks.Add(new NoteFormula($"*P*_{{вв}} = *p*_{{1}} + ΣΔ*P*′ = {F(d.DictatingPressure.Mpa, "0.000")} + {F(d.Path.Sum(x => x.LossWithLocal.Mpa), "0.000")} = **{F(d.InletNodePressure.Mpa, "0.000")} МПа**.", "5.8", []));
+        if (d.Hydrants is { Raised: true })
+        {
+            blocks.Add(new NoteParagraph($"Давление у диктующего оросителя принято {F(pStart, "0.000")} МПа — больше значения по (Б.1), так как его требуют пожарные краны совмещённой сети (см. ниже, формула 5.10); расходы оросителей в таблице — при этом давлении."));
+        }
+
+        blocks.Add(new NoteFormula($"*P*_{{вв}} = *p*_{{1}} + ΣΔ*P*′ = {F(pStart, "0.000")} + {F(d.Path.Sum(x => x.LossWithLocal.Mpa), "0.000")} = **{F(d.InletNodePressure.Mpa, "0.000")} МПа**.", "5.8", []));
         if (d.Hydrants is { } h)
         {
             blocks.AddRange(HydrantBlocks(d, h, qAup));
@@ -310,7 +317,7 @@ public static class ExplanatoryNoteComposer
         var n = v.Jets;
         return
         [
-            new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; нормы ВПВ — СН КР 40-04:2025 (объект в Кыргызской Республике), совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485."),
+            new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."),
             new NoteParagraph($"По таблице Ж.2 (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
             new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м, строка {F(v.TableJetHeight.Meters, "0")} м, без интерполяции): *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
             new NoteParagraph("Пожарные краны включены в расчётную сеть АУП как потребители с характеристикой:"),

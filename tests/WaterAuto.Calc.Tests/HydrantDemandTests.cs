@@ -85,4 +85,10 @@ public class HydrantDemandTests
         r.Demand!.JetFlow.LitersPerSecond.ShouldBe(4.6);
         r.Issues.ShouldContain(i => i.Code == "vpv.valveDn" && i.Level == IssueLevel.Warning);
     }
+
+    [Fact]
+    public void Latin_look_alike_letters_are_accepted()
+    {
+        HydrantDemand.Resolve(Norms, Parking with { Category = "B", HazardClass = "C0" }).Demand.ShouldNotBeNull();
+    }
 }

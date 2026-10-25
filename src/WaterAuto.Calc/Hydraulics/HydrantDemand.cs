@@ -43,10 +43,21 @@ public sealed record HydrantDemandResult(HydrantDemandValue? Demand, IReadOnlyLi
 /// </summary>
 public static class HydrantDemand
 {
+    // Латинские буквы, похожие на кириллические (A, B, C, E…), — к кириллице: в таблицах Ж.2 категории и классы кириллицей.
+    private static string Cyrillic(string v) => new(v.Trim().ToUpperInvariant().Select(c => c switch
+    {
+        'A' => 'А',
+        'B' => 'В',
+        'C' => 'С',
+        'E' => 'Е',
+        _ => c,
+    }).ToArray());
+
     public static HydrantDemandResult Resolve(INormsProvider norms, HydrantSettings s)
     {
         ArgumentNullException.ThrowIfNull(norms);
         ArgumentNullException.ThrowIfNull(s);
+        s = s with { Category = Cyrillic(s.Category), HazardClass = Cyrillic(s.HazardClass), FireResistance = s.FireResistance.Trim().ToUpperInvariant() };
         var issues = new List<Issue>();
         HydrantDemandResult Stop(string code, IssueLevel level, string message, string clause)
         {
@@ -61,7 +72,7 @@ public static class HydrantDemand
             && (r.Attributes["constructionClass"] == "не нормируется" || Split(r.Attributes["constructionClass"]).Contains(s.HazardClass)));
         if (row is null)
         {
-            return Stop("vpv.noRow", IssueLevel.Error, $"В табл. Ж.2 нет строки для степени {s.FireResistance}, категории {s.Category}, класса {s.HazardClass}.", "табл. Ж.2");
+            return Stop("vpv.noRow", IssueLevel.Error, $"В табл. Ж.2 нет строки для степени {s.FireResistance}, категории {s.Category}, класса {s.HazardClass}. Допустимо: степень I–V, категория А, Б, В, Г, Д, класс С0–С3.", "табл. Ж.2");
         }
 
         if (s.BuildingHeight.Meters > row.Values["heightMax"]!.Value + 1e-9)

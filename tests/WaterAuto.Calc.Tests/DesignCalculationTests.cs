@@ -68,6 +68,7 @@ public class DesignCalculationTests
         h.JetFlowActual.LitersPerSecond.ShouldBe(h.Demand.JetFlow.LitersPerSecond, 1e-6);
         r.InletNodePressure.Mpa.ShouldBe(h.RequiredNodePressure.Mpa, 1e-6);
         r.SprinklerFlows[r.DictatingSprinklerId].LitersPerSecond.ShouldBeGreaterThan(r.DictatingFlow.LitersPerSecond);
+        (h.DictatingPressureActual.Mpa + r.Path.Sum(x => x.LossWithLocal.Mpa)).ShouldBe(r.InletNodePressure.Mpa, 1e-6);
     }
 
     [Fact]
