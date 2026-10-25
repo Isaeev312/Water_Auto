@@ -20,7 +20,8 @@ public sealed record NoteInputs(
     DesignResult Design,
     DesignSettings DesignSettings,
     IReadOnlyList<LiteratureEntry> Literature,
-    IReadOnlyList<string> LiteratureIds);
+    IReadOnlyList<string> LiteratureIds,
+    SprinklerSelectionResult? Selection = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -117,6 +118,15 @@ public static class ExplanatoryNoteComposer
             ["Наименьшее расстояние между оросителями", string.Create(Ru, $"{i.Rules.MinSpacing.Meters:0.###} м"), "п. 6.2.21"],
             ["Наибольшее расстояние до стен", string.Create(Ru, $"{i.Rules.MaxWallDistance.Meters:0.###} м"), "п. 6.2.21"],
         ]));
+        if (i.Selection is { Chosen: { } chosen } sel)
+        {
+            blocks.Add(new NoteParagraph(string.Create(Ru, $"**Подбор оросителя.** Ороситель подобран по каталогу производителя: для каждой модели выполнен полный гидравлический расчёт. Модель допускается, если давление у оросителей диктующей зоны лежит в её рабочем диапазоне, средняя интенсивность по каталогу при давлении у диктующего оросителя не меньше нормативной ({i.Design.Parameters.Intensity:0.###} л/(с·м²)) и защищаемая площадь не меньше площади на ороситель. Из допустимых принята модель с наименьшим произведением расхода и давления насоса: **{chosen.Maker} {chosen.Model}**, *K* = {chosen.K:0.###} л/(с·МПа^{{0,5}}). Данные каталога подлежат сверке с паспортом изделия.")));
+            blocks.Add(new NoteTable("Таблица 6 — Подбор оросителя по каталогу", ["Модель", "K", "Q_нас, л/с", "P_нас, МПа", "Результат"],
+                sel.Rows.GroupBy(r => r.Candidate.K).Select(g => g.FirstOrDefault(r => r.Candidate.Id == chosen.Id) ?? g.First()).OrderBy(r => r.Candidate.K)
+                    .Select(r => (IReadOnlyList<string>)[r.Candidate.Model, string.Create(Ru, $"{r.Candidate.K:0.###}"), string.Create(Ru, $"{r.PumpFlow.LitersPerSecond:0.00}"), string.Create(Ru, $"{r.PumpPressure.Mpa:0.000}"), r.Candidate.Id == chosen.Id ? "принят" : r.Reason])
+                    .ToList()));
+        }
+
         return new NoteSection("2", "Параметры установки", blocks);
     }
 

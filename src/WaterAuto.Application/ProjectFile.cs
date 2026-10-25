@@ -65,8 +65,11 @@ public sealed record ProjectDesign
 
     public string SprinklerModel { get; init; } = "";
 
-    /// <summary>K оросителя, л/(с·МПа^0,5) — по технической документации изделия.</summary>
+    /// <summary>K оросителя, л/(с·МПа^0,5) — по технической документации изделия; 0 — автоподбор из каталога data/catalog.</summary>
     public double SprinklerK { get; init; }
+
+    /// <summary>Положение розетки для автоподбора: up (вверх), down (вниз), horizontal, concealed.</summary>
+    public string SprinklerDeflector { get; init; } = "up";
 
     public string PipeStandard { get; init; } = "ГОСТ 3262-75";
 

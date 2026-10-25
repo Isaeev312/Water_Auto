@@ -118,12 +118,14 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
-    public void Missing_sprinkler_K_stops_with_an_issue_file()
+    public void Without_K_the_sprinkler_is_chosen_from_the_catalog()
     {
         Drawing();
         var result = Run(Project(k: 0));
-        result.Success.ShouldBeFalse();
-        File.ReadAllText(result.Files.ShouldHaveSingleItem()).ShouldContain("project.sprinklerK");
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        result.Issues.ShouldContain(i => i.Code == "sprinkler.chosen");
+        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("Подбор оросителя");
     }
 
     [Fact]

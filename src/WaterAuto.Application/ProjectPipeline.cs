@@ -41,9 +41,10 @@ public static class ProjectPipeline
 
         var project = ProjectFile.Load(projectPath);
         var design = project.Design;
-        if (design.SprinklerK <= 0)
+        var catalogPath = SprinklerCatalog.PathFor(normsDir);
+        if (design.SprinklerK <= 0 && !File.Exists(catalogPath))
         {
-            issues.Add(new Issue("project.sprinklerK", IssueLevel.Error, "В проекте не задан K оросителя (design.sprinklerK) — по технической документации изделия."));
+            issues.Add(new Issue("project.sprinklerK", IssueLevel.Error, "В проекте не задан K оросителя (design.sprinklerK), а каталога оросителей для автоподбора нет (data/catalog/sprinklers.json)."));
             return Stop();
         }
 
@@ -116,14 +117,43 @@ public static class ProjectPipeline
             hydrants = demand.Demand is { } dv ? new HydrantInput(hs, dv) : null;
         }
 
-        var designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
+        List<DesignResult> designs;
+        SprinklerSelectionResult? selection = null;
+        var sprinklerK = design.SprinklerK;
+        var sprinklerModel = design.SprinklerModel;
+        if (sprinklerK > 0)
+        {
+            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
+        }
+        else
+        {
+            // Автоподбор: модели каталога с нужным положением розетки, полный расчёт для каждой (SprinklerSelection).
+            var catalog = SprinklerCatalog.ForWater(SprinklerCatalog.Load(catalogPath), design.SprinklerDeflector).ToList();
+            selection = SprinklerSelection.Select(routing.Routes, norms, rules, settings, parameters, hydrants, catalog.Select(c => c.Candidate).ToList());
+            issues.AddRange(selection.Issues);
+            if (selection is not { Chosen: { } chosen, Designs: { } chosenDesigns })
+            {
+                return Stop();
+            }
+
+            var entry = catalog.First(c => c.Candidate.Id == chosen.Id);
+            sprinklerK = chosen.K;
+            sprinklerModel = entry.Designation.Length > 0 ? $"{chosen.Model} ({entry.Designation})" : chosen.Model;
+            settings = settings with { SprinklerK = new KFactor(chosen.K) };
+            designs = [.. chosenDesigns];
+            issues.Add(new Issue(
+                "sprinkler.chosen",
+                IssueLevel.Info,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Подобран ороситель {chosen.Maker} {chosen.Model}, K = {chosen.K:0.###}: из {selection.Rows.Count} моделей подходят {selection.Rows.Count(r => r.Valid)}, выбрана с наименьшим Q·P насоса.{(entry.Verified ? "" : " Данные каталога не сверены с паспортом изделия.")}")));
+        }
+
         var worst = designs.MaxBy(d => d.PumpPressure.Mpa)!;
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         var routes = designs.Select(d => d.Route).ToList();
 
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
-            string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {design.SprinklerK:0.###}"),
-            design.SprinklerModel));
+            string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}"),
+            sprinklerModel));
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
 
         var outIssues = issues.ToList();
@@ -154,7 +184,8 @@ public static class ProjectPipeline
                 worst,
                 settings,
                 literature,
-                ids),
+                ids,
+                selection),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
