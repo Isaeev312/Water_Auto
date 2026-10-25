@@ -18,6 +18,7 @@ internal static class DxfDrawing
     /// </summary>
     public static void Save(string path, CadDocument doc)
     {
+        ApplyTextStyle(doc);
         if (Path.GetExtension(path).ToLowerInvariant() is ".dwg" or ".dwt")
         {
             DwgWriter.Write(path, doc);
@@ -28,9 +29,37 @@ internal static class DxfDrawing
         }
     }
 
-    public static Layer AddLayer(CadDocument doc, string name, short color)
+    /// <summary>Стиль текста по ГОСТ 2.304: шрифт GOST Common (TrueType) — для всех подписей программы.</summary>
+    public const string TextStyleName = "WA_ГОСТ";
+
+    public const string TextFont = "GOST Common.ttf";
+
+    // Все надписи — стилем WA_ГОСТ; если шрифта нет на компьютере, AutoCAD подставит замену.
+    private static void ApplyTextStyle(CadDocument doc)
     {
-        var layer = new Layer(name) { Color = new Color(color) };
+        if (!doc.TextStyles.TryGetValue(TextStyleName, out var style))
+        {
+            style = new TextStyle(TextStyleName) { Filename = TextFont, Width = 1.0 };
+            doc.TextStyles.Add(style);
+        }
+
+        foreach (var e in doc.Entities)
+        {
+            switch (e)
+            {
+                case TextEntity t:
+                    t.Style = style;
+                    break;
+                case MText m:
+                    m.Style = style;
+                    break;
+            }
+        }
+    }
+
+    public static Layer AddLayer(CadDocument doc, string name, short color, LineWeightType lineWeight = LineWeightType.Default)
+    {
+        var layer = new Layer(name) { Color = new Color(color), LineWeight = lineWeight };
         doc.Layers.Add(layer);
         return layer;
     }

@@ -53,7 +53,7 @@ public static class PlanDxfWriter
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
         var sprinklers = DxfDrawing.AddLayer(doc, SprinklerLayer, 1);
-        var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4);
+        var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4, LineWeightType.W40); // трубопроводы — 0,40 мм
         var segments = DxfDrawing.AddLayer(doc, SegmentLayer, 7);
         var marks = DxfDrawing.AddLayer(doc, IssueLayer, 6);
         var zoneLayer = DxfDrawing.AddLayer(doc, ZoneLayer, 2);
