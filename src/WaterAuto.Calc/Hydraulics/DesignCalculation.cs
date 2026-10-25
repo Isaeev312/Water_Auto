@@ -20,6 +20,26 @@ public sealed record DesignSettings(
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
 
+/// <summary>ВПВ для совмещённого расчёта: данные проекта и требование по табл. Ж.2, Ж.3 (ADR 0010).</summary>
+public sealed record HydrantInput(HydrantSettings Settings, HydrantDemandValue Demand);
+
+/// <summary>
+/// Пожарные краны в сети АУП (Б.1.3.16): K = q / √H по строке Ж.3; требуемое давление узла ввода трассы;
+/// фактический расход струи; Raised — давление сети поднято до требования ПК.
+/// </summary>
+public sealed record HydrantResult(
+    HydrantDemandValue Demand,
+    HydrantSettings Settings,
+    SeriesPipe Pipe,
+    double K,
+    Flow JetFlowActual,
+    Flow TotalFlow,
+    Pressure RequiredNodePressure,
+    Pressure PipeLoss,
+    Pressure Elevation,
+    bool Raised,
+    Pressure DictatingPressureActual);
+
 /// <summary>Кандидат в диктующие: ороситель в конце ветви и давление насоса при зоне вокруг него.</summary>
 public sealed record ZoneCandidate(string SprinklerId, Pressure PumpPressure);
 
@@ -60,7 +80,8 @@ public sealed record DesignResult(
     double DischargeCoefficient,
     double FirstSegmentDiameterMm,
     IReadOnlyList<Issue> Issues,
-    IReadOnlyList<ZoneCandidate> Candidates);
+    IReadOnlyList<ZoneCandidate> Candidates,
+    HydrantResult? Hydrants = null);
 
 /// <summary>
 /// Проектный расчёт спринклерной АУП по приложению Б СП 485 (ADR 0008):
@@ -73,7 +94,8 @@ public sealed record DesignResult(
 public static class DesignCalculation
 {
     /// <param name="parameters">i, Q, S, t по группе и высотам (<see cref="FireParameters"/>); null — по табл. 6.1 для группы правил раскладки.</param>
-    public static DesignResult Run(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters = null)
+    /// <param name="hydrants">ВПВ, совмещённый с АУП (Б.1.3.7, Б.1.3.8, Б.1.3.16); null — без пожарных кранов.</param>
+    public static DesignResult Run(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters = null, HydrantInput? hydrants = null)
     {
         ArgumentNullException.ThrowIfNull(route);
         ArgumentNullException.ThrowIfNull(norms);
@@ -88,7 +110,7 @@ public static class DesignCalculation
         var ends = sprinklers.Where(n => !feeding.Contains(n.Id)).ToList();
         var results = (ends.Count > 0 ? ends : sprinklers)
             .OrderByDescending(n => PathLength(n.Id))
-            .Select(n => RunFor(route, norms, rules, settings, parameters, n.Id))
+            .Select(n => RunFor(route, norms, rules, settings, parameters, hydrants, n.Id))
             .ToList();
         var worst = results.Aggregate((a, x) => x.PumpPressure.Mpa > a.PumpPressure.Mpa + 1e-12 ? x : a);
         var candidates = results.Select(x => new ZoneCandidate(x.DictatingSprinklerId, x.PumpPressure)).OrderByDescending(x => x.PumpPressure.Mpa).ToList();
@@ -96,7 +118,7 @@ public static class DesignCalculation
         return worst with { Candidates = [new ZoneCandidate(worst.DictatingSprinklerId, worst.PumpPressure), .. candidates] };
     }
 
-    private static DesignResult RunFor(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters, string dictatingId)
+    private static DesignResult RunFor(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters, HydrantInput? hydrants, string dictatingId)
     {
         var issues = new List<Issue>();
         var table = norms.Find(rules.NormIds[0])!;
@@ -142,7 +164,7 @@ public static class DesignCalculation
         var diameter = norms.Find("sp485.b1_2_6.diameter")!;
         var mu = diameter.Values["muMin"]!.Value;
         var open = zone.ToHashSet();
-        TreeSolution Solve(PipeRoute r)
+        TreeSolution Solve(PipeRoute r, double pDictating)
         {
             var built = RouteNetwork.Build(r, norms, settings.PipeStandard, settings.SprinklerK, Length.FromMillimeters(0), 1 + k);
             var network = built.Network!;
@@ -150,12 +172,12 @@ public static class DesignCalculation
             {
                 Nodes = network.Nodes.Select(x => x.Kind == NodeKind.Sprinkler && !open.Contains(x.Id) ? x with { Kind = NodeKind.Tee, Emitter = null } : x).ToList(),
             };
-            return TreeSolver.SolveDesign(network, dictating.Id, new Pressure(p1));
+            return TreeSolver.SolveDesign(network, dictating.Id, new Pressure(pDictating));
         }
 
         // Б.5: диаметры участков, по которым идёт расход, — по принятой скорости V; повтор до установления диаметров.
         var current = route;
-        var solution = Solve(current);
+        var solution = Solve(current, p1);
         for (var iteration = 0; settings.DesignVelocity is { } v && iteration < 20; iteration++)
         {
             var resized = Resize(current, solution, series, mu, Math.Min(v, diameter.Values["velocityMax"]!.Value), issues);
@@ -165,7 +187,13 @@ public static class DesignCalculation
             }
 
             current = resized;
-            solution = Solve(current);
+            solution = Solve(current, p1);
+        }
+
+        HydrantResult? hydrant = null;
+        if (hydrants is { } hi)
+        {
+            (solution, hydrant) = WithHydrants(hi, solution, p => Solve(current, p), p1, k, settings, series, issues);
         }
 
         issues.AddRange(solution.Issues);
@@ -183,6 +211,12 @@ public static class DesignCalculation
         path.Reverse();
         var qDesign = solution.TotalFlow.LitersPerSecond;
         var (qPump, clause) = qDesign <= qNorm ? (qNorm, "Б.24") : (qDesign, "Б.26");
+        if (hydrant is not null)
+        {
+            // Б.29: Q = Q_АУП + Q_ВПВ, расходы ПК — по их месту в совмещённой схеме (Б.1.3.8).
+            qPump += hydrant.TotalFlow.LitersPerSecond;
+            clause += ", Б.29";
+        }
 
         var supply = series.Pick(settings.SupplyDn);
         var supplyLinear = supply is null ? 0 : qPump * qPump * settings.SupplyLength.Meters / (100 * supply.Kt.Kt);
@@ -240,7 +274,59 @@ public static class DesignCalculation
             mu,
             settings.DesignVelocity is { } dv ? DiameterMm(q1, mu, dv) : 0,
             issues,
-            []);
+            [],
+            hydrant);
+    }
+
+    // Б.1.3.16: n кранов в узле ввода трассы через трубопровод ПК. Если им нужно больше давления, чем даёт спринклерная сеть,
+    // давление диктующего оросителя поднимается (бисекция) до требования ПК; иначе расход ПК — фактический при давлении узла.
+    private static (TreeSolution Solution, HydrantResult? Result) WithHydrants(
+        HydrantInput input, TreeSolution solution, Func<double, TreeSolution> solve, double p1, double k, DesignSettings settings, PipeSeries series, List<Issue> issues)
+    {
+        var s = input.Settings;
+        var d = input.Demand;
+        var pipe = series.Pick(s.PipeDn);
+        if (pipe is null)
+        {
+            issues.Add(new Issue("vpv.noPipe", IssueLevel.Error, $"Трубопровод ПК DN{s.PipeDn} нет в сортаменте.", Clause: "Б.1.3.16"));
+            return (solution, null);
+        }
+
+        var n = d.Jets;
+        var headMpa = d.Head.Meters / 100;
+        var kPk = d.JetFlow.LitersPerSecond / Math.Sqrt(headMpa);
+        var dz = (s.AboveAxis.Meters - settings.DictatingAboveAxis.Meters) / 100;
+        var lineCoef = (1 + k) * n * n * s.PipeLength.Meters / (100 * pipe.Kt.Kt);
+        var required = headMpa + dz + (lineCoef * d.JetFlow.LitersPerSecond * d.JetFlow.LitersPerSecond);
+        var source = solution.SourcePressure.Mpa;
+        double q;
+        var pDict = p1;
+        var raised = required > source + 1e-9;
+        if (raised)
+        {
+            double lo = p1, hi = 2 * p1;
+            while (solve(hi).SourcePressure.Mpa < required)
+            {
+                hi *= 2;
+            }
+
+            for (var i = 0; i < 60; i++)
+            {
+                var mid = (lo + hi) / 2;
+                (solve(mid).SourcePressure.Mpa < required ? ref lo : ref hi) = mid;
+            }
+
+            pDict = hi;
+            solution = solve(pDict);
+            q = d.JetFlow.LitersPerSecond;
+        }
+        else
+        {
+            q = Math.Sqrt((source - dz) / ((1 / (kPk * kPk)) + lineCoef));
+        }
+
+        var loss = lineCoef * q * q;
+        return (solution, new HydrantResult(d, s, pipe, kPk, new Flow(q), new Flow(n * q), new Pressure(required), new Pressure(loss), new Pressure(dz), raised, new Pressure(pDict)));
     }
 
     /// <summary>Б.5: d = 1000·√(4Q / (π·μ·V)), Q — л/с, мм.</summary>

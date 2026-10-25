@@ -29,6 +29,48 @@ public class DesignCalculationTests
         return DesignCalculation.Run(route, Norms, Rules, Settings with { DesignVelocity = velocity });
     }
 
+    private static DesignResult CalculateWithHydrants(HydrantSettings s)
+    {
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var layout = SprinklerLayouter.Layout(plan, Rules);
+        var route = PipeRouter.Route(plan, layout, Norms, Rules, new Pressure(0.3)).Routes[0];
+        var demand = HydrantDemand.Resolve(Norms, s).Demand!;
+        return DesignCalculation.Run(route, Norms, Rules, Settings, hydrants: new HydrantInput(s, demand));
+    }
+
+    [Fact]
+    public void Hydrants_are_part_of_the_network_and_pump_flow_follows_B29()
+    {
+        // Б.1.3.16: краны — потребители сети при давлении узла; Б.29: Q = max(Q_АУП, Q_норм) + Σq_ПК.
+        var plain = Calculate();
+        var r = CalculateWithHydrants(HydrantDemandTests.Parking);
+        var h = r.Hydrants!;
+        h.Raised.ShouldBeFalse();
+        h.JetFlowActual.LitersPerSecond.ShouldBeGreaterThanOrEqualTo(2.6 - 1e-9);
+        h.TotalFlow.LitersPerSecond.ShouldBe(2 * h.JetFlowActual.LitersPerSecond, 1e-9);
+        r.PumpFlow.LitersPerSecond.ShouldBe(Math.Max(r.DesignFlow.LitersPerSecond, 30) + h.TotalFlow.LitersPerSecond, 1e-9);
+        r.PumpPressure.Mpa.ShouldBeGreaterThan(plain.PumpPressure.Mpa);
+
+        // Давление узла = напор у ПК + разность отметок + потери в трубопроводе ПК при фактическом расходе.
+        var head = Math.Pow(h.JetFlowActual.LitersPerSecond / h.K, 2);
+        (head + h.Elevation.Mpa + h.PipeLoss.Mpa).ShouldBe(r.InletNodePressure.Mpa, 1e-6);
+    }
+
+    [Fact]
+    public void Hydrants_needing_more_pressure_raise_the_sprinkler_network()
+    {
+        // Струя 18 м, DN50, спрыск 13, рукав 20 м: 3,6 л/с при 40,6 м; трубопровод ПК DN32 длиной 60 м — больше давления спринклерной сети в узле.
+        var s = HydrantDemandTests.Parking with { RoomHeight = new Length(17), NozzleMm = 13, PipeDn = 32, PipeLength = new Length(60) };
+        var r = CalculateWithHydrants(s);
+        var h = r.Hydrants!;
+        h.Raised.ShouldBeTrue();
+        h.JetFlowActual.LitersPerSecond.ShouldBe(h.Demand.JetFlow.LitersPerSecond, 1e-6);
+        r.InletNodePressure.Mpa.ShouldBe(h.RequiredNodePressure.Mpa, 1e-6);
+        r.SprinklerFlows[r.DictatingSprinklerId].LitersPerSecond.ShouldBeGreaterThan(r.DictatingFlow.LitersPerSecond);
+        (h.DictatingPressureActual.Mpa + r.Path.Sum(x => x.LossWithLocal.Mpa)).ShouldBe(r.InletNodePressure.Mpa, 1e-6);
+    }
+
     [Fact]
     public void Worst_zone_is_chosen_by_pump_pressure_among_branch_ends()
     {

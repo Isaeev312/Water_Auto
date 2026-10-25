@@ -1,0 +1,97 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СН КР 40-04:2025",
+  "edition": "2025 (Госагентство архитектуры, строительства и ЖКХ при Кабмине КР)",
+  "verified": false,
+  "title": "Внутренний противопожарный водопровод: напор, время, скорости",
+  "source": "СН КР 40-04_2025 Внутр. водопровод и канализ.pdf, русская часть, разд. 7 (с. 19–22).",
+  "records": [
+    {
+      "id": "snkr4004.p7_9.jetHeight",
+      "clause": "7.9",
+      "values": {
+        "minUpTo50": 6,
+        "residentialOver50": 8,
+        "otherOver50": 16,
+        "buildingHeightLimit": 50
+      },
+      "units": {
+        "minUpTo50": "м",
+        "residentialOver50": "м",
+        "otherOver50": "м",
+        "buildingHeightLimit": "м"
+      },
+      "note": "Высота и радиус компактной части струи — не меньше высоты помещения (пол — наивысшая точка перекрытия) и не меньше указанных значений."
+    },
+    {
+      "id": "snkr4004.p7_9.valveDn",
+      "clause": "7.9, примечание",
+      "values": {
+        "dn50MaxFlow": 4,
+        "dnSmall": 50,
+        "dnLarge": 65
+      },
+      "units": {
+        "dn50MaxFlow": "л/с",
+        "dnSmall": "мм",
+        "dnLarge": "мм"
+      },
+      "note": "Струи до 4 л/с — ПК и рукава 50 мм, большей производительности — 65 мм. Давление у ПК — с учётом потерь в рукавах."
+    },
+    {
+      "id": "snkr4004.p7_13.duration",
+      "clause": "7.13",
+      "values": {
+        "standaloneMinutes": 60,
+        "combinedVelocityMax": 3,
+        "sprinklerVelocityMax": 10
+      },
+      "units": {
+        "standaloneMinutes": "мин",
+        "combinedVelocityMax": "м/с",
+        "sprinklerVelocityMax": "м/с"
+      },
+      "note": "Время работы ПК — 1 ч; при объединении ВПВ с АУП — равно времени работы АУП. Скорость в объединённом хозяйственно-противопожарном водопроводе — не более 3 м/с, в спринклерных и дренчерных системах — 10 м/с."
+    },
+    {
+      "id": "snkr4004.p7_10_11.pressure",
+      "clause": "7.10, 7.11",
+      "values": {
+        "combinedStaticMax": 0.45,
+        "separateStaticMax": 0.9,
+        "diaphragmAbove": 0.4
+      },
+      "units": {
+        "combinedStaticMax": "МПа",
+        "separateStaticMax": "МПа",
+        "diaphragmAbove": "МПа"
+      },
+      "note": "Гидростатическое давление у нижнего прибора объединённой сети — не более 0,45 МПа; у нижнего ПК раздельной сети — не более 0,90 МПа; при давлении у ПК более 0,4 МПа — диафрагмы или регуляторы давления."
+    },
+    {
+      "id": "snkr4004.p7_15.jetsPerRiser",
+      "clause": "7.15",
+      "values": {
+        "max": 2
+      },
+      "units": {
+        "max": "шт."
+      },
+      "note": "Число струй из каждого стояка — не более двух."
+    },
+    {
+      "id": "snkr4004.p7_16.valveHeight",
+      "clause": "7.16",
+      "values": {
+        "height": 1.35,
+        "tolerance": 0.15
+      },
+      "units": {
+        "height": "м",
+        "tolerance": "м"
+      },
+      "note": "Высота установки ПК над полом."
+    }
+  ]
+}

@@ -50,7 +50,7 @@ public sealed class ProjectPipelineTests : IDisposable
         return path;
     }
 
-    private string Project(double k = 0.47) =>
+    private string Project(double k = 0.47, ProjectHydrants? hydrants = null) =>
         Write("project.waproj", ProjectFile.ToJson(new ProjectFile
         {
             Name = "Тестовая автостоянка",
@@ -66,6 +66,7 @@ public sealed class ProjectPipelineTests : IDisposable
                 SupplyDn = 125,
                 InletPressure = 0.1,
                 DesignVelocity = 5,
+                Hydrants = hydrants,
             },
         }));
 
@@ -97,6 +98,23 @@ public sealed class ProjectPipelineTests : IDisposable
         var text = note.MainDocumentPart!.Document.Body!.InnerText;
         text.ShouldContain("Тестовая автостоянка");
         text.ShouldContain("Б.30");
+    }
+
+    [Fact]
+    public void Hydrants_from_the_project_enter_the_pump_flow_and_the_note()
+    {
+        Drawing();
+        var plain = Run(Project()).Design!;
+        var result = Run(Project(hydrants: new ProjectHydrants
+        {
+            FireResistance = "II", Category = "В", HazardClass = "С0", Volume = 40, BuildingHeight = 12, RoomHeight = 3.3,
+            AboveAxis = 1.35, PipeLength = 15, PipeDn = 65,
+        }));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        result.Design!.Hydrants.ShouldNotBeNull();
+        result.Design.PumpFlow.LitersPerSecond.ShouldBeGreaterThan(plain.PumpFlow.LitersPerSecond + 5);
+        using var note = WordprocessingDocument.Open(result.Files[4], false);
+        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("СН КР 40-04:2025");
     }
 
     [Fact]

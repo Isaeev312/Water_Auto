@@ -257,7 +257,9 @@ public static class ExplanatoryNoteComposer
                 RouteNodeKind.Inlet => "ВВ",
                 _ => letterNo < Letters.Length ? Letters[letterNo++].ToString() : $"у{++letterNo}",
             };
-        var pressure = d.DictatingPressure.Mpa;
+        // При ВПВ, требующем большего давления, сеть рассчитана от поднятого давления диктующего оросителя (ADR 0010).
+        var pStart = d.Hydrants is { Raised: true } raised ? raised.DictatingPressureActual.Mpa : d.DictatingPressure.Mpa;
+        var pressure = pStart;
         var rows = new List<IReadOnlyList<string>>();
         foreach (var x in d.Path.Reverse())
         {
@@ -283,16 +285,54 @@ public static class ExplanatoryNoteComposer
         blocks.Add(new NoteFormula($"*Q*_{{р}} = Σ*q*_{{n}} = **{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с**,", "5.7", [
             $"где *n* — количество оросителей в диктующей зоне, *n* = {d.ZoneSprinklers.Count}.",
         ]));
-        blocks.Add(new NoteParagraph(d.PumpFlowClause == "Б.24"
-            ? $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с ≤ *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.24), насос должен обеспечивать нормативный расход: *Q*_{{нас}} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**."
-            : $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с > *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.25), насос выбирается с расходом не менее расчётного (Б.26): *Q*_{{нас}} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**."));
+        var qAup = d.PumpFlow.LitersPerSecond - (d.Hydrants?.TotalFlow.LitersPerSecond ?? 0);
+        var aupName = d.Hydrants is null ? "*Q*_{нас}" : "*Q*_{АУП}";
+        blocks.Add(new NoteParagraph(d.PumpFlowClause.StartsWith("Б.24", StringComparison.Ordinal)
+            ? $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с ≤ *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.24), установка должна обеспечивать нормативный расход: {aupName} = **{F(qAup, "0.00")} л/с**."
+            : $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с > *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.25), расход принимается не менее расчётного (Б.26): {aupName} = **{F(qAup, "0.00")} л/с**."));
         blocks.Add(new NoteParagraph("Давление в точке подключения распределительной сети:"));
-        blocks.Add(new NoteFormula($"*P*_{{вв}} = *p*_{{1}} + ΣΔ*P*′ = {F(d.DictatingPressure.Mpa, "0.000")} + {F(d.Path.Sum(x => x.LossWithLocal.Mpa), "0.000")} = **{F(d.InletNodePressure.Mpa, "0.000")} МПа**.", "5.8", []));
+        if (d.Hydrants is { Raised: true })
+        {
+            blocks.Add(new NoteParagraph($"Давление у диктующего оросителя принято {F(pStart, "0.000")} МПа — больше значения по (Б.1), так как его требуют пожарные краны совмещённой сети (см. ниже, формула 5.10); расходы оросителей в таблице — при этом давлении."));
+        }
+
+        blocks.Add(new NoteFormula($"*P*_{{вв}} = *p*_{{1}} + ΣΔ*P*′ = {F(pStart, "0.000")} + {F(d.Path.Sum(x => x.LossWithLocal.Mpa), "0.000")} = **{F(d.InletNodePressure.Mpa, "0.000")} МПа**.", "5.8", []));
+        if (d.Hydrants is { } h)
+        {
+            blocks.AddRange(HydrantBlocks(d, h, qAup));
+        }
+
         var vMax = d.Path.Max(x => x.Velocity);
         blocks.Add(new NoteParagraph(vMax <= d.VelocityLimit
             ? $"Наибольшая скорость на расчётном направлении — {F(vMax, "0.00")} м/с, что не превышает {F(d.VelocityLimit)} м/с для напорных трубопроводов (п. 6.7.1.37)."
             : $"*Внимание:* скорость {F(vMax, "0.00")} м/с больше {F(d.VelocityLimit)} м/с (п. 6.7.1.37) — диаметры требуется увеличить."));
         return new NoteSection("5", "Гидравлический расчёт", blocks);
+    }
+
+    // ВПВ, совмещённый с АУП: Ж.2, Ж.3 и п. 7.9 СН КР 40-04:2025; включение ПК в сеть — Б.1.3.8, Б.1.3.16; расход — Б.29 (ADR 0010).
+    private static List<NoteBlock> HydrantBlocks(DesignResult d, HydrantResult h, double qAup)
+    {
+        var s = h.Settings;
+        var v = h.Demand;
+        var n = v.Jets;
+        return
+        [
+            new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."),
+            new NoteParagraph($"По таблице Ж.2 (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
+            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м, строка {F(v.TableJetHeight.Meters, "0")} м, без интерполяции): *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
+            new NoteParagraph("Пожарные краны включены в расчётную сеть АУП как потребители с характеристикой:"),
+            new NoteFormula($"*K*_{{ПК}} = *q*_{{ПК}} / √(*H*_{{ПК}}/100) = {F(v.JetFlow.LitersPerSecond)} / √{F(v.Head.Meters / 100, "0.000")} = {F(h.K, "0.000")} л/(с·МПа^{{0,5}}).", "5.9", []),
+            new NoteParagraph($"*Принято:* {n} крана диктующей секции присоединены в точке подключения трубопроводом DN{h.Pipe.Dn} длиной {F(s.PipeLength.Meters, "0.0")} м (*K*_{{т}} = {F(h.Pipe.Kt.Kt, "0.##")}), по которому идёт весь расход кранов; местные потери — {F(d.LocalLossFactor * 100, "0")} % (п. Б.1.3.13). Клапан диктующего ПК — на {F(s.AboveAxis.Meters, "0.00")} м над осью насоса."),
+            new NoteFormula($"*P*_{{вв,ПК}} = *H*_{{ПК}}/100 + Δ*Z* + (1 + {F(d.LocalLossFactor, "0.0")})·(*n*·*q*)^{{2}}·*L* / (100·*K*_{{т}}) = {F(v.Head.Meters / 100, "0.000")} + ({F(h.Elevation.Mpa, "0.000")}) + {F((1 + d.LocalLossFactor) * n * n * v.JetFlow.LitersPerSecond * v.JetFlow.LitersPerSecond * s.PipeLength.Meters / (100 * h.Pipe.Kt.Kt), "0.000")} = {F(h.RequiredNodePressure.Mpa, "0.000")} МПа,", "5.10", [
+                "где Δ*Z* — разность отметок клапана ПК и диктующего оросителя, делённая на 100, МПа.",
+            ]),
+            new NoteParagraph(h.Raised
+                ? $"Требуемое давление для кранов больше давления спринклерной сети в точке подключения, поэтому давление сети поднято до *P*_{{вв}} = {F(h.RequiredNodePressure.Mpa, "0.000")} МПа (давление у диктующего оросителя {F(h.DictatingPressureActual.Mpa, "0.000")} МПа); расходы оросителей пересчитаны при этом давлении. Расход крана — *q*_{{ПК}} = {F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с."
+                : $"Давление спринклерной сети в точке подключения не меньше требуемого для кранов, поэтому расход крана — фактический при этом давлении (п. Б.1.3.8): *q*_{{ПК}} = **{F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с** ≥ {F(v.JetFlow.LitersPerSecond)} л/с."),
+            new NoteParagraph("Расход насосов совмещённого водопровода (Б.29):"),
+            new NoteFormula($"*Q*_{{нас}} = *Q*_{{АУП}} + *n*·*q*_{{ПК}} = {F(qAup, "0.00")} + {n}·{F(h.JetFlowActual.LitersPerSecond, "0.00")} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**.", "5.11", []),
+            new NoteParagraph("Продолжительность работы ВПВ, совмещённого с АУП, равна времени работы АУП (п. Б.1.3.15 СП 485; п. 7.13 СН КР 40-04:2025)."),
+        ];
     }
 
     private static NoteSection Pump(NoteInputs i, INormsProvider norms)
