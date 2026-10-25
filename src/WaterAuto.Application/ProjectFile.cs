@@ -81,6 +81,12 @@ public sealed record ProjectDesign
     /// <summary>Стандарт приварных деталей трубопроводов (отводы, тройники, переходы).</summary>
     public string FittingStandard { get; init; } = "ГОСТ 17375-2001";
 
+    /// <summary>Стандарт сварных соединений трубопроводов.</summary>
+    public string WeldStandard { get; init; } = "ГОСТ 16037-80";
+
+    /// <summary>Ссылка в выноске у точки ввода на лист насосной станции.</summary>
+    public string InletReference { get; init; } = "см. раздел НС";
+
     /// <summary>Сортамент для расчёта и спецификации.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string PipeSeriesStandard => PipeStandardLarge.Length > 0

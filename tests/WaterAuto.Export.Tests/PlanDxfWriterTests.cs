@@ -111,6 +111,43 @@ public class PlanDxfWriterTests
     }
 
     [Fact]
+    public void Plan_is_drawn_over_the_source_drawing_without_restyling_it()
+    {
+        var source = new CadDocument(ACadVersion.AC1032);
+        source.Header.InsUnits = UnitsType.Millimeters;
+        var walls = new ACadSharp.Tables.Layer("АР_СТЕНЫ");
+        source.Layers.Add(walls);
+        source.Entities.Add(new Line(new CSMath.XYZ(0, 0, 0), new CSMath.XYZ(6000, 0, 0)) { Layer = walls });
+        source.Entities.Add(new TextEntity { Value = "Стоянка", Height = 300, Layer = walls });
+        var basePath = Path.Combine(Path.GetTempPath(), $"wa-base-{Guid.NewGuid():N}.dxf");
+        var path = Path.Combine(Path.GetTempPath(), $"wa-{Guid.NewGuid():N}.dwg");
+        DxfWriter.Write(basePath, source, false);
+        try
+        {
+            PlanDxfWriter.Write(path, Layout, [Route], [], basePath: basePath);
+            var doc = DwgReader.Read(path);
+            doc.Entities.OfType<Line>().ShouldContain(l => l.Layer.Name == "АР_СТЕНЫ");
+            doc.Entities.OfType<Line>().ShouldContain(l => l.Layer.Name == PlanDxfWriter.PipeLayer);
+            doc.Entities.OfType<TextEntity>().Single(x => x.Value == "Стоянка").Style.Filename.ShouldNotBe("GOST Common.ttf");
+        }
+        finally
+        {
+            File.Delete(basePath);
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void Inlet_gets_a_leader_with_DN_elevation_and_reference()
+    {
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), inlets: [new PlanInletNote(new PlanPoint(500, 500), ["Ввод DN100", "отм. −1,500", "см. раздел НС"])]);
+        var text = doc.Entities.OfType<MText>().Single(m => m.Value.Contains("см. раздел НС", StringComparison.Ordinal));
+        text.Value.ShouldContain("DN100");
+        text.Layer.Name.ShouldBe(PlanDxfWriter.SegmentLayer);
+        doc.Entities.OfType<LwPolyline>().ShouldContain(l => l.Layer.Name == PlanDxfWriter.SegmentLayer && l.Vertices.First().Location.X == 500);
+    }
+
+    [Fact]
     public void Pipes_are_0_40_mm_and_texts_use_GOST_Common()
     {
         var doc = WriteAndRead();

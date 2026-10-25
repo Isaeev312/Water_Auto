@@ -23,6 +23,9 @@ public sealed record PlanCalcSummary(
     string ZoneLabel,
     double ZoneMarginMm);
 
+/// <summary>Выноска у точки ввода: строки текста (DN, отметка, ссылка на раздел НС).</summary>
+public sealed record PlanInletNote(PlanPoint At, IReadOnlyList<string> Lines);
+
 /// <summary>
 /// DXF-наложение на чертёж пользователя (README §7): в тех же координатах, в мм.
 /// ПТ_ОРОСИТЕЛИ — блок с атрибутом ID; ПТ_ТРУБЫ — участки трассы; ПТ_УЧАСТКИ — DN и длины
@@ -39,19 +42,25 @@ public static class PlanDxfWriter
     public const string SummaryLayer = "ПТ_РАСЧЁТ";
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null)
+    /// <param name="basePath">Исходный чертёж этажа: план труб рисуется поверх него в одном файле; null — только слои программы.</param>
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null)
     {
-        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary));
+        var source = basePath is null ? null : DxfDrawing.Read(basePath);
+        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source));
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(issues);
         ArgumentNullException.ThrowIfNull(style);
-        var doc = new CadDocument(ACadVersion.AC1032);
-        doc.Header.InsUnits = UnitsType.Millimeters;
+        var doc = source ?? new CadDocument(ACadVersion.AC1032);
+        if (source is null)
+        {
+            doc.Header.InsUnits = UnitsType.Millimeters;
+        }
+
         var sprinklers = DxfDrawing.AddLayer(doc, SprinklerLayer, 1);
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4, LineWeightType.W40); // трубопроводы — 0,40 мм
         var segments = DxfDrawing.AddLayer(doc, SegmentLayer, 7);
@@ -59,10 +68,13 @@ public static class PlanDxfWriter
         var zoneLayer = DxfDrawing.AddLayer(doc, ZoneLayer, 2);
         var summaryLayer = DxfDrawing.AddLayer(doc, SummaryLayer, 7);
 
-        var block = new BlockRecord(SprinklerBlock);
-        block.Entities.Add(new Circle(XYZ.Zero, style.SprinklerRadiusMm));
-        block.Entities.Add(new AttributeDefinition { Tag = "ID", Prompt = "ID оросителя", Height = style.TextHeightMm / 2, InsertPoint = new XYZ(style.SprinklerRadiusMm, style.SprinklerRadiusMm, 0), Flags = AttributeFlags.Hidden });
-        doc.BlockRecords.Add(block);
+        if (!doc.BlockRecords.TryGetValue(SprinklerBlock, out var block))
+        {
+            block = new BlockRecord(SprinklerBlock);
+            block.Entities.Add(new Circle(XYZ.Zero, style.SprinklerRadiusMm));
+            block.Entities.Add(new AttributeDefinition { Tag = "ID", Prompt = "ID оросителя", Height = style.TextHeightMm / 2, InsertPoint = new XYZ(style.SprinklerRadiusMm, style.SprinklerRadiusMm, 0), Flags = AttributeFlags.Hidden });
+            doc.BlockRecords.Add(block);
+        }
         foreach (var s in layout.Sprinklers)
         {
             var insert = new Insert(block) { InsertPoint = new XYZ(s.Location.XMm, s.Location.YMm, 0), Layer = sprinklers };
@@ -130,6 +142,23 @@ public static class PlanDxfWriter
         if (summary is not null)
         {
             AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer);
+        }
+
+        // Выноска у ввода: наклонная линия и полка, над полкой — текст (DN, отметка, ссылка на раздел НС).
+        foreach (var note in inlets ?? [])
+        {
+            var h = style.TextHeightMm;
+            var corner = new XY(note.At.XMm + (7.5 * h), note.At.YMm + (7.5 * h));
+            var width = note.Lines.Max(l => l.Length) * 0.75 * h;
+            doc.Entities.Add(new LwPolyline([new XY(note.At.XMm, note.At.YMm), corner, new XY(corner.X + width, corner.Y)]) { Layer = segments });
+            doc.Entities.Add(new MText
+            {
+                Value = string.Join("\\P", note.Lines),
+                InsertPoint = new XYZ(corner.X, corner.Y + ((note.Lines.Count + 0.5) * 1.6 * h), 0),
+                Height = h,
+                RectangleWidth = width,
+                Layer = segments,
+            });
         }
 
         return doc;

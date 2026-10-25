@@ -159,8 +159,16 @@ public static class ProjectPipeline
 
         var outIssues = issues.ToList();
         var summary = Summary(worst);
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary));
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary));
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var inletNotes = plan.Inlets.Select(i => new PlanInletNote(i.Location, [
+            $"Ввод DN{design.SupplyDn}",
+            "отм. " + design.PipeElevation.ToString("+0.000;−0.000;0.000", ru),
+            design.InletReference,
+        ])).ToList();
+
+        // plan.dwg — трубы поверх исходного чертежа этажа в одном файле; plan.dxf — только слои программы (для вставки).
+        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, basePath: drawing));
+        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation)));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов")));
 
@@ -186,7 +194,8 @@ public static class ProjectPipeline
                 settings,
                 literature,
                 ids,
-                selection),
+                selection,
+                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}."),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
