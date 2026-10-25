@@ -1,0 +1,208 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "clause": "табл. 6.4",
+  "title": "Номинальная температура срабатывания спринклерных оросителей и предельно допустимая рабочая температура среды (п. 6.2.16)",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, п. 6.2.16, табл. 6.4 (ячейки таблицы из document.xml).",
+  "verified": false,
+  "columns": {
+    "nominal": "номинальная температура срабатывания, °С",
+    "maxAmbient": "предельно допустимая рабочая температура среды в зоне расположения оросителей, °С, не более"
+  },
+  "records": [
+    {
+      "id": "sp485.t6_4.t57",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 57,
+        "maxAmbient": 38
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t68",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 68,
+        "maxAmbient": 50
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t72",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 72,
+        "maxAmbient": 52
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t74",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 74,
+        "maxAmbient": 52
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t79",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 79,
+        "maxAmbient": 58
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t93",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 93,
+        "maxAmbient": 70
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t100",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 100,
+        "maxAmbient": 77
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t121",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 121,
+        "maxAmbient": 86
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t141",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 141,
+        "maxAmbient": 100
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t163",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 163,
+        "maxAmbient": 120
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t182",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 182,
+        "maxAmbient": 140
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t204",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 204,
+        "maxAmbient": 162
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t227",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 227,
+        "maxAmbient": 185
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t240",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 240,
+        "maxAmbient": 200
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t260",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 260,
+        "maxAmbient": 220
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    },
+    {
+      "id": "sp485.t6_4.t343",
+      "clause": "табл. 6.4",
+      "values": {
+        "nominal": 343,
+        "maxAmbient": 300
+      },
+      "units": {
+        "nominal": "°С",
+        "maxAmbient": "°С"
+      }
+    }
+  ]
+}
