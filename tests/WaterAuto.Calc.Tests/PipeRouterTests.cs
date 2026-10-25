@@ -108,6 +108,19 @@ public class PipeRouterTests
     }
 
     [Fact]
+    public void Sprinklers_under_a_duct_are_routed_too()
+    {
+        var duct = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-0.9));
+        var plan = Plan(Rect(0, 0, 30000, 20000), new PlanPoint(500, 500)) with { Ducts = [duct] };
+        var layout = SprinklerLayouter.Layout(plan, Rules);
+        var routing = PipeRouter.Route(plan, layout, Norms, Rules, Low);
+        routing.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty(string.Join("; ", routing.Issues.Select(i => i.Message)));
+        var route = routing.Routes.Single();
+        RouteChecks.ShouldBeTree(route);
+        route.Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
+    }
+
+    [Fact]
     public void Room_without_inlet_is_an_error()
     {
         var plan = Plan(Rect(0, 0, 30000, 20000), new PlanPoint(40000, 500));

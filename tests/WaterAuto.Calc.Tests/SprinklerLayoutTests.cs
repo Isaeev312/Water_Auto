@@ -218,33 +218,109 @@ public class SprinklerLayoutTests
     }
 
     [Fact]
-    public void High_beams_are_reported_until_fields_are_implemented()
+    public void High_beams_split_the_ceiling_into_fields_with_beam_faces_as_walls()
     {
+        // 6.2.10: балка выше 0,3 м (К0) — оросители между балками; грани приняты как стены (В-17): до них не дальше 6.2.21.
         var high = new Beam("B1", Rect(0, 5900, 30000, 6100), new Length(0.35), new Length(-0.4));
         var low = new Beam("B2", Rect(0, 12900, 30000, 13100), new Length(0.25), new Length(-0.4));
         var plan = Plan(Rect(0, 0, 30000, 20000), beams: [high, low]);
-        var layout = SprinklerLayouter.Layout(plan, Rules());
+        var rules = Rules();
+        var layout = SprinklerLayouter.Layout(plan, rules);
         var issue = layout.Issues.ShouldHaveSingleItem();
         issue.Code.ShouldBe("layout.beamFields");
-        issue.Level.ShouldBe(IssueLevel.Error);
+        issue.Level.ShouldBe(IssueLevel.Info);
         issue.ElementId.ShouldBe("B1");
         issue.Clause.ShouldBe("6.2.10");
+        layout.Sprinklers.ShouldNotContain(s => high.Outline.Contains(s.Location));
+        LayoutChecks.ShouldSatisfy(layout, plan, rules, extraWalls: [high.Outline]);
+
+        // Поле 30 × 5,9 м и поле 30 × 13,9 м: ряды по обе стороны балки.
+        layout.Sprinklers.ShouldContain(s => s.Location.YMm < 5900);
+        layout.Sprinklers.ShouldContain(s => s.Location.YMm > 6100 && s.Location.YMm < 6100 + rules.MaxWallDistance.Millimeters + 1);
 
         // Для К2 предел 0,2 м — обе балки делят перекрытие.
         SprinklerLayouter.Layout(plan, Rules(ConstructionClass.K2)).Issues.Count(i => i.Code == "layout.beamFields").ShouldBe(2);
     }
 
-    [Fact]
-    public void Wide_ducts_are_reported_until_6_2_14_is_implemented()
+    [Theory]
+    [InlineData(14900, 15100)] // балка 200 мм
+    [InlineData(14700, 15300)] // балка 600 мм: при 1,75 м до каждой грани зазор был бы 4,1 м > 3,5 м
+    public void Spacing_across_a_beam_stays_within_the_norm_and_rows_stay_connected(double x0, double x1)
     {
+        // Балка поперёк рядов: зазор между оросителями по обе стороны балки на одном ряду — не больше шага.
+        var beam = new Beam("B1", Rect(x0, 0, x1, 20000), new Length(0.35), new Length(-0.4));
+        var plan = Plan(Rect(0, 0, 30000, 20000), beams: [beam]) with { Inlets = [new Inlet("I1", new PlanPoint(500, 500), null)] };
+        var rules = Rules();
+        var layout = SprinklerLayouter.Layout(plan, rules);
+        LayoutChecks.ShouldSatisfy(layout, plan, rules, extraWalls: [beam.Outline]);
+        foreach (var row in layout.Sprinklers.GroupBy(s => Math.Round(s.Location.YMm)))
+        {
+            var left = row.Where(s => s.Location.XMm < x0).Max(s => s.Location.XMm);
+            var right = row.Where(s => s.Location.XMm > x1).Min(s => s.Location.XMm);
+            (right - left).ShouldBeLessThanOrEqualTo(rules.MaxSpacing.Millimeters + 0.5, $"ряд y = {row.Key}: через балку {right - left} мм");
+        }
+
+        var routing = WaterAuto.Calc.Routing.PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3));
+        routing.Issues.ShouldNotContain(i => i.Code == "routing.rowNotReached");
+        routing.Routes.Single().Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
+    }
+
+    [Fact]
+    public void Pipes_cross_beams_to_reach_every_field()
+    {
+        var high = new Beam("B1", Rect(0, 5900, 30000, 6100), new Length(0.35), new Length(-0.4));
+        var plan = Plan(Rect(0, 0, 30000, 20000), beams: [high]) with { Inlets = [new Inlet("I1", new PlanPoint(500, 500), null)] };
+        var layout = SprinklerLayouter.Layout(plan, Rules());
+        var routing = WaterAuto.Calc.Routing.PipeRouter.Route(plan, layout, Norms, Rules(), new Pressure(0.3));
+        routing.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty();
+        routing.Routes.Single().Nodes.Count(n => n.Kind == RouteNodeKind.Sprinkler).ShouldBe(layout.Sprinklers.Count);
+    }
+
+    [Fact]
+    public void Sprinklers_are_added_under_wide_ducts()
+    {
+        // 6.2.14: короб шире 0,75 м на высоте не менее 0,7 м от пола — дополнительные оросители под ним.
         var wide = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-0.9));
         var narrow = new Duct("D2", Rect(2000, 5000, 12000, 5500), new Length(-0.9));
         var plan = Plan(Rect(0, 0, 30000, 20000), ducts: [wide, narrow]);
-        var issue = SprinklerLayouter.Layout(plan, Rules()).Issues.ShouldHaveSingleItem();
-        issue.Code.ShouldBe("layout.duct");
-        issue.Level.ShouldBe(IssueLevel.Warning);
+        var rules = Rules();
+        var layout = SprinklerLayouter.Layout(plan, rules, floorElevation: new Length(-4.0));
+
+        var under = layout.Sprinklers.Where(s => s.UnderObstacleId is not null).ToList();
+        under.ShouldNotBeEmpty();
+        under.ShouldAllBe(s => s.UnderObstacleId == "D1" && wide.Outline.Contains(s.Location) && s.RoomId == "R1");
+        var xs = under.Select(s => s.Location.XMm).Order().ToList();
+        (xs[0] - 2000).ShouldBeLessThanOrEqualTo(rules.MaxWallDistance.Millimeters + 0.5);
+        (12000 - xs[^1]).ShouldBeLessThanOrEqualTo(rules.MaxWallDistance.Millimeters + 0.5);
+        xs.Zip(xs.Skip(1), (a, b) => b - a).ShouldAllBe(d => d <= rules.MaxSpacing.Millimeters + 0.5);
+
+        // Раскладка на перекрытии не меняется: 54 оросителя.
+        layout.Sprinklers.Count(s => s.UnderObstacleId is null).ShouldBe(54);
+        var issue = layout.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("layout.ductSprinklers");
+        issue.Level.ShouldBe(IssueLevel.Info);
         issue.ElementId.ShouldBe("D1");
         issue.Clause.ShouldBe("6.2.14");
+    }
+
+    [Fact]
+    public void Duct_lower_than_the_limit_above_the_floor_gets_no_sprinklers()
+    {
+        // Низ короба на 0,5 м выше пола (< 0,7 м) — 6.2.14 не требует оросителей под ним.
+        var low = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-3.5));
+        var plan = Plan(Rect(0, 0, 30000, 20000), ducts: [low]);
+        var layout = SprinklerLayouter.Layout(plan, Rules(), floorElevation: new Length(-4.0));
+        layout.Sprinklers.ShouldNotContain(s => s.UnderObstacleId != null);
+        layout.Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Without_floor_elevation_ducts_get_sprinklers_and_the_note_says_so()
+    {
+        var wide = new Duct("D1", Rect(2000, 15000, 12000, 16000), new Length(-0.9));
+        var layout = SprinklerLayouter.Layout(Plan(Rect(0, 0, 30000, 20000), ducts: [wide]), Rules());
+        layout.Sprinklers.ShouldContain(s => s.UnderObstacleId == "D1");
+        layout.Issues.ShouldHaveSingleItem().Message.ShouldContain("отметка пола не задана");
     }
 
     [Fact]

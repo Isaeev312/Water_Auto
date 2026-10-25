@@ -1,6 +1,7 @@
 // Консоль для расчёта по проекту и для тестов.
 //   calc <проект.waproj> --out <папка> [--data <папка data>]  — сквозной расчёт: план, аксонометрия, спецификация, записка
 //   new <проект.waproj> --drawing <чертёж.dwg|dxf>              — заготовка файла проекта с исходными данными
+//   template <файл.dwt|dwg|dxf>                                 — шаблон чертежа: слои ПТ_, мм, блок ввода, памятка
 using System.Text;
 using WaterAuto.Application;
 
@@ -9,6 +10,7 @@ const string Usage = """
     Использование:
       WaterAuto.Cli calc <проект.waproj> --out <папка> [--data <папка data>]
       WaterAuto.Cli new <проект.waproj> --drawing <чертёж.dwg|dxf>
+      WaterAuto.Cli template <файл.dwt|dwg|dxf>
     """;
 
 if (args.Length < 2 || args[0] is "-h" or "--help")
@@ -29,14 +31,14 @@ switch (args[0])
     {
         var project = Path.GetFullPath(args[1]);
         var output = Option("--out") ?? Path.Combine(Path.GetDirectoryName(project)!, "out");
-        var root = Option("--data") is { } data ? Path.GetDirectoryName(Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar))! : FindRoot(project);
+        var root = Option("--data") is { } data ? Path.GetDirectoryName(Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar))! : DataLocator.FindRoot(Path.GetDirectoryName(project)!, AppContext.BaseDirectory);
         if (root is null)
         {
             Console.Error.WriteLine("Не найдена папка data/norms: укажите --data <путь к папке data>.");
             return 2;
         }
 
-        var result = ProjectPipeline.Run(project, output, Path.Combine(root, "data", "norms"), Path.Combine(root, "docs", "literature_registry.csv"));
+        var result = ProjectPipeline.Run(project, output, DataLocator.Norms(root), DataLocator.Registry(root));
         foreach (var level in new[] { WaterAuto.Core.IssueLevel.Error, WaterAuto.Core.IssueLevel.Warning })
         {
             var count = result.Issues.Count(i => i.Level == level);
@@ -76,25 +78,16 @@ switch (args[0])
         return 0;
     }
 
+    case "template":
+    {
+        var path = Path.GetFullPath(args[1]);
+        DrawingTemplate.Write(path);
+        Console.WriteLine($"Шаблон: {path}. Архитектурный план — внешней ссылкой в 0,0, контуры и препятствия — на слоях ПТ_ (памятка в файле).");
+        return 0;
+    }
+
     default:
         Console.Error.WriteLine($"Неизвестная команда «{args[0]}».");
         Console.Error.WriteLine(Usage);
         return 2;
-}
-
-// Корень репозитория или установки: папка, в которой есть data/norms, — вверх от проекта, затем от программы.
-static string? FindRoot(string project)
-{
-    foreach (var start in new[] { Path.GetDirectoryName(project)!, AppContext.BaseDirectory })
-    {
-        for (var dir = new DirectoryInfo(start); dir is not null; dir = dir.Parent)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, "data", "norms")))
-            {
-                return dir.FullName;
-            }
-        }
-    }
-
-    return null;
 }

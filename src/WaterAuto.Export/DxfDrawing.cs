@@ -14,11 +14,11 @@ internal static class DxfDrawing
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
     /// <summary>
-    /// Запись по расширению: .dwg — DWG (его вставляет команда AutoCAD INSERT и WA-INSERT), иначе DXF.
+    /// Запись по расширению: .dwg и .dwt (шаблон) — DWG (его вставляет команда AutoCAD INSERT и WA-INSERT), иначе DXF.
     /// </summary>
     public static void Save(string path, CadDocument doc)
     {
-        if (string.Equals(Path.GetExtension(path), ".dwg", StringComparison.OrdinalIgnoreCase))
+        if (Path.GetExtension(path).ToLowerInvariant() is ".dwg" or ".dwt")
         {
             DwgWriter.Write(path, doc);
         }

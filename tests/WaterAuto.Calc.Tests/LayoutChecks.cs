@@ -9,7 +9,7 @@ namespace WaterAuto.Calc.Tests;
 /// </summary>
 internal static class LayoutChecks
 {
-    public static void ShouldSatisfy(SprinklerLayout layout, FloorPlan plan, LayoutRules rules, double angleRad = 0, double lateralToleranceMm = 1)
+    public static void ShouldSatisfy(SprinklerLayout layout, FloorPlan plan, LayoutRules rules, double angleRad = 0, double lateralToleranceMm = 1, IEnumerable<Polygon>? extraWalls = null)
     {
         var s = rules.MaxSpacing.Millimeters + 0.5;
         var m = rules.MinSpacing.Millimeters - 0.5;
@@ -19,8 +19,8 @@ internal static class LayoutChecks
 
         foreach (var room in plan.Rooms)
         {
-            var points = layout.Sprinklers.Where(p => p.RoomId == room.Id).Select(p => p.Location).ToList();
-            var walls = room.Contour.Edges().Concat(plan.NoSprinklerZones.SelectMany(z => z.Outline.Edges())).ToList();
+            var points = layout.Sprinklers.Where(p => p.RoomId == room.Id && p.UnderObstacleId is null).Select(p => p.Location).ToList();
+            var walls = room.Contour.Edges().Concat(plan.NoSprinklerZones.SelectMany(z => z.Outline.Edges())).Concat((extraWalls ?? []).SelectMany(w => w.Edges())).ToList();
             foreach (var p in points)
             {
                 room.Contour.Contains(p).ShouldBeTrue($"{p} вне помещения {room.Name}");

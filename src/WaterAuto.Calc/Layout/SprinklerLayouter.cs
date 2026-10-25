@@ -22,7 +22,8 @@ public static class SprinklerLayouter
 {
     private const double Tol = Polygon.ToleranceMm;
 
-    public static SprinklerLayout Layout(FloorPlan plan, LayoutRules rules)
+    /// <param name="floorElevation">Отметка пола этажа — для условия 6.2.14 «не менее … от пола»; null — условие считается выполненным.</param>
+    public static SprinklerLayout Layout(FloorPlan plan, LayoutRules rules, Length? floorElevation = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(rules);
@@ -40,6 +41,7 @@ public static class SprinklerLayouter
         }
 
         issues.AddRange(ObstacleIssues(plan, rules));
+        sprinklers.AddRange(UnderDucts(plan, rules, floorElevation, issues));
         return new SprinklerLayout(sprinklers, zones, issues);
     }
 
@@ -59,29 +61,39 @@ public static class SprinklerLayouter
             return new RoomLayout([], [], issues);
         }
 
+        // Вырезы раскладки: зоны без оросителей и балки выше предела 6.2.10 — их грани работают как стены (В-17).
+        // Для трассы балки не препятствие: трубы проходят под ними.
         var holes = new List<List<PlanPoint>>();
-        var skippedZones = new List<NoSprinklerZone>();
-        foreach (var zone in plan.NoSprinklerZones.Where(z => z.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint))
+        var beamHoles = new List<List<PlanPoint>>();
+        var skippedZones = new List<Polygon>();
+        var cutouts = plan.NoSprinklerZones.Select(z => (z.Id, z.Outline, What: "Зона без оросителей"))
+            .Concat(plan.Beams.Where(b => b.Height.Meters > rules.BeamHeightLimit.Meters + 1e-9).Select(b => (b.Id, b.Outline, What: "Балка")));
+        foreach (var (id, outline, what) in cutouts.Where(c => c.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint))
         {
-            var local = frame.ToLocal(zone.Outline);
+            var local = frame.ToLocal(outline);
             if (NonOrthogonalEdge(local) is { } zoneBad)
             {
                 issues.Add(new Issue(
                     "layout.nonOrthogonal",
                     IssueLevel.Error,
-                    "Зона без оросителей не прямоугольная относительно стен помещения: оросители внутри неё удалены, расстояния у её границ не проверены.",
-                    zone.Id,
+                    $"{what} не прямоугольная относительно стен помещения: оросители внутри неё удалены, расстояния у её границ не проверены.",
+                    id,
                     Location: frame.ToWorld(zoneBad)));
-                skippedZones.Add(zone);
+                skippedZones.Add(outline);
                 continue;
             }
 
             holes.Add(local);
+            if (what == "Балка")
+            {
+                beamHoles.Add(local);
+            }
         }
 
         var snap = new Snapper(contour.Concat(holes.SelectMany(h => h)));
         contour = snap.Apply(contour);
         holes = holes.Select(snap.Apply).ToList();
+        var beams = beamHoles.Select(b => Box.Of(snap.Apply(b))).ToList();
         var boundary = Segments(contour).Concat(holes.SelectMany(Segments)).Where(e => Len(e) > Tol).ToList();
         var rects = Decompose(contour, holes);
 
@@ -94,10 +106,23 @@ public static class SprinklerLayouter
             .Where(c => rects.Any(r => r.Overlaps(c.Box)))
             .ToList();
         PlanPoint Center(Rect r) => frame.ToWorld(new PlanPoint((r.X0 + r.X1) / 2, (r.Y0 + r.Y1) / 2));
+        var beamIssues = new List<Issue>();
+        AxisSpan YBeamSpan(Rect r)
+        {
+            bool Overlaps(Box b) => Math.Min(r.X1, b.X1) - Math.Max(r.X0, b.X0) > Tol;
+            return BeamFaces(
+                YSpan(r, wall),
+                b => Math.Abs(b.Y1 - r.Y0) <= Tol && Overlaps(b) ? b.Y1 - b.Y0 : null,
+                b => Math.Abs(b.Y0 - r.Y1) <= Tol && Overlaps(b) ? b.Y1 - b.Y0 : null,
+                beams,
+                s,
+                beamIssues,
+                Center(r));
+        }
 
         // Линии вдоль разрезов (X) — свои у каждой зоны. Зона, в которой не помещается ни одна линия (ниша, ступенька
         // стены), своих оросителей не получает: её дальнюю сторону обслуживают соседи, их предел у общей стороны уменьшается.
-        var xSpans = rects.Select(r => XSpan(r, boundary, wall, s, m)).ToList();
+        var xSpans = rects.Select(r => XSpan(r, boundary, wall, s, m, beams, issues)).ToList();
         var absorbed = rects.Select((r, i) => LineSolver.Solve([xSpans[i]], s, m, []) is null).ToArray();
         for (var i = 0; i < rects.Count; i++)
         {
@@ -144,7 +169,7 @@ public static class SprinklerLayouter
                 continue;
             }
 
-            if (LineSolver.Solve([YSpan(rects[i], wall)], s, m, []) is null)
+            if (LineSolver.Solve([YBeamSpan(rects[i])], s, m, []) is null)
             {
                 issues.Add(Sliver(room, rects[i], Center(rects[i])));
                 continue;
@@ -153,7 +178,7 @@ public static class SprinklerLayouter
             active.Add(i);
         }
 
-        var ySpans = active.Select(i => YSpan(rects[i], wall)).Distinct().ToList();
+        var ySpans = active.Select(i => YBeamSpan(rects[i])).Distinct().ToList();
         var ys = ySpans.Count == 0 ? [] : SolveAvoiding(ySpans, s, m, columns.Select(c => (c.Box.Y0 - Tol, c.Box.Y1 + Tol)).ToList());
         if (ys is null)
         {
@@ -161,6 +186,7 @@ public static class SprinklerLayouter
             return new RoomLayout([], [], issues);
         }
 
+        issues.AddRange(beamIssues.DistinctBy(x => x.Location));
         var placed = new List<(PlanPoint Local, Rect Rect)>();
         var zones = new List<Rect>();
         foreach (var i in active)
@@ -207,7 +233,7 @@ public static class SprinklerLayouter
                 continue;
             }
 
-            if (!skippedZones.Any(z => z.Outline.Contains(world)))
+            if (!skippedZones.Any(z => z.Contains(world)))
             {
                 kept.Add((local, rect, world));
             }
@@ -248,9 +274,35 @@ public static class SprinklerLayouter
 
     private static AxisSpan YSpan(Rect r, double wall) => new(r.Y0, r.Y1, wall, wall, LineSolver.StepMm, LineSolver.StepMm);
 
+    // Сторона зоны на грани балки: до грани не дальше предела 6.2.21 и шаг через балку не больше нормы —
+    // предел min(предел у стены, (s − ширина балки) / 2), так выполняются оба прочтения В-17.
+    private static AxisSpan BeamFaces(AxisSpan span, Func<Box, double?> loWidth, Func<Box, double?> hiWidth, List<Box> beams, double s, List<Issue> issues, PlanPoint at)
+    {
+        double Limit(double current, double? width)
+        {
+            if (width is not { } w)
+            {
+                return current;
+            }
+
+            var across = (s - w) / 2;
+            if (across < LineSolver.StepMm)
+            {
+                issues.Add(new Issue("layout.beamWide", IssueLevel.Warning, $"Балка шириной {w:0} мм не меньше наибольшего шага: шаг через балку по норме не выдержать — у граней принят предел до стены.", Clause: "6.2.10", Location: at));
+                return current;
+            }
+
+            return Math.Min(current, across);
+        }
+
+        var lo = beams.Select(loWidth).FirstOrDefault(w => w is not null);
+        var hi = beams.Select(hiWidth).FirstOrDefault(w => w is not null);
+        return span with { EndLimitLo = Limit(span.EndLimitLo, lo), EndLimitHi = Limit(span.EndLimitHi, hi) };
+    }
+
     // Сторона зоны: стена (доля длины на границе ≈ 1) — предел 6.2.21; разрез (≈ 0) — полшага;
     // частично стена — меньшее из двух. У разреза линия не ближе половины наименьшего шага: через разрез не ближе нормы.
-    private static AxisSpan XSpan(Rect r, List<(PlanPoint A, PlanPoint B)> boundary, double wall, double s, double m)
+    private static AxisSpan XSpan(Rect r, List<(PlanPoint A, PlanPoint B)> boundary, double wall, double s, double m, List<Box> beams, List<Issue> issues)
     {
         (double Limit, double MinOffset) Side(double x)
         {
@@ -262,7 +314,15 @@ public static class SprinklerLayouter
 
         var (loLimit, loMin) = Side(r.X0);
         var (hiLimit, hiMin) = Side(r.X1);
-        return new AxisSpan(r.X0, r.X1, loLimit, hiLimit, loMin, hiMin);
+        bool Overlaps(Box b) => Math.Min(r.Y1, b.Y1) - Math.Max(r.Y0, b.Y0) > Tol;
+        return BeamFaces(
+            new AxisSpan(r.X0, r.X1, loLimit, hiLimit, loMin, hiMin),
+            b => Math.Abs(b.X1 - r.X0) <= Tol && Overlaps(b) ? b.X1 - b.X0 : null,
+            b => Math.Abs(b.X0 - r.X1) <= Tol && Overlaps(b) ? b.X1 - b.X0 : null,
+            beams,
+            s,
+            issues,
+            new PlanPoint((r.X0 + r.X1) / 2, (r.Y0 + r.Y1) / 2));
     }
 
     // Предел соседа у стороны узкой зоны шириной width, если дальняя сторона зоны — стена (до неё не дальше предела 6.2.21),
@@ -280,26 +340,55 @@ public static class SprinklerLayouter
         {
             yield return new Issue(
                 "layout.beamFields",
-                IssueLevel.Error,
-                $"Балка высотой {beam.Height} больше {rules.BeamHeightLimit}: оросители размещаются между балками. Раскладка по полям между балками ещё не реализована — оросители расставлены без учёта этой балки.",
+                IssueLevel.Info,
+                $"Балка высотой {beam.Height} больше {rules.BeamHeightLimit}: оросители размещены в полях между балками: до граней балки не дальше предела п. 6.2.21 и шаг через балку не больше нормы (выполнены оба прочтения В-17).",
                 beam.Id,
                 "6.2.10",
                 beam.Outline.Centroid);
         }
+    }
 
+    /// <summary>
+    /// 6.2.14: под коробами (площадками, оборудованием) шире предела на высоте не менее предела от пола — дополнительные
+    /// оросители. Раскладка по контуру короба по тем же правилам, что под перекрытием: шаг не больше нормы, до краёв —
+    /// не дальше предела 6.2.21. «Препятствует орошению» принимается для всех таких коробов (строже).
+    /// </summary>
+    private static IEnumerable<PlacedSprinkler> UnderDucts(FloorPlan plan, LayoutRules rules, Length? floor, List<Issue> issues)
+    {
         foreach (var duct in plan.Ducts)
         {
             var longest = duct.Outline.Edges().Max(e => Dist(e.A, e.B));
             var width = longest > 0 ? duct.Outline.AreaMm2 / longest : 0;
-            if (width > rules.DuctMinWidth.Millimeters + 1e-6)
+            if (width <= rules.DuctMinWidth.Millimeters + 1e-6)
             {
-                yield return new Issue(
-                    "layout.duct",
-                    IssueLevel.Warning,
-                    $"Короб шириной {Length.FromMillimeters(width)} больше {rules.DuctMinWidth}: если он препятствует орошению и расположен на высоте по п. 6.2.14, под ним нужны дополнительные оросители. Автоматически не проверяется.",
-                    duct.Id,
-                    "6.2.14",
-                    duct.Outline.Centroid);
+                continue;
+            }
+
+            if (floor is { } f && rules.DuctMinHeightAboveFloor is { } h && duct.Bottom.Meters - f.Meters < h.Meters - 1e-9)
+            {
+                continue;
+            }
+
+            var room = plan.Rooms.FirstOrDefault(r => r.Contour.Contains(duct.Outline.Centroid));
+            var under = new Room(duct.Id, "под коробом", duct.Outline);
+            var empty = new FloorPlan([under], [], [], [], [], []);
+            var vertical = LayoutRoom(under, empty, rules, CutDirection.Vertical);
+            var horizontal = LayoutRoom(under, empty, rules, CutDirection.Horizontal);
+            var best = Better(horizontal, vertical) ? horizontal : vertical;
+            issues.AddRange(best.Issues);
+            var roomId = room?.Id ?? duct.Id;
+            var placed = best.Sprinklers.Select((s, k) => new PlacedSprinkler($"{roomId}.D{duct.Id}.{k + 1}", roomId, s.Location, duct.Id)).ToList();
+            var note = floor is null ? " Отметка пола не задана — условие «не менее … от пола» принято выполненным." : "";
+            issues.Add(new Issue(
+                "layout.ductSprinklers",
+                IssueLevel.Info,
+                $"Короб шириной {Length.FromMillimeters(width)} больше {rules.DuctMinWidth}: под ним дополнительно {placed.Count} оросит. (принято, что короб препятствует орошению).{note}",
+                duct.Id,
+                "6.2.14",
+                duct.Outline.Centroid));
+            foreach (var s in placed)
+            {
+                yield return s;
             }
         }
     }
