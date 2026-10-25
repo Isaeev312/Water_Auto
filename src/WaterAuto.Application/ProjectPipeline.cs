@@ -173,10 +173,24 @@ public static class ProjectPipeline
             SteelDensity(normsDir),
             pipeSizes);
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
+        // Расстановка ПК (п. 7.14): радиус — из проекта или длина рукава + радиус компактной струи (В-22).
+        var hydrantPoints = new List<PlanPoint>();
+        Length? hydrantReach = null;
+        if (hydrants is not null && design.Hydrants is { Place: true } hp)
+        {
+            hydrantReach = new Length(hp.Reach ?? (hp.HoseLength + hydrants.Demand.TableJetHeight.Meters));
+            foreach (var room in plan.Rooms)
+            {
+                var placed = HydrantPlacement.Place(plan, room, hydrantReach.Value, hydrants.Demand.Jets);
+                hydrantPoints.AddRange(placed.Points);
+                issues.AddRange(placed.Issues);
+            }
+        }
+
         var hydrantSet = HydrantEquipment.PathFor(normsDir);
         if (hydrants is not null && File.Exists(hydrantSet))
         {
-            takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings)] };
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count))] };
         }
 
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
@@ -199,8 +213,8 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions));
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions));
+        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints));
+        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation)));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов")));
 
@@ -230,7 +244,9 @@ public static class ProjectPipeline
                 $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части (отводы, тройники, переходы) — по {design.FittingStandard}.",
                 supports,
                 temperature.Choice,
-                design.MaxAmbientTemperature),
+                design.MaxAmbientTemperature,
+                hydrantPoints.Count,
+                hydrantReach),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));

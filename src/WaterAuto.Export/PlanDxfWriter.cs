@@ -48,16 +48,17 @@ public static class PlanDxfWriter
     public const string SummaryLayer = "ПТ_РАСЧЁТ";
     public const string SupportLayer = "ПТ_КРЕПЛЕНИЯ";
     public const string DimensionLayer = "ПТ_ПРИВЯЗКИ";
+    public const string HydrantLayer = "ПТ_ПК";
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
     /// <param name="basePath">Исходный чертёж этажа: план труб рисуется поверх него в одном файле; null — только слои программы.</param>
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null)
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null)
     {
         var source = basePath is null ? null : DxfDrawing.Read(basePath);
-        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source, supports, dimensions));
+        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source, supports, dimensions, hydrants));
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
@@ -164,6 +165,24 @@ public static class PlanDxfWriter
             {
                 doc.Entities.Add(new Line(new XYZ(s.At.XMm - d, s.At.YMm - d, 0), new XYZ(s.At.XMm + d, s.At.YMm + d, 0)) { Layer = supportLayer });
                 doc.Entities.Add(new Line(new XYZ(s.At.XMm - d, s.At.YMm + d, 0), new XYZ(s.At.XMm + d, s.At.YMm - d, 0)) { Layer = supportLayer });
+            }
+        }
+
+        // Пожарные краны: кружок и подпись ПК-n (слой ПТ_ПК).
+        if (hydrants is { Count: > 0 })
+        {
+            var hydrantLayer = DxfDrawing.AddLayer(doc, HydrantLayer, 1);
+            for (var k = 0; k < hydrants.Count; k++)
+            {
+                var h = hydrants[k];
+                doc.Entities.Add(new Circle(new XYZ(h.XMm, h.YMm, 0), style.SprinklerRadiusMm * 2.5) { Layer = hydrantLayer });
+                doc.Entities.Add(new TextEntity
+                {
+                    Value = $"ПК-{k + 1}",
+                    InsertPoint = new XYZ(h.XMm + (style.SprinklerRadiusMm * 3), h.YMm + (style.SprinklerRadiusMm * 3), 0),
+                    Height = style.TextHeightMm,
+                    Layer = hydrantLayer,
+                });
             }
         }
 

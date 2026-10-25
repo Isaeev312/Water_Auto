@@ -183,6 +183,12 @@ public sealed class ProjectHydrants
 
     /// <summary>Зал с массовым пребыванием людей при сгораемой отделке — на одну струю больше (п. 7.7).</summary>
     public bool ExtraJet { get; init; }
+
+    /// <summary>Радиус действия ПК для расстановки, м; null — длина рукава + радиус компактной струи (В-22).</summary>
+    public double? Reach { get; init; }
+
+    /// <summary>Расставлять краны на плане (п. 7.14); false — комплект в спецификации на один кран.</summary>
+    public bool Place { get; init; } = true;
 }
 
 /// <summary>Титульный лист записки.</summary>
