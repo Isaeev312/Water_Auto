@@ -108,6 +108,8 @@ public static class PlanDxfWriter
             }
         }
 
+        // Информационные замечания на план не выносятся (остаются в issues.txt), чтобы не загромождать лист.
+        issues = issues.Where(i => i.Level != IssueLevel.Info).ToList();
         foreach (var issue in issues.Where(i => i.Location is not null))
         {
             var at = issue.Location!.Value;

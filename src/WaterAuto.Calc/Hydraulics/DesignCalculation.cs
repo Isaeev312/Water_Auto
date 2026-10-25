@@ -38,7 +38,11 @@ public sealed record HydrantResult(
     Pressure PipeLoss,
     Pressure Elevation,
     bool Raised,
-    Pressure DictatingPressureActual);
+    Pressure DictatingPressureActual)
+{
+    /// <summary>Давление у клапана ПК при фактическом расходе: (q / K)².</summary>
+    public Pressure ValvePressure => new(Math.Pow(JetFlowActual.LitersPerSecond / K, 2));
+}
 
 /// <summary>Кандидат в диктующие: ороситель в конце ветви и давление насоса при зоне вокруг него.</summary>
 public sealed record ZoneCandidate(string SprinklerId, Pressure PumpPressure);
@@ -194,6 +198,11 @@ public static class DesignCalculation
         if (hydrants is { } hi)
         {
             (solution, hydrant) = WithHydrants(hi, solution, p => Solve(current, p), p1, k, settings, series, issues);
+            var limit = norms.Find("snkr4004.p7_10_11.pressure")!.Values["diaphragmAbove"]!.Value;
+            if (hydrant is { } hr && hr.ValvePressure.Mpa > limit + 1e-9)
+            {
+                issues.Add(new Issue("vpv.diaphragm", IssueLevel.Warning, $"Давление у пожарного крана {hr.ValvePressure} больше {limit} МПа — между краном и соединительной головкой предусмотреть диафрагму или регулятор давления; расход ПК в расчёте принят без диафрагмы (в запас).", Clause: "7.11"));
+            }
         }
 
         issues.AddRange(solution.Issues);

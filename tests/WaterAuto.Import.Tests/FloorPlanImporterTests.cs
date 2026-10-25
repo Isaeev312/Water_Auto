@@ -67,7 +67,7 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
-    public void Column_entirely_outside_is_an_error_and_partly_outside_a_warning()
+    public void Column_entirely_outside_is_an_error_and_partly_outside_an_info()
     {
         var outside = DrawingBuilder.ValidFloor();
         outside.Rect(FloorPlanImporter.ColumnLayer, 40000, 40000, 40400, 40400);
@@ -78,7 +78,7 @@ public class FloorPlanImporterTests
         var inWall = DrawingBuilder.ValidFloor();
         inWall.Rect(FloorPlanImporter.ColumnLayer, -200, 9800, 200, 10200);
         var r = ImportDxf(inWall);
-        Single(r, "import.partlyOutside").Level.ShouldBe(IssueLevel.Warning);
+        Single(r, "import.partlyOutside").Level.ShouldBe(IssueLevel.Info);
         r.Plan.ShouldNotBeNull();
     }
 
