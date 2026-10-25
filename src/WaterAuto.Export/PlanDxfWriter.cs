@@ -23,6 +23,12 @@ public sealed record PlanCalcSummary(
     string ZoneLabel,
     double ZoneMarginMm);
 
+/// <summary>
+/// Размерная цепочка привязок: точки по одной прямой (стена, оросители, стена); размерная линия — со смещением Offset, мм,
+/// влево от направления от первой точки к последней (отрицательное — вправо).
+/// </summary>
+public sealed record PlanDimensionChain(IReadOnlyList<PlanPoint> Points, double Offset);
+
 /// <summary>Выноска у точки ввода: строки текста (DN, отметка, ссылка на раздел НС).</summary>
 public sealed record PlanInletNote(PlanPoint At, IReadOnlyList<string> Lines);
 
@@ -41,16 +47,17 @@ public static class PlanDxfWriter
     public const string ZoneLayer = "ПТ_ДИКТ_ЗОНА";
     public const string SummaryLayer = "ПТ_РАСЧЁТ";
     public const string SupportLayer = "ПТ_КРЕПЛЕНИЯ";
+    public const string DimensionLayer = "ПТ_ПРИВЯЗКИ";
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
     /// <param name="basePath">Исходный чертёж этажа: план труб рисуется поверх него в одном файле; null — только слои программы.</param>
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null)
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null)
     {
         var source = basePath is null ? null : DxfDrawing.Read(basePath);
-        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source, supports));
+        DxfDrawing.Save(path, Build(layout, routes, issues, style ?? new PlanDxfStyle(), summary, inlets, source, supports, dimensions));
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
@@ -160,6 +167,15 @@ public static class PlanDxfWriter
             }
         }
 
+        if (dimensions is { Count: > 0 })
+        {
+            var dimLayer = DxfDrawing.AddLayer(doc, DimensionLayer, 3);
+            foreach (var chain in dimensions.Where(c => c.Points.Count >= 2))
+            {
+                AddChain(doc, chain, style, dimLayer);
+            }
+        }
+
         // Выноска у ввода: наклонная линия и полка, над полкой — текст (DN, отметка, ссылка на раздел НС).
         foreach (var note in inlets ?? [])
         {
@@ -178,6 +194,58 @@ public static class PlanDxfWriter
         }
 
         return doc;
+    }
+
+    // Размерная цепочка по ГОСТ 2.307: выносные линии, размерная линия с засечками под 45°, размер в мм над линией.
+    private static void AddChain(CadDocument doc, PlanDimensionChain chain, PlanDxfStyle style, Layer layer)
+    {
+        var a = chain.Points[0];
+        var b = chain.Points[^1];
+        var length = Math.Sqrt(((b.XMm - a.XMm) * (b.XMm - a.XMm)) + ((b.YMm - a.YMm) * (b.YMm - a.YMm)));
+        if (length < 1)
+        {
+            return;
+        }
+
+        double ux = (b.XMm - a.XMm) / length, uy = (b.YMm - a.YMm) / length;
+        double nx = -uy, ny = ux;
+        var h = style.TextHeightMm;
+        var over = h * 0.5;
+        var tick = h * 0.5;
+        XYZ On(PlanPoint p, double shift) => new(p.XMm + (nx * shift), p.YMm + (ny * shift), 0);
+        var sign = Math.Sign(chain.Offset) is var s && s != 0 ? s : 1;
+
+        doc.Entities.Add(new Line(On(a, chain.Offset), On(b, chain.Offset)) { Layer = layer });
+        foreach (var p in chain.Points)
+        {
+            doc.Entities.Add(new Line(On(p, sign * h * 0.25), On(p, chain.Offset + (sign * over))) { Layer = layer });
+            var c = On(p, chain.Offset);
+            doc.Entities.Add(new Line(new XYZ(c.X - ((ux + nx) * tick), c.Y - ((uy + ny) * tick), 0), new XYZ(c.X + ((ux + nx) * tick), c.Y + ((uy + ny) * tick), 0)) { Layer = layer });
+        }
+
+        var angle = Math.Atan2(uy, ux);
+        if (angle > Math.PI / 2 || angle <= -Math.PI / 2)
+        {
+            angle += Math.PI;
+        }
+
+        for (var k = 1; k < chain.Points.Count; k++)
+        {
+            var (p, q) = (chain.Points[k - 1], chain.Points[k]);
+            var span = Math.Sqrt(((q.XMm - p.XMm) * (q.XMm - p.XMm)) + ((q.YMm - p.YMm) * (q.YMm - p.YMm)));
+            var mid = new PlanPoint((p.XMm + q.XMm) / 2, (p.YMm + q.YMm) / 2);
+            var at = On(mid, chain.Offset + (h * 0.3));
+            doc.Entities.Add(new TextEntity
+            {
+                Value = Math.Round(span).ToString("0", System.Globalization.CultureInfo.InvariantCulture),
+                InsertPoint = at,
+                AlignmentPoint = at,
+                HorizontalAlignment = TextHorizontalAlignment.Center,
+                Height = h,
+                Rotation = angle,
+                Layer = layer,
+            });
+        }
     }
 
     // Диктующая зона: контур по крайним оросителям с отступом, кружки у оросителей зоны и подпись;

@@ -148,6 +148,17 @@ public class PlanDxfWriterTests
     }
 
     [Fact]
+    public void Dimension_chain_has_a_text_per_span_with_its_length()
+    {
+        // Стена (0) → ороситель (2000) → ороситель (5000) → стена (6000), размерная линия на 600 мм ниже.
+        var chain = new PlanDimensionChain([new(0, 1500), new(2000, 1500), new(5000, 1500), new(6000, 1500)], -600);
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), dimensions: [chain]);
+        var texts = doc.Entities.OfType<TextEntity>().Where(x => x.Layer.Name == PlanDxfWriter.DimensionLayer).Select(x => x.Value).ToList();
+        texts.ShouldBe(["2000", "3000", "1000"]);
+        doc.Entities.OfType<Line>().Count(l => l.Layer.Name == PlanDxfWriter.DimensionLayer).ShouldBeGreaterThan(4);
+    }
+
+    [Fact]
     public void Pipes_are_0_40_mm_and_texts_use_GOST_Common()
     {
         var doc = WriteAndRead();
