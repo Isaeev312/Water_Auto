@@ -87,7 +87,7 @@ public static class ProjectPipeline
         }
 
         var settings = new DesignSettings(
-            design.PipeStandard,
+            design.PipeSeriesStandard,
             new KFactor(design.SprinklerK),
             new Length(design.DictatingAboveAxis),
             new Length(design.SupplyLength),
@@ -120,7 +120,7 @@ public static class ProjectPipeline
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         var routes = designs.Select(d => d.Route).ToList();
 
-        var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeStandard, new SprinklerSpec(
+        var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {design.SprinklerK:0.###}"),
             design.SprinklerModel));
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));

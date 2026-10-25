@@ -68,7 +68,18 @@ public sealed record ProjectDesign
     /// <summary>K оросителя, л/(с·МПа^0,5) — по технической документации изделия.</summary>
     public double SprinklerK { get; init; }
 
-    public string PipeStandard { get; init; } = "ГОСТ 3262";
+    public string PipeStandard { get; init; } = "ГОСТ 3262-75";
+
+    /// <summary>Стандарт труб, начиная с <see cref="PipeStandardLargeFromDn"/>; пусто — все трубы по <see cref="PipeStandard"/>.</summary>
+    public string PipeStandardLarge { get; init; } = "ГОСТ 10704-91";
+
+    public int PipeStandardLargeFromDn { get; init; } = 50;
+
+    /// <summary>Сортамент для расчёта и спецификации.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string PipeSeriesStandard => PipeStandardLarge.Length > 0
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn)
+        : PipeStandard;
 
     /// <summary>Высота помещения, м — для табл. 6.3 и примечания 3 к табл. 6.2; null — до 10 м.</summary>
     public double? RoomHeight { get; init; }

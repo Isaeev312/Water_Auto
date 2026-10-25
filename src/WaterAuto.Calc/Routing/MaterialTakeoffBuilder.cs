@@ -91,7 +91,7 @@ public static class MaterialTakeoffBuilder
         items.AddRange(pipes.OrderBy(p => p.Key).Select(p => new TakeoffItem(
             TakeoffGroup.Pipes,
             string.Create(Ru, $"Трубы {p.Value.Pipe.PipeType} DN{p.Key}, Ø{p.Value.Pipe.OuterDiameterMm:0.##}×{p.Value.Pipe.WallMm:0.##} мм"),
-            pipeStandard,
+            p.Value.Pipe.Standard,
             Math.Round(p.Value.Meters, 2),
             "м")));
         items.AddRange(fittings
