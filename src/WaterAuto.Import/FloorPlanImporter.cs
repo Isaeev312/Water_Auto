@@ -434,7 +434,7 @@ public static class FloorPlanImporter
             }
             else
             {
-                issues.Add(new Issue("import.partlyOutside", IssueLevel.Warning, $"{kind} частично выходит за контур помещения — будет обрезана по контуру.", id, null, outline.Centroid));
+                issues.Add(new Issue("import.partlyOutside", IssueLevel.Info, $"{kind} частично выходит за контур помещения — будет обрезана по контуру.", id, null, outline.Centroid));
             }
         }
     }

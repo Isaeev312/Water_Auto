@@ -69,6 +69,10 @@ public class DesignCalculationTests
         r.InletNodePressure.Mpa.ShouldBe(h.RequiredNodePressure.Mpa, 1e-6);
         r.SprinklerFlows[r.DictatingSprinklerId].LitersPerSecond.ShouldBeGreaterThan(r.DictatingFlow.LitersPerSecond);
         (h.DictatingPressureActual.Mpa + r.Path.Sum(x => x.LossWithLocal.Mpa)).ShouldBe(r.InletNodePressure.Mpa, 1e-6);
+
+        // Напор у ПК 40,6 м = 0,406 МПа > 0,4 МПа — диафрагма или регулятор давления (примечание к 7.11).
+        h.ValvePressure.Mpa.ShouldBe(0.406, 1e-6);
+        r.Issues.ShouldContain(i => i.Code == "vpv.diaphragm" && i.Clause == "7.11");
     }
 
     [Fact]
