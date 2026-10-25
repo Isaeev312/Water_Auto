@@ -25,7 +25,8 @@ public static class SupportEquipment
         string Thread(int dn) => threads.FirstOrDefault(t => dn <= t.DnMax).Thread ?? threads[^1].Thread;
         var rod = rodLengthMm.ToString("0", CultureInfo.InvariantCulture);
         var items = new Dictionary<(string Name, string? Designation, string Unit), double>();
-        foreach (var g in supports.Points.GroupBy(p => p.Dn))
+        // Крепёж группируется по резьбе (М8, М10, М12), внутри — по DN хомута.
+        foreach (var g in supports.Points.GroupBy(p => p.Dn).OrderBy(g => threads.FindIndex(t => g.Key <= t.DnMax) is var k and >= 0 ? k : threads.Count).ThenBy(g => g.Key))
         {
             var thread = Thread(g.Key);
             foreach (var i in root.GetProperty("items").EnumerateArray())

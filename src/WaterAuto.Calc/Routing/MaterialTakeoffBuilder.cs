@@ -4,7 +4,7 @@ using WaterAuto.Core;
 namespace WaterAuto.Calc.Routing;
 
 /// <summary>Ороситель для спецификации: наименование и марка из каталога или от пользователя.</summary>
-public sealed record SprinklerSpec(string Name, string Designation);
+public sealed record SprinklerSpec(string Name, string Designation, string? Supplier = null);
 
 /// <summary>
 /// Ведомость материалов по трассе: оросители и запас (п. 6.1.15), трубы по DN сортамента с длинами,
@@ -28,15 +28,16 @@ public static class MaterialTakeoffBuilder
     }
 
     /// <param name="fittingStandard">Стандарт приварных деталей (отводы, тройники, переходы), например ГОСТ 17375-2001; null — не указывается.</param>
-    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, string? fittingStandard = null)
+    /// <param name="steelDensity">Плотность стали для теоретической массы 1 м трубы, т/м³; null — масса не указывается.</param>
+    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, string? fittingStandard = null, double? steelDensity = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(sprinkler);
         var series = new PipeSeries(norms, pipeStandard);
         var items = new List<TakeoffItem>
         {
-            new(TakeoffGroup.Sprinklers, sprinkler.Name, sprinkler.Designation, installedSprinklers, "шт."),
-            new(TakeoffGroup.Sprinklers, $"{sprinkler.Name} (запас)", sprinkler.Designation, SpareSprinklers(norms, installedSprinklers), "шт.", "запас по п. 6.1.15"),
+            new(TakeoffGroup.Sprinklers, sprinkler.Name, sprinkler.Designation, installedSprinklers, "шт.", Supplier: sprinkler.Supplier),
+            new(TakeoffGroup.Sprinklers, $"{sprinkler.Name} (запас)", sprinkler.Designation, SpareSprinklers(norms, installedSprinklers), "шт.", "запас по п. 6.1.15 СП 485", Supplier: sprinkler.Supplier),
         };
 
         var pipes = new Dictionary<int, (SeriesPipe Pipe, double Meters)>();
@@ -91,12 +92,16 @@ public static class MaterialTakeoffBuilder
             }
         }
 
+        // Теоретическая масса 1 м: m = π·(D − s)·s·ρ / 1000, кг/м (D, s — мм, ρ — т/м³).
+        double? Mass(SeriesPipe pipe) => steelDensity is { } rho ? Math.Round(Math.PI * (pipe.OuterDiameterMm - pipe.WallMm) * pipe.WallMm * rho / 1000, 2) : null;
         items.AddRange(pipes.OrderBy(p => p.Key).Select(p => new TakeoffItem(
             TakeoffGroup.Pipes,
             string.Create(Ru, $"Трубы {p.Value.Pipe.PipeType} DN{p.Key}, Ø{p.Value.Pipe.OuterDiameterMm:0.##}×{p.Value.Pipe.WallMm:0.##} мм"),
             p.Value.Pipe.Standard,
             Math.Round(p.Value.Meters, 2),
-            "м")));
+            "м",
+            Mass(p.Value.Pipe) is { } m ? string.Create(Ru, $"общая масса {m * p.Value.Meters:0.#} кг") : null,
+            Mass(p.Value.Pipe))));
         items.AddRange(fittings
             .OrderBy(f => FittingOrder(f.Key))
             .ThenBy(f => Diameters(f.Key).First)

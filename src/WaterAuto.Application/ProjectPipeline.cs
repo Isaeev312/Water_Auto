@@ -124,6 +124,7 @@ public static class ProjectPipeline
         SprinklerSelectionResult? selection = null;
         var sprinklerK = design.SprinklerK;
         var sprinklerModel = design.SprinklerModel;
+        string? sprinklerSupplier = null;
         if (sprinklerK > 0)
         {
             designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
@@ -142,6 +143,7 @@ public static class ProjectPipeline
             var entry = catalog.First(c => c.Candidate.Id == chosen.Id);
             sprinklerK = chosen.K;
             sprinklerModel = entry.Designation.Length > 0 ? $"{chosen.Model} ({entry.Designation})" : chosen.Model;
+            sprinklerSupplier = chosen.Maker;
             settings = settings with { SprinklerK = new KFactor(chosen.K) };
             designs = [.. chosenDesigns];
             issues.Add(new Issue(
@@ -156,8 +158,10 @@ public static class ProjectPipeline
 
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}"),
-            sprinklerModel),
-            design.FittingStandard.Length > 0 ? design.FittingStandard : null);
+            sprinklerModel,
+            sprinklerSupplier),
+            design.FittingStandard.Length > 0 ? design.FittingStandard : null,
+            SteelDensity(normsDir));
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
         var hydrantSet = HydrantEquipment.PathFor(normsDir);
         if (hydrants is not null && File.Exists(hydrantSet))
@@ -219,6 +223,19 @@ public static class ProjectPipeline
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note));
         files.Add(WriteIssues(outDir, issues));
         return new PipelineResult(true, files, issues, worst);
+    }
+
+    // Плотность стали из data/catalog/materials.json — для теоретической массы труб в спецификации.
+    private static double? SteelDensity(string normsDir)
+    {
+        var path = Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, "materials.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.GetProperty("steelDensity").GetDouble();
     }
 
     // Табличка расчёта и диктующая зона на плане (docs/foreign_drawings_ideas.md, приёмы 1 и 2).
