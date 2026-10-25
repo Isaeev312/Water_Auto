@@ -76,6 +76,10 @@ public static class ProjectPipeline
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
         var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero);
         issues.AddRange(routing.Issues);
+        if (design.MaxSprinklersPerBranch is { } maxBranch)
+        {
+            issues.AddRange(routing.Routes.SelectMany(r => BranchLimit.Check(r, maxBranch)));
+        }
         if (routing.Routes.Count == 0)
         {
             issues.Add(new Issue("project.noRoute", IssueLevel.Error, "Ни одно помещение не удалось соединить трубопроводом с вводом — расчёт не выполняется."));
