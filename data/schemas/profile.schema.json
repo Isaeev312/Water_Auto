@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/profile.schema.json",
+  "title": "Профиль заказчика: требования строже норм или практика (ARCHITECTURE §9.1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "customer", "doc", "edition", "source", "verified", "records"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "customer": { "type": "string" },
+    "doc": { "type": "string", "minLength": 1 },
+    "edition": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "description": "Где лежит документ и как нумеруются страницы." },
+    "basis": { "type": "string", "description": "На какие нормы опирается документ заказчика." },
+    "verified": { "type": "boolean" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "records": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/record" } }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "page", "kind", "statement"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[A-Za-z0-9_]+)+$" },
+        "page": { "type": "string", "minLength": 1, "description": "Страница документа заказчика." },
+        "kind": {
+          "enum": ["requirement", "recommendation", "practice", "info"],
+          "description": "requirement — обязательно для заказчика; recommendation — «рекомендуется»; practice — практика; info — справочно, программа выдаёт замечание."
+        },
+        "statement": { "type": "string", "minLength": 1, "description": "Требование своими словами." },
+        "values": { "type": "object", "additionalProperties": { "type": ["number", "null"] } },
+        "units": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "attrs": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "boolean", "array"] }
+        },
+        "tightens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["norm", "key", "bound"],
+          "description": "Какое нормативное значение профиль ужесточает. bound: max — значение профиля не больше нормы; min — не меньше.",
+          "properties": {
+            "norm": { "type": "string" },
+            "key": { "type": "string" },
+            "bound": { "enum": ["max", "min"] }
+          }
+        },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
