@@ -44,7 +44,7 @@ dotnet test
 dotnet run --project src/WaterAuto.App
 ```
 
-Расчёт проекта по чертежу из командной строки: заготовка файла проекта, затем полный выпуск — план (`plan.dwg`, `plan.dxf`), аксонометрия (`axonometry.dxf`), спецификация (`specification.xlsx`), пояснительная записка (`note.docx`) и замечания (`issues.txt`):
+Расчёт проекта по чертежу из командной строки: заготовка файла проекта, затем полный выпуск — план (`plan.dwg`, `plan.dxf`), аксонометрия (`axonometry.dxf`), спецификация (`specification.docx` — A3 в рамке с основной надписью по формам 5/6 ГОСТ Р 21.101, `specification.xlsx` — для правки), пояснительная записка (`note.docx`), лист «Общие данные» (`general_data.docx`, рамка и основная надпись по форме 3) и замечания (`issues.txt`). Данные основной надписи — раздел `title` проекта (`code`, `stage`, `building`, `signatures`):
 
 ```bash
 dotnet run --project src/WaterAuto.Cli -- new objects/parking.waproj --drawing objects/floor-1.dwg

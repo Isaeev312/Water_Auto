@@ -12,7 +12,7 @@ public sealed record SpecificationHeader(string Title);
 /// обозначения документов — с годом утверждения; масса единицы, кг, где она известна (трубы — теоретическая масса 1 м);
 /// в конце — итог массы позиций с известной массой. Шрифт — GOST Common (ГОСТ 2.304, тип А).
 /// Позиции нумеруются заново в каждом разделе; строки — по 8 мм (длинный текст — кратно 8 мм).
-/// Внизу листа оставлено место под основную надпись (ГОСТ Р 21.101), её и рамку проектировщик добавляет при выпуске.
+/// Рабочий файл для правки; для выпуска — <see cref="SpecificationDocx"/> в рамке с основной надписью. Внизу оставлено место под основную надпись.
 /// </summary>
 public static class SpecificationXlsx
 {
@@ -42,9 +42,9 @@ public static class SpecificationXlsx
     ];
 
     // Ширины граф формы 1, мм; в Excel ширина — в символах (≈ 1,9 мм на символ шрифта по умолчанию).
-    private static readonly double[] WidthsMm = [20, 130, 60, 35, 45, 20, 20, 25, 40];
+    internal static readonly double[] WidthsMm = [20, 130, 60, 35, 45, 20, 20, 25, 40];
 
-    private static readonly (TakeoffGroup Group, string Title)[] Sections =
+    internal static readonly (TakeoffGroup Group, string Title)[] Sections =
     [
         (TakeoffGroup.Sprinklers, "Оросители"),
         (TakeoffGroup.Pipes, "Трубопроводы"),
