@@ -13,14 +13,17 @@ public sealed record ResolvedCharacteristic(PipeCharacteristic Value, Characteri
 
 /// <summary>
 /// Kт стальной трубы: строка табл. Б.2 по стандарту, наружному диаметру и стенке; если строки нет —
-/// формула Б.8 Kт = 10⁻⁸·ψ·Ø^θ по внутреннему диаметру с коэффициентами табл. Б.3.
+/// формула Б.8 Kт = 10⁻⁸·ψ·Ø^θ по внутреннему диаметру с коэффициентами табл. Б.3 — только в её диапазоне DN.
+/// Вне таблицы и вне диапазона формулы — null: Kт задаётся вручную или по данным производителя.
 /// Правило выбора — ARCHITECTURE §9.2, подтверждение — open_questions.md В-04.
 /// </summary>
 public static class PipeCharacteristics
 {
-    public static ResolvedCharacteristic? Resolve(INormsProvider norms, string standard, double outerDiameterMm, double wallMm)
+    public static ResolvedCharacteristic? Resolve(INormsProvider norms, string standard, int dn, Length outerDiameter, Length wall)
     {
         ArgumentNullException.ThrowIfNull(norms);
+        var outerDiameterMm = outerDiameter.Millimeters;
+        var wallMm = wall.Millimeters;
         foreach (var r in norms.ByClause("табл. Б.2"))
         {
             if (r.Attributes.GetValueOrDefault("standard") == standard
@@ -33,7 +36,7 @@ public static class PipeCharacteristics
 
         var coefficients = norms.ByClause("табл. Б.3").FirstOrDefault(r =>
             r.Attributes.GetValueOrDefault("standard") == standard && r.Attributes.GetValueOrDefault("quantity") == "Kt");
-        if (coefficients is null)
+        if (coefficients is null || dn < coefficients.Values["dnMin"] || dn > coefficients.Values["dnMax"])
         {
             return null;
         }

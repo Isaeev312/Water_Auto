@@ -33,7 +33,7 @@ public class FormulaTests
     [Fact]
     public void Kt_comes_from_table_B2_when_the_row_exists()
     {
-        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 42.3, 2.8)!;
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
         kt.Source.ShouldBe(CharacteristicSource.TableB2);
         kt.Value.Kt.ShouldBe(16.5);
     }
@@ -42,7 +42,7 @@ public class FormulaTests
     public void Kt_comes_from_formula_B8_by_inner_diameter_otherwise()
     {
         // ВГП 42,3×4,0 нет в табл. Б.2; ГидРаВПТ даёт 11,238334 (Ø 34,3 мм, ψ = 5,363, θ = 5,42).
-        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 42.3, 4.0)!;
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!;
         kt.Source.ShouldBe(CharacteristicSource.FormulaB8);
         kt.Value.Kt.ShouldBe(11.238334, 1e-6);
     }
@@ -50,6 +50,13 @@ public class FormulaTests
     [Fact]
     public void Kt_is_null_for_unknown_standard()
     {
-        PipeCharacteristics.Resolve(Norms, "PPR", 40, 3.7).ShouldBeNull();
+        PipeCharacteristics.Resolve(Norms, "PPR", 32, Length.FromMillimeters(40), Length.FromMillimeters(3.7)).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Formula_B8_is_not_used_outside_its_DN_range()
+    {
+        // Табл. Б.3 — для DN 20–200; ВГП DN15 с нестандартной стенкой формулой не считается.
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 15, Length.FromMillimeters(21.3), Length.FromMillimeters(3.2)).ShouldBeNull();
     }
 }

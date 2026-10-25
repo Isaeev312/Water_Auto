@@ -29,6 +29,11 @@ public readonly record struct Flow(double LitersPerSecond)
 /// <summary>Длина или отметка, м.</summary>
 public readonly record struct Length(double Meters)
 {
+    /// <summary>Геометрия труб и чертежей — в мм (README §6).</summary>
+    public static Length FromMillimeters(double mm) => new(mm / 1000.0);
+
+    public double Millimeters => Meters * 1000.0;
+
     public override string ToString() => Meters.ToString("0.###", CultureInfo.InvariantCulture) + " м";
 }
 
@@ -41,7 +46,10 @@ public readonly record struct KFactor(double Value)
 /// <summary>Удельная характеристика трубопровода Kт, л²/с² (табл. Б.2): ΔP = Q²·L/(100·Kт).</summary>
 public readonly record struct PipeCharacteristic(double Kt)
 {
-    /// <summary>Через удельное сопротивление A, с²/л² (табл. Б.1): ΔP = A·Q²·L/100, т. е. Kт = 1/A.</summary>
+    /// <summary>
+    /// Через удельное сопротивление A, с²/л² (табл. Б.1): ΔP = A·Q²·L/100, т. е. Kт = 1/A.
+    /// A — табличный коэффициент той же природы, что Kт, поэтому передаётся числом.
+    /// </summary>
     public static PipeCharacteristic FromResistivity(double a) => new(1.0 / a);
 
     public override string ToString() => Kt.ToString("0.######", CultureInfo.InvariantCulture);

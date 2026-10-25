@@ -158,7 +158,12 @@ public class GoldenTests
     private static PipeCharacteristic Characteristic(JsonElement pipe) =>
         pipe.TryGetProperty("A", out var a)
             ? PipeCharacteristic.FromResistivity(a.GetDouble())
-            : PipeCharacteristics.Resolve(Norms, pipe.GetProperty("standard").GetString()!, pipe.GetProperty("od").GetDouble(), pipe.GetProperty("wall").GetDouble())!.Value;
+            : PipeCharacteristics.Resolve(
+                Norms,
+                pipe.GetProperty("standard").GetString()!,
+                pipe.GetProperty("dn").GetInt32(),
+                Length.FromMillimeters(pipe.GetProperty("od").GetDouble()),
+                Length.FromMillimeters(pipe.GetProperty("wall").GetDouble()))!.Value;
 
     // Величины после сети (узел управления, подводящие, насос) — по правилам compat источника.
     private static Dictionary<string, double> Derived(JsonElement project, TreeSolution solution, HydraulicNetwork network)

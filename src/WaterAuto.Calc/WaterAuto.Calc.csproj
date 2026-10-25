@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WaterAuto.Calc.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\WaterAuto.Core\WaterAuto.Core.csproj" />
   </ItemGroup>
 

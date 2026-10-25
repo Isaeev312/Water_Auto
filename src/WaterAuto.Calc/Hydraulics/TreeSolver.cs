@@ -145,7 +145,7 @@ public static class TreeSolver
     }
 
     /// <summary>r в МПа/(л/с)²: ΔP = r·Q², r = L/(100·Kт)·множитель (Б.6, Б.31).</summary>
-    public static double Resistance(NetworkPipe pipe)
+    internal static double Resistance(NetworkPipe pipe)
     {
         ArgumentNullException.ThrowIfNull(pipe);
         return pipe.Length.Meters / (100.0 * pipe.Characteristic.Kt) * pipe.LossMultiplier;

@@ -15,24 +15,66 @@
     {
       "id": "sp485.tB_3.A.gost3262",
       "clause": "табл. Б.3",
-      "values": { "alpha": 9.642, "beta": -5.3 },
-      "units": { "alpha": "—", "beta": "—" },
-      "attrs": { "standard": "ГОСТ 3262", "formula": "Б.7", "quantity": "A" },
+      "values": {
+        "alpha": 9.642,
+        "beta": -5.3,
+        "dnMin": 20,
+        "dnMax": 200
+      },
+      "units": {
+        "alpha": "—",
+        "beta": "—",
+        "dnMin": "DN",
+        "dnMax": "DN"
+      },
+      "attrs": {
+        "standard": "ГОСТ 3262",
+        "formula": "Б.7",
+        "quantity": "A"
+      },
       "note": "Как напечатано; см. footnotes.B7."
     },
     {
       "id": "sp485.tB_3.Kt.gost3262",
       "clause": "табл. Б.3",
-      "values": { "psi": 5.363, "theta": 5.42 },
-      "units": { "psi": "—", "theta": "—" },
-      "attrs": { "standard": "ГОСТ 3262", "formula": "Б.8", "quantity": "Kt" }
+      "values": {
+        "psi": 5.363,
+        "theta": 5.42,
+        "dnMin": 20,
+        "dnMax": 200
+      },
+      "units": {
+        "psi": "—",
+        "theta": "—",
+        "dnMin": "DN",
+        "dnMax": "DN"
+      },
+      "attrs": {
+        "standard": "ГОСТ 3262",
+        "formula": "Б.8",
+        "quantity": "Kt"
+      }
     },
     {
       "id": "sp485.tB_3.Kt.gost10704",
       "clause": "табл. Б.3",
-      "values": { "psi": 5.044, "theta": 5.434 },
-      "units": { "psi": "—", "theta": "—" },
-      "attrs": { "standard": "ГОСТ 10704", "formula": "Б.8", "quantity": "Kt" }
+      "values": {
+        "psi": 5.044,
+        "theta": 5.434,
+        "dnMin": 20,
+        "dnMax": 200
+      },
+      "units": {
+        "psi": "—",
+        "theta": "—",
+        "dnMin": "DN",
+        "dnMax": "DN"
+      },
+      "attrs": {
+        "standard": "ГОСТ 10704",
+        "formula": "Б.8",
+        "quantity": "Kt"
+      }
     }
   ]
 }
