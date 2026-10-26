@@ -15,6 +15,7 @@ var dataDir = Path.GetFullPath(args[0]);
 var schemasDir = Path.Combine(dataDir, "schemas");
 var schemas = new Dictionary<string, JsonSchema>(StringComparer.OrdinalIgnoreCase);
 var normIds = new Dictionary<string, string>(StringComparer.Ordinal);
+var normEditions = new Dictionary<(string Doc, string Clause), (string Edition, string Rel)>();
 var normValues = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
 var profiles = new List<(string Rel, JsonNode Doc)>();
 var errors = new List<string>();
@@ -80,6 +81,7 @@ foreach (var file in Directory.EnumerateFiles(dataDir, "*.json", SearchOption.Al
     if (Path.GetFileName(schemaPath).Equals("norms.schema.json", StringComparison.OrdinalIgnoreCase))
     {
         CheckNorms(rel, doc!, normIds, errors);
+        CheckSingleEdition(rel, doc!, normEditions, errors);
         CheckRequiredKeys(rel, doc!, errors);
         foreach (var record in doc!["records"]!.AsArray())
         {
@@ -160,6 +162,31 @@ static void CheckSprinklers(string rel, JsonNode doc, List<string> errors)
                 errors.Add($"{rel}: {id}: точка интенсивности P = {p}, i = {i} должна быть положительной");
             }
         }
+    }
+}
+
+static void CheckSingleEdition(string rel, JsonNode doc, Dictionary<(string Doc, string Clause), (string Edition, string Rel)> files, List<string> errors)
+{
+    // В одной папке норм не может быть двух файлов одного документа и пункта в разных редакциях:
+    // JsonNormsProvider.Load без явной редакции не может выбрать, какую брать. Проверка — по doc и
+    // clause уровня файла (уровень записи здесь не рассматривается).
+    var docName = doc["doc"]!.GetValue<string>();
+    var edition = doc["edition"]!.GetValue<string>();
+    if (doc["clause"]?.GetValue<string>() is not { } clause)
+    {
+        return;
+    }
+
+    var key = (docName, clause);
+    if (!files.TryGetValue(key, out var existing))
+    {
+        files[key] = (edition, rel);
+        return;
+    }
+
+    if (existing.Edition != edition)
+    {
+        errors.Add($"{rel}: документ «{docName}», {clause} в редакции «{edition}», а {existing.Rel} — в редакции «{existing.Edition}»; в одной папке норм не может быть двух редакций");
     }
 }
 

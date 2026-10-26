@@ -53,6 +53,7 @@ WaterAuto/
 ├─ tests/
 │  ├─ WaterAuto.Calc.Tests/
 │  ├─ WaterAuto.Import.Tests/
+│  ├─ WaterAuto.Norms.Tests/
 │  ├─ WaterAuto.Architecture.Tests/
 │  └─ Golden/
 │     ├─ IOS2.2/          # эталон из проекта 01-21-1542-ИОС2.2
