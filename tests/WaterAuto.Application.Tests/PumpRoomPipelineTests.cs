@@ -19,8 +19,8 @@ public sealed class PumpRoomPipelineTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 
-    // Этаж 30 × 20 м; помещение насосной 12 × 8 м, дверь, два ввода, выпуск, два патрубка ГМ.
-    private string Drawing(bool withPumpRoom = true)
+    // Этаж 30 × 20 м; помещение насосной 12 × 8 м, дверь, вводы (2 или 1 для проверки 6.10.27), выпуск, два патрубка ГМ.
+    private string Drawing(bool withPumpRoom = true, int pumpInlets = 2)
     {
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
@@ -51,7 +51,7 @@ public sealed class PumpRoomPipelineTests : IDisposable
         room.Layer = L(FloorPlanImporter.PumpRoomLayer);
         doc.Entities.Add(room);
         doc.Entities.Add(new Point(new XYZ(13000, 5000, 0)) { Layer = L(FloorPlanImporter.PumpRoomLayer) });
-        foreach (var y in new[] { 3000.0, 5000.0 })
+        foreach (var y in pumpInlets == 1 ? new[] { 5000.0 } : new[] { 3000.0, 5000.0 })
         {
             doc.Entities.Add(new Point(new XYZ(1000, y, 0)) { Layer = L(FloorPlanImporter.PumpInletLayer) });
         }
@@ -64,6 +64,55 @@ public sealed class PumpRoomPipelineTests : IDisposable
 
         return Save(doc);
     }
+
+    // Насосная задана только зоной ПТ_ЗАПРЕТ с подписью «ПНС»: ни слоя ПТ_НС, ни вводов/выпусков нет.
+    private string DrawingWithZonePumpRoom()
+    {
+        var doc = new CadDocument(ACadVersion.AC1032);
+        doc.Header.InsUnits = UnitsType.Millimeters;
+        Layer L(string name)
+        {
+            if (!doc.Layers.TryGetValue(name, out var layer))
+            {
+                layer = new Layer(name);
+                doc.Layers.Add(layer);
+            }
+
+            return layer;
+        }
+
+        LwPolyline Rect(double x0, double y0, double x1, double y1) =>
+            new([new XY(x0, y0), new XY(x1, y0), new XY(x1, y1), new XY(x0, y1)]) { IsClosed = true };
+        var floor = Rect(0, 0, 30000, 20000);
+        floor.Layer = L(FloorPlanImporter.ContourLayer);
+        doc.Entities.Add(floor);
+        doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(15000, 10000, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        doc.Entities.Add(new Point(new XYZ(500, 500, 0)) { Layer = L(FloorPlanImporter.InletLayer) });
+        var zone = Rect(1000, 1000, 13000, 9000);
+        zone.Layer = L(FloorPlanImporter.NoSprinklerLayer);
+        doc.Entities.Add(zone);
+        doc.Entities.Add(new TextEntity("ПНС") { InsertPoint = new XYZ(7000, 5000, 0), Height = 250, Layer = L(FloorPlanImporter.NoSprinklerLayer) });
+        return Save(doc);
+    }
+
+    // Проект без раздела pumpRoom: проверяются умолчания (пол и земля на одном уровне) и скорость из data/catalog/pipe_sizes.json.
+    private string ProjectWithDefaultPumpRoom() =>
+        Write("project.waproj", ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Тестовая автостоянка с насосной",
+            Drawing = "floor.dxf",
+            Design = new ProjectDesign
+            {
+                RoomGroup = "2",
+                SprinklerK = 0.47,
+                SprinklerModel = "по каталогу",
+                PipeElevation = -1.5,
+                DictatingAboveAxis = 3.5,
+                SupplyLength = 30,
+                SupplyDn = 125,
+                InletPressure = 0.1,
+            },
+        }));
 
     private string Save(CadDocument doc)
     {
@@ -147,6 +196,23 @@ public sealed class PumpRoomPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Pump_room_from_zone_gets_auto_inlets_outlets_and_sheets()
+    {
+        // Реальный случай из практики: насосная нарисована зоной ПТ_ЗАПРЕТ с подписью «ПНС», точек вводов/выпусков нет.
+        // Программа ставит условные точки на стенах и выпускает комплект, а не останавливается на Errors 6.10.27/6.10.28.
+        DrawingWithZonePumpRoom();
+        var result = Run(ProjectWithDefaultPumpRoom());
+        var issues = IssueText(result);
+        result.Success.ShouldBeTrue(issues);
+        result.Issues.ShouldContain(i => i.Code == "pumpRoom.inletsAuto", issues);
+        result.Issues.ShouldContain(i => i.Code == "pumpRoom.outletsAuto", issues);
+        result.Files.Select(Path.GetFileName).ShouldContain(ProjectPipeline.PumpRoomPlanFile);
+        result.Files.Select(Path.GetFileName).ShouldContain(ProjectPipeline.PumpStationSpecFile);
+        // Искусственная зона в тесте режет ряды раскладки (routing.*), но насосная не должна давать своих Error.
+        result.Issues.Where(i => i.Code.StartsWith("pump", StringComparison.Ordinal) && i.Level == Core.IssueLevel.Error).ShouldBeEmpty(issues);
+    }
+
+    [Fact]
     public void Project_without_pump_room_warns_and_has_no_pump_room_sheets()
     {
         Drawing(withPumpRoom: false);
@@ -172,13 +238,24 @@ public sealed class PumpRoomPipelineTests : IDisposable
     [Fact]
     public void Pump_station_error_stops_the_package()
     {
-        // P_вх = 0 — всасывание без подпора: предельная скорость 1,5 м/с, для Q = 30 л/с нужен DN > 150,
-        // которого нет во внутреннем сортаменте → pump.pipeTooLarge (Error), документы не выпускаются (аудит PC-5/PC-6).
-        Drawing(withPumpRoom: false);
-        var result = Run(Project(inletPressure: 0));
+        // Один ввод в насосную вместо двух (6.10.27) — pump.suctionLines Error, документы не выпускаются (аудит PC-5/PC-6).
+        Drawing(pumpInlets: 1);
+        var result = Run(Project());
         result.Success.ShouldBeFalse();
-        result.Issues.ShouldContain(i => i.Code == "pump.pipeTooLarge" && i.Level == Core.IssueLevel.Error);
+        result.Issues.ShouldContain(i => i.Code == "pump.suctionLines" && i.Level == Core.IssueLevel.Error);
         result.Files.ShouldHaveSingleItem();
         result.Files[0].ShouldEndWith(ProjectPipeline.IssuesFile);
+    }
+
+    [Fact]
+    public void Pump_suction_uses_outdoor_only_rows_when_internal_series_is_short()
+    {
+        // P_вх = 0 — всасывание без подпора: предел 1,5 м/с, для Q = 30 л/с нужен внутренний Ø > 150 мм.
+        // Внутренний сортамент кончается на DN 150, поэтому для обвязки насосной допускается строка табл. Б.2 «*»
+        // (трубы наружных сетей) — с Info-замечанием (аудит PC-5, PUMP-11).
+        Drawing();
+        var result = Run(Project(inletPressure: 0));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => $"{i.Level} {i.Code}: {i.Message}")));
+        result.Issues.ShouldContain(i => i.Code == "pipe.outdoorOnly" && i.Level == Core.IssueLevel.Info);
     }
 }

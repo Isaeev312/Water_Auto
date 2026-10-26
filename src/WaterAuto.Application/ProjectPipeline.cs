@@ -105,9 +105,12 @@ public static class ProjectPipeline
             new Length(design.SupplyLength),
             design.SupplyDn,
             new Pressure(design.InletPressure),
-            design.DesignVelocity,
+            design.DesignVelocity ?? DesignVelocityDefault(normsDir),
             design.RingValvesClosed,
-            pipeSizes);
+            pipeSizes,
+            // Диаметры по табл. Б.4, но участки со скоростью выше предела 6.7.1.37 увеличиваются автоматически:
+            // иначе на реальном проекте напор доходил до 193 м и насос не подбирался.
+            ResizeOverLimit: true);
         HydrantInput? hydrants = null;
         if (design.Hydrants is { } h)
         {
@@ -195,7 +198,7 @@ public static class ProjectPipeline
             materials.Coating);
 
         // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
-        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), new Pressure(design.InletPressure));
+        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
         var stationTakeoff = new MaterialTakeoff([], []);
@@ -206,6 +209,29 @@ public static class ProjectPipeline
                 ? $"точка ввода {found.inlet.Name ?? (found.k + 1).ToString(CultureInfo.InvariantCulture)}"
                 : id)
             .ToList();
+        // Помещение насосной может быть задано зоной ПТ_ЗАПРЕТ с подписью «ПНС» (слой ПТ_НС не обязателен), но без точек
+        // вводов/выпусков: без них не проверяются 6.10.27/6.10.28 и не трассируется обвязка. Ставим условные точки по стенам
+        // с явным Info-замечанием — иначе пользователь получает только Error и неполный комплект.
+        if (plan.PumpRooms.Count > 0 && plan.PumpRooms[0] is { } autoRoom
+            && (autoRoom.Inlets.Count == 0 || autoRoom.Outlets.Count == 0))
+        {
+            var minSuction = (int)Need(norms, "sp485.p6_10_27.suctionLines").Values["minCount"]!.Value;
+            var inlets = autoRoom.Inlets.Count > 0 ? autoRoom.Inlets : AutoWallPoints(autoRoom.Outline, Math.Max(1, minSuction), 0.1);
+            var outlets = autoRoom.Outlets.Count > 0 ? autoRoom.Outlets : AutoWallPoints(autoRoom.Outline, Math.Max(1, sections.Count), 0.5);
+            plan = plan with { PumpRooms = [autoRoom with { Inlets = inlets, Outlets = outlets }, .. plan.PumpRooms.Skip(1)] };
+            if (autoRoom.Inlets.Count == 0)
+            {
+                issues.Add(new Issue("pumpRoom.inletsAuto", IssueLevel.Info,
+                    $"В помещении насосной {autoRoom.Id} нет вводов на слое ПТ_НС_ВВОД — поставлено {inlets.Count} условных точек на стенах; проверьте привязку к сети (п. 6.10.27).", autoRoom.Id));
+            }
+
+            if (autoRoom.Outlets.Count == 0)
+            {
+                issues.Add(new Issue("pumpRoom.outletsAuto", IssueLevel.Info,
+                    $"В помещении насосной {autoRoom.Id} нет выпусков на слое ПТ_НС_ВЫПУСК — поставлено {outlets.Count} условных точек на стенах; проверьте привязку к сети секций (п. 6.10.28).", autoRoom.Id));
+            }
+        }
+
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -303,7 +329,7 @@ public static class ProjectPipeline
         PipingResult? piping = null;
         if (roomPlan is { Items.Count: > 0 } && plan.PumpRooms[0] is { Inlet: { } stationInlet } pumpRoom && PumpCatalog.Piping(normsDir) is { } pr && setChoice?.Chosen is { } pipedSet)
         {
-            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var set = roomPlan.Items.First(i => i.Kind == StationItemKind.PumpSet);
             var units = roomPlan.Items.Where(i => i.Kind == StationItemKind.ControlUnit).ToList();
 
@@ -388,6 +414,7 @@ public static class ProjectPipeline
 
             piping = PumpRoomPiping.Route(pumpRoom.Outline, requests, new PipingRules(pr.WallOffset, pr.BracketHeight, pr.LevelGap));
             issues.AddRange(piping.Issues);
+            issues.AddRange(series.Issues);
             var ruP = CultureInfo.GetCultureInfo("ru-RU");
             var elbowStandard = design.FittingStandards.TryGetValue("Отвод", out var es) ? es : null;
             var pipeRows = piping.Runs.GroupBy(r => r.Dn).OrderBy(g => g.Key).SelectMany(g =>
@@ -464,7 +491,7 @@ public static class ProjectPipeline
 
             if (inletRoutes.Count > 0)
             {
-                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
 
                 // Отметка трассы ввода без коллизий с сетью АУП: задана в проекте — проверяется; не задана — ниже сети на
                 // наибольшее нужное расхождение на пересечениях (полусумма наружных диаметров + 20 мм), с округлением вниз до 50 мм.
@@ -493,6 +520,7 @@ public static class ProjectPipeline
 
                 var dnI = station.Suction.Pipe.Dn;
                 var spI = seriesI.Pick(dnI);
+                issues.AddRange(seriesI.Issues);
                 var ruI = CultureInfo.GetCultureInfo("ru-RU");
                 // Подъём у ввода в здание и опуск у насосной — вертикали и по два отвода на каждую.
                 var rise = Math.Abs(inletRouteZ - inletWallZ);
@@ -649,10 +677,11 @@ public static class ProjectPipeline
             var pr1 = design.PumpRoom;
             var features = PumpRoomFeatures.Build(roomPlan.Room.Outline, roomPlan.Items, roomPlan.Room.Door, pr1.PitSize * 1000, PumpCatalog.PipingExtras(normsDir).FoundationMargin);
             var sleeveExtraD = PumpCatalog.PipingExtras(normsDir).SleeveExtra;
-            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var sleeves = (piping?.Runs ?? [])
                 .SelectMany(r => new[] { r.Path[0], r.Path[^1] }.Where(pt => IsWall(roomPlan.Room.Outline, pt)).Select(pt => (pt, (seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD, $"гильза Ø{(seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD:0}")))
                 .ToList();
+            issues.AddRange(seriesD.Issues);
             var valves = new List<(PlanPoint, double, string, int?)>();
             foreach (var r in piping?.Runs ?? [])
             {
@@ -926,6 +955,41 @@ public static class ProjectPipeline
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
 
+    // Условные точки на стенах помещения (вводы/выпуски), когда разметка ПТ_НС_ВВОД/ВЫПУСК не сделана: равномерно по
+    // периметру прямоугольника помещения; start — доля периметра от левого нижнего угла.
+    private static IReadOnlyList<PlanPoint> AutoWallPoints(Polygon room, int count, double start)
+    {
+        var v = room.Vertices;
+        var (x0, y0, x1, y1) = (v.Min(p => p.XMm), v.Min(p => p.YMm), v.Max(p => p.XMm), v.Max(p => p.YMm));
+        var (w, h) = (x1 - x0, y1 - y0);
+        var perimeter = 2 * (w + h);
+        PlanPoint At(double t)
+        {
+            var d = ((t % 1) + 1) % 1 * perimeter;
+            if (d <= w)
+            {
+                return new PlanPoint(x0 + d, y0);
+            }
+
+            d -= w;
+            if (d <= h)
+            {
+                return new PlanPoint(x1, y0 + d);
+            }
+
+            d -= h;
+            if (d <= w)
+            {
+                return new PlanPoint(x1 - d, y1);
+            }
+
+            d -= w;
+            return new PlanPoint(x0, y1 - d);
+        }
+
+        return [.. Enumerable.Range(0, count).Select(k => At(start + (k / (double)Math.Max(1, count))))];
+    }
+
     // Отметка со знаком по правилам чертежей: +3,300 / −1,600 / ±0,000. Однозначная форма "+0.000" для
     // отрицательных чисел давала «-+1,600» (культура подставляет минус к литералу «+»).
     private static string Elev(double m) => m.ToString("+0.000;−0.000;0.000", CultureInfo.GetCultureInfo("ru-RU"));
@@ -984,6 +1048,20 @@ public static class ProjectPipeline
     private static string Feminine(string color) => color.EndsWith("ый", StringComparison.Ordinal) || color.EndsWith("ий", StringComparison.Ordinal) || color.EndsWith("ой", StringComparison.Ordinal)
         ? color[..^2] + (color.EndsWith("ий", StringComparison.Ordinal) && !color.EndsWith("кий", StringComparison.Ordinal) ? "яя" : "ая")
         : color;
+
+    // Скорость подбора диаметров по Б.5, когда в проекте не задана (data/catalog/pipe_sizes.json, defaultDesignVelocity:
+    // практика проектирования, не норма). null — диаметры по табл. Б.4.
+    private static double? DesignVelocityDefault(string normsDir)
+    {
+        var path = Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, "pipe_sizes.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.TryGetProperty("defaultDesignVelocity", out var v) ? v.GetDouble() : null;
+    }
 
     // Принятые размеры труб из data/catalog/pipe_sizes.json (наружный диаметр × стенка по DN).
     private static List<PipeSize> PipeSizes(string normsDir)
@@ -1085,4 +1163,6 @@ public static class ProjectPipeline
         return path;
     }
 }
+
+
 

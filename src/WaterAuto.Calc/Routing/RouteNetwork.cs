@@ -27,7 +27,10 @@ public static class RouteNetwork
         {
             if (series.Pick(s.Dn) is { } pipe)
             {
-                pipes.Add(new NetworkPipe(s.Id, s.From, s.To, s.Length, pipe.Kt, lossMultiplier));
+                // Сортамент известен — передаём геометрию: без неё не считаются скорости (6.7.1.37) и «труба без сортамента»
+                // в замечаниях появляется у каждой трубы стальной сети (было: 300 предупреждений на реальном проекте).
+                var geometry = new PipeGeometry(pipe.Standard, pipe.Dn, new Length(pipe.OuterDiameterMm / 1000), new Length(pipe.WallMm / 1000));
+                pipes.Add(new NetworkPipe(s.Id, s.From, s.To, s.Length, pipe.Kt, lossMultiplier, geometry));
             }
         }
 

@@ -141,7 +141,7 @@ public sealed record ProjectDesign
     /// <summary>Давление на входе насоса (гарантированный напор по ТУ), МПа; по умолчанию 0,10 МПа (10 м вод. ст.) — уточнить по ТУ.</summary>
     public double InletPressure { get; init; } = 0.10;
 
-    /// <summary>Скорость для подбора диаметров по Б.5, м/с; null — диаметры по табл. Б.4.</summary>
+    /// <summary>Скорость для подбора диаметров по Б.5, м/с; null — скорость из data/catalog/pipe_sizes.json (defaultDesignVelocity), без неё — табл. Б.4.</summary>
     public double? DesignVelocity { get; init; }
 
     /// <summary>Кольцевой питающий трубопровод (рис. Б.2, секции В, Г; ADR 0011).</summary>
@@ -188,8 +188,11 @@ public sealed class ProjectPumpRoom
     /// <summary>Отметка пола насосной.</summary>
     public double FloorElevation { get; init; }
 
-    /// <summary>Отметка уровня земли (планировочная) — для выводов на фасад (патрубки ГМ, п. 6.10.18).</summary>
-    public double GroundElevation { get; init; } = 3.0;
+    /// <summary>
+    /// Отметка уровня земли (планировочная) — для выводов на фасад (патрубки ГМ, п. 6.10.18).
+    /// По умолчанию пол насосной и земля на одном уровне (план этажа без разрезов); для заглублённой насосной задаётся в проекте.
+    /// </summary>
+    public double GroundElevation { get; init; }
 
     /// <summary>Заглубление ввода от уровня земли.</summary>
     public double InletDepth { get; init; } = 1.6;
