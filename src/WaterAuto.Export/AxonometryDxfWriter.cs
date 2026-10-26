@@ -84,9 +84,13 @@ public static class AxonometryDxfWriter
                 var a = Project(nodes[seg.From].Location, z, style);
                 var b = Project(nodes[seg.To].Location, z, style);
                 doc.Entities.Add(new Line(At(a), At(b)) { Layer = pipes });
-                if (loops.Contains(seg.Id) || DxfDrawing.NeedsLabel(seg, byTo))
+                // Подпись — где меняется диаметр или назначение участка; на рядках — только DN (длины — в таблице расчёта),
+                // чтобы подписи коротких участков между оросителями не наползали друг на друга.
+                var changed = !byTo.TryGetValue(seg.From, out var parent) || parent.Dn != seg.Dn || parent.Role != seg.Role;
+                if (loops.Contains(seg.Id) || changed)
                 {
-                    doc.Entities.Add(DxfDrawing.Label(seg, a, b, style.TextHeightMm, labels));
+                    var text = seg.Role == RouteSegmentRole.Row ? $"DN{seg.Dn}" : null;
+                    doc.Entities.Add(DxfDrawing.Label(seg, a, b, style.TextHeightMm, labels, text));
                 }
             }
 

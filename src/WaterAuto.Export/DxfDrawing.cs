@@ -88,8 +88,8 @@ internal static class DxfDrawing
     public static bool NeedsLabel(RouteSegment seg, IReadOnlyDictionary<string, RouteSegment> byTo) =>
         seg.Role != RouteSegmentRole.Row || !byTo.TryGetValue(seg.From, out var parent) || parent.Dn != seg.Dn;
 
-    /// <summary>Подпись участка «DN32 L=1,50 м» над серединой, вдоль трубы, не вверх ногами.</summary>
-    public static TextEntity Label(RouteSegment seg, XY a, XY b, double textHeight, Layer layer)
+    /// <summary>Подпись участка (по умолчанию «DN32 L=1,50 м») над серединой, вдоль трубы, не вверх ногами.</summary>
+    public static TextEntity Label(RouteSegment seg, XY a, XY b, double textHeight, Layer layer, string? text = null)
     {
         var angle = Math.Atan2(b.Y - a.Y, b.X - a.X);
         if (angle > Math.PI / 2 || angle <= -Math.PI / 2)
@@ -100,7 +100,7 @@ internal static class DxfDrawing
         var mid = new XYZ(((a.X + b.X) / 2) - (Math.Sin(angle) * textHeight * 0.5), ((a.Y + b.Y) / 2) + (Math.Cos(angle) * textHeight * 0.5), 0);
         return new TextEntity
         {
-            Value = string.Create(Ru, $"DN{seg.Dn} L={seg.Length.Meters:0.00} м"),
+            Value = text ?? string.Create(Ru, $"DN{seg.Dn} L={seg.Length.Meters:0.00} м"),
             InsertPoint = mid,
             Height = textHeight,
             Rotation = angle,
