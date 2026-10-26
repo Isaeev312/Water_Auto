@@ -31,6 +31,7 @@ public static class ProjectPipeline
     public const string PumpSchemeFile = "pump_scheme.dxf";
     public const string PumpStationSpecFile = "specification_pns.docx";
     public const string PumpRoomPlanFile = "pump_room_plan.dxf";
+    public const string PumpRoomPipingFile = "pump_room_piping.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string IssuesFile = "issues.txt";
 
@@ -316,10 +317,10 @@ public static class ProjectPipeline
                 requests.Add(new("Жокей-насос, напорный", pr.JockeyDn, outerJ, jc, 600, dischargeAt, pipedSet.Hydraulic.HeightMm, 1) { RunHeightMm = 1500 });
             }
 
-            // Патрубки ГМ для мобильной техники: точки слоя ПТ_НС_ГМ; нет — на стене ввода по обе стороны от него через 800 мм.
+            // Патрубки ГМ для мобильной техники: точки слоя ПТ_НС_ГМ; нет — на стене ввода за последним вводом через 800 мм.
             var truckPoints = pumpRoom.TruckInlets.Count > 0
                 ? pumpRoom.TruckInlets
-                : Enumerable.Range(0, station.TruckInlets).Select(k => AlongWall(pumpRoom.Outline, stationInlet, (k % 2 == 0 ? 1 : -1) * 800 * ((k / 2) + 1))).ToList();
+                : Enumerable.Range(0, station.TruckInlets).Select(k => AlongWall(pumpRoom.Outline, pumpRoom.Inlets.MaxBy(i => i.XMm + i.YMm)!, 1200 + (800 * k))).ToList();
             var outerT = series.Pick(station.TruckInletDn)?.OuterDiameterMm ?? station.TruckInletDn;
             foreach (var (tp, k) in truckPoints.Select((p, k) => (p, k)))
             {
@@ -347,14 +348,36 @@ public static class ProjectPipeline
                     new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "повороты трассы и опуски к оборудованию"),
                 };
             });
+            // Гильзы в стенах (закладные): на каждом проходе трубы через стену, Ø — наружный диаметр трубы + запас (Козицина, с. 26).
+            var wallT = design.PumpRoom.WallThickness * 1000;
+            var sleeveExtra = PumpCatalog.PipingExtras(normsDir).SleeveExtra;
+            var sleeveRows = piping.Runs
+                .SelectMany(r => new[] { IsWall(pumpRoom.Outline, r.Path[0]) ? r.Dn : 0, IsWall(pumpRoom.Outline, r.Path[^1]) ? r.Dn : 0 })
+                .Where(dn => dn > 0)
+                .GroupBy(dn => dn)
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                {
+                    var outer = series.Pick(g.Key)?.OuterDiameterMm ?? g.Key;
+                    return new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruP, $"Гильза стальная для прохода трубы DN{g.Key} через стену: Ø не менее {outer + sleeveExtra:0} мм, L = {wallT:0} мм"), "по месту", g.Count(), "шт.", "закладная деталь; заделка — эластичным негорючим материалом", Role: "sleeve");
+                });
+            var extraRows = new List<TakeoffItem>(sleeveRows);
+            if (design.PumpRoom.Underground && norms.Find("sp485.p6_10_23.drainage")?.Values["drainPumpsUnderground"] is { } drains)
+            {
+                extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStation, "Насос дренажный погружной с поплавковым выключателем", "марка — по каталогу", drains, "шт.", "в приямке; I категория электроснабжения (п. 6.10.23)", Role: "drainPump"));
+            }
+
+            extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", units.Count, "шт.", "в верхней точке напорной линии (п. 6.10.29); или аналог", Role: "airVent"));
+
             // Отводы патрубков ГМ теперь считаются по трассе — строка шаблона убирается.
-            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Where(i => i.Role != "elbowT"), .. pipeRows] };
+            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Where(i => i.Role != "elbowT"), .. pipeRows, .. extraRows] };
         }
 
         // Номера позиций спецификации насосной — на схеме, по роли элемента (сквозная нумерация).
         var schemePositions = SpecificationXlsx.Positions(stationTakeoff, continuous: true)
             .Where(p => p.Item.Role is not null)
-            .ToDictionary(p => p.Item.Role!, p => p.Position);
+            .GroupBy(p => p.Item.Role!)
+            .ToDictionary(g => g.Key, g => g.First().Position); // у одной роли может быть несколько строк (гильзы разных DN)
 
         // Промывочные устройства — п. 6.7.1.15 (узлы управления — в спецификации насосной, ПТ2.СО).
         var flushingSet = EquipmentSet.PathFor(normsDir, EquipmentSet.FlushingFile);
@@ -460,25 +483,90 @@ public static class ProjectPipeline
                     _ => PosOf("jockey"),
                 },
                 i.Front,
-                i.Front is null ? 0 : board)).ToList();
-            Write(outDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
-                p,
-                new PumpRoomDrawing(roomPlan.Room.Outline, roomPlan.Room.Door, [.. equipment.OrderBy(e => e.Label == roomPlan.Items[0].Label ? 0 : 1)], [
+                i.Front is null ? 0 : board)
+            {
+                // Марки насосов установки (основные и резервные) и жокей-насоса — как на принципиальной схеме.
+                Pumps = i.Kind switch
+                {
+                    StationItemKind.PumpSet when setChoice?.Chosen is { } ps => [.. Enumerable.Range(1, ps.MainPumps + ps.StandbyPumps).Select(n => $"Н{n}")],
+                    StationItemKind.Jockey => ["НЖ"],
+                    _ => [],
+                },
+            }).ToList();
+            var pr1 = design.PumpRoom;
+            var features = PumpRoomFeatures.Build(roomPlan.Room.Outline, roomPlan.Items, roomPlan.Room.Door, pr1.PitSize * 1000, PumpCatalog.PipingExtras(normsDir).FoundationMargin);
+            var sleeveExtraD = PumpCatalog.PipingExtras(normsDir).SleeveExtra;
+            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+            var sleeves = (piping?.Runs ?? [])
+                .SelectMany(r => new[] { r.Path[0], r.Path[^1] }.Where(pt => IsWall(roomPlan.Room.Outline, pt)).Select(pt => (pt, (seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD, $"гильза Ø{(seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD:0}")))
+                .ToList();
+            var valves = new List<(PlanPoint, double, string, int?)>();
+            foreach (var r in piping?.Runs ?? [])
+            {
+                if (r.Name.StartsWith("Всасывающий", StringComparison.Ordinal))
+                {
+                    valves.Add(Along(r.Path, 700, false, "gate", PosOf("inletValve")));
+                }
+                else if (r.Name.StartsWith("Напорный к УУ", StringComparison.Ordinal))
+                {
+                    valves.Add(Along(r.Path, 700, true, "gate", PosOf("cuValve")));
+                    valves.Add(Along(r.Path, 0, false, "vent", PosOf("airVent")));
+                }
+                else if (r.Name.StartsWith("Выпуск секции", StringComparison.Ordinal))
+                {
+                    valves.Add(Along(r.Path, 700, false, "gate", PosOf("cuValve")));
+                }
+                else if (r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal))
+                {
+                    valves.Add(Along(r.Path, 700, false, "check", PosOf("checkT")));
+                    valves.Add(Along(r.Path, 1400, false, "gate", PosOf("valveT")));
+                }
+            }
+
+            var roomDrawing = new PumpRoomDrawing(roomPlan.Room.Outline, roomPlan.Room.Door, [.. equipment.OrderBy(e => e.Label == roomPlan.Items[0].Label ? 0 : 1)], [
                     "Экспликация: " + string.Join("; ", equipment.GroupBy(e => e.Position).Select(g => $"{g.Key?.ToString(CultureInfo.InvariantCulture) ?? "—"} — {string.Join(", ", g.Select(e => e.Label).Distinct())}")) + ".",
                     .. roomPlan.Rules.Select(r => $"Проход: {r} (п. 6.10.16 СП 485)."),
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Отметка пола насосной {pr1.FloorElevation:+0.000;−0.000;0.000}; уровень земли {pr1.GroundElevation:+0.000;−0.000}; стены — {pr1.WallThickness * 1000:0} мм (условно, по архитектурному разделу)."),
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Пол — с уклоном к приямку {pr1.PitSize:0.0} × {pr1.PitSize:0.0} м глубиной {pr1.PitDepth:0.0} м; дренажные насосы в приямке (п. 6.10.23)."),
+                    "Фундамент установки — по паспорту изготовителя; при отсутствии сведений масса фундамента не менее 4 масс агрегатов (п. 6.10.26). Электродвигатели — не ниже 0,5 м от пола (п. 6.10.22).",
                     "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно (data/catalog/pump_room.json), уточнить по выбранному оборудованию.",
                     "Свободная зона у двери 1 × 1 м — правило программы.",
                     "Номера позиций — по спецификации ПТ2.СО.",
-                    .. piping is null ? Array.Empty<string>() : [$"Трубопроводы — на кронштейнах у стен на высоте {PumpCatalog.Piping(normsDir)!.Value.BracketHeight / 1000:0.0} м, отступ от стены и ярусы — по рекомендациям: {PumpCatalog.Piping(normsDir)!.Value.Source}"],
                 ])
+            {
+                WallThicknessMm = pr1.WallThickness * 1000,
+                Pit = features.Pit,
+                PitLabel = string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Приямок {pr1.PitSize:0.0}×{pr1.PitSize:0.0}, h = {pr1.PitDepth:0.0} м; дренажные насосы — поз. {PosOf("drainPump")?.ToString(CultureInfo.InvariantCulture) ?? "—"}"),
+                Foundation = features.Foundation,
+                Sleeves = sleeves,
+                WallMarks = [
+                    .. plan.PumpRooms[0].Inlets.Select((wi, k) => (wi, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод {k + 1} DN{station.Suction.Pipe.Dn}, {(pr1.GroundElevation - pr1.InletDepth):+0.000}"))),
+                    .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Выпуск, секция {k + 1}, {design.PipeElevation:+0.000}"))),
+                    .. (piping?.Runs ?? []).Where(r => r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal)).Select(r => (r.Path[0], $"ГМ-{station.TruckInletDn}")),
+                ],
+            };
+            List<string> pipingNotes =
+            [
+                "Трубопроводы — стальные на сварке; отметки — оси труб от пола насосной; подписи «DN, отметка».",
+                "Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:200, переходы — эксцентрические, в верхних точках напорных линий — воздухоотводчики (п. 6.10.29, 6.7.1.22).",
+                "Патрубки ГМ — с обратным клапаном и опломбированной открытой задвижкой, вывод на фасад на (1,20 ± 0,15) м от отмостки (пп. 6.10.17, 6.10.18).",
+                .. piping is null ? Array.Empty<string>() : [$"Отступы от стен и прокладка на кронштейнах — по рекомендациям: {PumpCatalog.Piping(normsDir)!.Value.Source}"],
+                "Номера позиций — по спецификации ПТ2.СО.",
+            ];
+            Write(outDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
+                p,
+                roomDrawing with
                 {
-                    Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe($"DN{r.Dn}", r.Path))],
-                    WallMarks = [
-                        .. plan.PumpRooms[0].Inlets.Select((wi, k) => (wi, $"Ввод {k + 1} DN{station.Suction.Pipe.Dn}")),
-                        .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, $"Выпуск в сеть, секция {k + 1}")),
-                        .. (piping?.Runs ?? []).Where(r => r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal)).Select(r => (r.Path[0], $"ГМ-{station.TruckInletDn}")),
-                    ],
+                    Notes = pipingNotes,
+                    Piping = true,
+                    Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{r.Dn} {r.RunHeightMm / 1000:+0.000}"), r.Path))],
+                    Valves = valves,
                 },
+                SheetStamp(project, "План обвязки", "План обвязки насосной станции") with { Name = "План обвязки насосной станции" },
+                project.Font));
+            Write(outDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
+                p,
+                roomDrawing,
                 SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
                 project.Font));
         }
@@ -558,6 +646,29 @@ public static class ProjectPipeline
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Точка на стене контура (не дальше 1 мм).
+    private static bool IsWall(Polygon room, PlanPoint p) => room.DistanceTo(p) < 1;
+
+    // Точка на ломаной на расстоянии dist от начала (или от конца) и направление участка, рад.
+    private static (PlanPoint, double, string, int?) Along(IReadOnlyList<PlanPoint> path, double dist, bool fromEnd, string kind, int? position)
+    {
+        var pts = fromEnd ? path.Reverse().ToList() : path.ToList();
+        for (var i = 1; i < pts.Count; i++)
+        {
+            var (a, b) = (pts[i - 1], pts[i]);
+            var len = Math.Sqrt(Math.Pow(b.XMm - a.XMm, 2) + Math.Pow(b.YMm - a.YMm, 2));
+            if (dist <= len || i == pts.Count - 1)
+            {
+                var t = len > 0 ? Math.Min(dist, len) / len : 0;
+                return (new PlanPoint(a.XMm + ((b.XMm - a.XMm) * t), a.YMm + ((b.YMm - a.YMm) * t)), Math.Atan2(b.YMm - a.YMm, b.XMm - a.XMm), kind, position);
+            }
+
+            dist -= len;
+        }
+
+        return (pts[0], 0, kind, position);
+    }
 
     // Точка на той же стене прямоугольного контура, сдвинутая вдоль стены на shift, мм (в пределах стены).
     private static PlanPoint AlongWall(Polygon room, PlanPoint p, double shift)

@@ -60,6 +60,21 @@ public static class PumpCatalog
         return (p.GetProperty("wallOffsetMm").GetDouble(), p.GetProperty("bracketHeightMm").GetDouble(), p.GetProperty("levelGapMm").GetDouble(), p.GetProperty("source").GetString()!, p.TryGetProperty("jockeyDn", out var j) ? j.GetInt32() : 32);
     }
 
+    /// <summary>Запас гильзы по диаметру и отступ фундамента от рамы, мм (data/catalog/pump_room.json, piping).</summary>
+    public static (double SleeveExtra, double FoundationMargin) PipingExtras(string normsDir)
+    {
+        var path = Path.Combine(Dir(normsDir), "pump_room.json");
+        if (!File.Exists(path))
+        {
+            return (50, 100);
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.TryGetProperty("piping", out var p)
+            ? (p.TryGetProperty("sleeveExtraMm", out var s) ? s.GetDouble() : 50, p.TryGetProperty("foundationMarginMm", out var f) ? f.GetDouble() : 100)
+            : (50, 100);
+    }
+
     /// <summary>Условные габариты узла управления и жокей-насоса; обозначение ТУ установки (если задано).</summary>
     public static (Footprint ControlUnit, Footprint Jockey, string? SetNote)? Room(string normsDir)
     {

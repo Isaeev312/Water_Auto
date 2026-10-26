@@ -40,6 +40,22 @@ public static class GostSheet
     /// Подбор листа под изображение (габариты в мм модели): наименьший формат, на котором оно помещается в масштабе не мельче 1:200,
     /// и наиболее крупный такой масштаб; иначе — А1 в первом подходящем масштабе. Изображение — по центру поля над основной надписью.
     /// </summary>
+    /// <summary>Лист заданного масштаба: наименьший формат, на котором изображение помещается; null — не помещается и на А1.</summary>
+    public static SheetPlacement? FitAtScale(double minX, double minY, double maxX, double maxY, double scale)
+    {
+        var (w, h) = (Math.Max(maxX - minX, 1), Math.Max(maxY - minY, 1));
+        foreach (var f in Formats)
+        {
+            var (x0, y0, x1, y1) = Field(f);
+            if (w / scale <= x1 - x0 && h / scale <= y1 - y0)
+            {
+                return new SheetPlacement(f, scale, new XY(((minX + maxX) / 2) - (((x0 + x1) / 2) * scale), ((minY + maxY) / 2) - (((y0 + y1) / 2) * scale)));
+            }
+        }
+
+        return null;
+    }
+
     public static SheetPlacement Fit(double minX, double minY, double maxX, double maxY)
     {
         var w = Math.Max(maxX - minX, 1);

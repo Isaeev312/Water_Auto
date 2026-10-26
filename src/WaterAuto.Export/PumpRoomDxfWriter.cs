@@ -7,7 +7,11 @@ using WaterAuto.Core;
 namespace WaterAuto.Export;
 
 /// <summary>Оборудование на плане насосной: прямоугольник, мм чертежа; Position — номер позиции спецификации; Front — сторона обслуживания.</summary>
-public sealed record PumpRoomEquipment(string Label, double X0, double Y0, double X1, double Y1, int? Position = null, (int X, int Y)? Front = null, double FrontDepth = 0);
+public sealed record PumpRoomEquipment(string Label, double X0, double Y0, double X1, double Y1, int? Position = null, (int X, int Y)? Front = null, double FrontDepth = 0)
+{
+    /// <summary>Марки насосов в составе (Н1, Н2…): рисуются кругами вдоль длинной стороны, между ними — коллекторы.</summary>
+    public IReadOnlyList<string> Pumps { get; init; } = [];
+}
 
 /// <summary>Трубопровод на плане насосной: ломаная, подпись (DN), уровень (0 — ближе к стене).</summary>
 public sealed record PumpRoomPipe(string Label, IReadOnlyList<PlanPoint> Path);
@@ -19,6 +23,24 @@ public sealed record PumpRoomDrawing(Polygon Room, PlanPoint? Door, IReadOnlyLis
 
     /// <summary>Точки на стенах с подписями (ввод, выпуски).</summary>
     public IReadOnlyList<(PlanPoint At, string Text)> WallMarks { get; init; } = [];
+
+    /// <summary>Лист: true — обвязка (трубы, арматура), false — архитектура и оборудование (стены, фундамент, приямок, гильзы, размеры).</summary>
+    public bool Piping { get; init; }
+
+    /// <summary>Толщина стен, мм (стены — снаружи контура).</summary>
+    public double WallThicknessMm { get; init; }
+
+    public (double X0, double Y0, double X1, double Y1)? Pit { get; init; }
+
+    public string PitLabel { get; init; } = "";
+
+    public (double X0, double Y0, double X1, double Y1)? Foundation { get; init; }
+
+    /// <summary>Гильзы в стенах: точка прохода трубы, наружный диаметр гильзы, мм, подпись.</summary>
+    public IReadOnlyList<(PlanPoint At, double DiameterMm, string Label)> Sleeves { get; init; } = [];
+
+    /// <summary>Арматура на трубах: точка, направление трубы (рад), вид (gate, check, vent), номер позиции.</summary>
+    public IReadOnlyList<(PlanPoint At, double Angle, string Kind, int? Position)> Valves { get; init; } = [];
 }
 
 /// <summary>
@@ -48,8 +70,11 @@ public static class PumpRoomDxfWriter
 
         var v = data.Room.Vertices;
         var (x0, y0, x1, y1) = (v.Min(p => p.XMm), v.Min(p => p.YMm), v.Max(p => p.XMm), v.Max(p => p.YMm));
-        // Снизу — место под примечания и экспликацию.
-        var sheet = GostSheet.Fit(x0 - 1500, y0 - (0.9 * (y1 - y0)), x1 + 1500, y1 + 1000);
+        // Масштаб 1:50 (насосные — крупно, чтобы читались арматура и подписи), формат — наименьший, где помещаются план
+        // и 85 мм под примечания; не помещается и на А1 — 1:100.
+        var sheet = new[] { 50.0, 100, 200 }
+            .Select(sc => GostSheet.FitAtScale(x0 - 3000, y0 - 2500 - (85 * sc), x1 + 3000, y1 + 1500, sc))
+            .FirstOrDefault(f => f is not null) ?? GostSheet.Fit(x0 - 3000, y0 - 20000, x1 + 3000, y1 + 1500);
         var s = sheet.Scale;
         var h = 2.5 * s;
         GostSheet.Draw(doc, sheet, stamp);
@@ -73,6 +98,67 @@ public static class PumpRoomDxfWriter
 
         doc.Entities.Add(new LwPolyline([.. v.Select(p => new XY(p.XMm, p.YMm))]) { IsClosed = true, Layer = room });
 
+        // Стены: наружный контур на толщину стены; на листе обвязки — без штриховки, тонко.
+        if (data.WallThicknessMm > 0)
+        {
+            var t = data.WallThicknessMm;
+            Rect(x0 - t, y0 - t, x1 + t, y1 + t, room);
+            if (!data.Piping)
+            {
+                var hatch = DxfDrawing.AddLayer(doc, "ПТ_НС_СТЕНЫ", 8);
+                for (var k = -(y1 - y0 + (2 * t)); k < x1 - x0 + (2 * t); k += 4 * h)
+                {
+                    // Штриховка стен под 45° — короткие отрезки в пределах толщины на каждой стороне.
+                    foreach (var (a0, b0, a1, b1) in new[] { (x0 - t, y0 - t, x1 + t, y0), (x0 - t, y1, x1 + t, y1 + t), (x0 - t, y0, x0, y1), (x1, y0, x1 + t, y1) })
+                    {
+                        var (sx, sy) = (a0 + k, b0);
+                        var lo = Math.Max(0, Math.Max(a0 - sx, b0 - sy));
+                        var hi = Math.Min(a1 - sx, b1 - sy);
+                        if (hi > lo)
+                        {
+                            doc.Entities.Add(new Line(P(sx + lo, sy + lo), P(sx + hi, sy + hi)) { Layer = hatch });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!data.Piping && data.Foundation is { } fd)
+        {
+            Rect(fd.X0, fd.Y0, fd.X1, fd.Y1, dims);
+            Text(fd.X0 + (0.3 * h), fd.Y0 + (0.3 * h), "фундамент", 0.6 * h);
+        }
+
+        if (data.Pit is { } pit)
+        {
+            Rect(pit.X0, pit.Y0, pit.X1, pit.Y1, room);
+            doc.Entities.Add(new Line(P(pit.X0, pit.Y0), P(pit.X1, pit.Y1)) { Layer = room });
+            doc.Entities.Add(new Line(P(pit.X0, pit.Y1), P(pit.X1, pit.Y0)) { Layer = room });
+            if (!data.Piping)
+            {
+                var (cx, cy) = ((pit.X0 + pit.X1) / 2, (pit.Y0 + pit.Y1) / 2);
+                var dirX = cx < (x0 + x1) / 2 ? 1 : -1;
+                Text(cx + (dirX > 0 ? 0.6 * (pit.X1 - pit.X0) : -12 * h), cy + (1.5 * h), data.PitLabel, 0.7 * h, 12 * h);
+            }
+        }
+
+        foreach (var (at, dia, label) in data.Sleeves.Where(_ => !data.Piping))
+        {
+            var t = Math.Max(data.WallThicknessMm, 100);
+            var vertical = Math.Min(Math.Abs(at.XMm - x0), Math.Abs(at.XMm - x1)) < Math.Min(Math.Abs(at.YMm - y0), Math.Abs(at.YMm - y1));
+            var outward = vertical ? (Math.Abs(at.XMm - x0) < Math.Abs(at.XMm - x1) ? -1 : 1) : (Math.Abs(at.YMm - y0) < Math.Abs(at.YMm - y1) ? -1 : 1);
+            if (vertical)
+            {
+                Rect(Math.Min(at.XMm, at.XMm + (outward * t)), at.YMm - (dia / 2), Math.Max(at.XMm, at.XMm + (outward * t)), at.YMm + (dia / 2), equipment);
+            }
+            else
+            {
+                Rect(at.XMm - (dia / 2), Math.Min(at.YMm, at.YMm + (outward * t)), at.XMm + (dia / 2), Math.Max(at.YMm, at.YMm + (outward * t)), equipment);
+            }
+
+            Text(at.XMm + (vertical ? outward * (t + h) - (outward < 0 ? 6 * h : 0) : h), at.YMm + (vertical ? h : outward * (t + h)), label, 0.6 * h);
+        }
+
         // Дверь: проём 900 мм по стене и дуга открывания внутрь.
         if (data.Door is { } d)
         {
@@ -92,12 +178,99 @@ public static class PumpRoomDxfWriter
             }
         }
 
+        var pipeLayerForSets = DxfDrawing.AddLayer(doc, PipeLayer, 5, LineWeightType.W50);
+        void Valve(XYZ at, double angle, string kind, double r)
+        {
+            var (c, sn) = (Math.Cos(angle), Math.Sin(angle));
+            XY Q(double a, double b) => new(at.X + (a * c) - (b * sn), at.Y + (a * sn) + (b * c));
+            if (kind == "check")
+            {
+                doc.Entities.Add(new LwPolyline([Q(-r, -r), Q(r, 0), Q(-r, r)]) { IsClosed = true, Layer = equipment });
+                doc.Entities.Add(new Line(new XYZ(Q(r, -r).X, Q(r, -r).Y, 0), new XYZ(Q(r, r).X, Q(r, r).Y, 0)) { Layer = equipment });
+            }
+            else
+            {
+                doc.Entities.Add(new LwPolyline([Q(-r, -r), Q(r, r), Q(r, -r), Q(-r, r)]) { IsClosed = true, Layer = equipment });
+            }
+        }
+
         foreach (var e in data.Equipment)
         {
+            // Насосы в составе установки: круги вдоль длинной стороны, коллекторы — линии по обе стороны от них.
+            if (e.Pumps.Count > 0)
+            {
+                var alongX = e.X1 - e.X0 >= e.Y1 - e.Y0;
+                var (len, wid) = alongX ? (e.X1 - e.X0, e.Y1 - e.Y0) : (e.Y1 - e.Y0, e.X1 - e.X0);
+                var r = Math.Min(len / (e.Pumps.Count * 2.6), wid * 0.22);
+                for (var k = 0; k < e.Pumps.Count; k++)
+                {
+                    var a = (len * (k + 0.5) / e.Pumps.Count) + (alongX ? e.X0 : e.Y0);
+                    var c = alongX ? P(a, (e.Y0 + e.Y1) / 2) : P((e.X0 + e.X1) / 2, a);
+                    doc.Entities.Add(new Circle { Center = c, Radius = r, Layer = equipment });
+                    doc.Entities.Add(new Circle { Center = c, Radius = r * 0.35, Layer = equipment });
+                    Text(c.X + r + (0.3 * h), c.Y + (0.3 * h), e.Pumps[k], 0.8 * h);
+
+                    // Обвязка агрегата (у установки с несколькими насосами): ветка к всасывающему коллектору с затвором,
+                    // к напорному — с обратным клапаном и затвором (обратный клапан — между насосом и запорной арматурой).
+                    if (e.Pumps.Count > 1)
+                    {
+                        var off = (wid / 2) - (wid * 0.12);
+                        foreach (var side in new[] { -1, 1 })
+                        {
+                            var (from, to) = alongX
+                                ? (P(c.X, c.Y + (side * r)), P(c.X, ((e.Y0 + e.Y1) / 2) + (side * off)))
+                                : (P(c.X + (side * r), c.Y), P(((e.X0 + e.X1) / 2) + (side * off), c.Y));
+                            doc.Entities.Add(new Line(from, to) { Layer = pipeLayerForSets });
+                            var ang = Math.Atan2(to.Y - from.Y, to.X - from.X);
+                            var seg = Math.Sqrt(Math.Pow(to.X - from.X, 2) + Math.Pow(to.Y - from.Y, 2));
+                            XYZ At(double frac) => P(from.X + ((to.X - from.X) * frac), from.Y + ((to.Y - from.Y) * frac));
+                            var vr = Math.Min(seg * 0.18, 0.5 * h);
+                            if (side < 0)
+                            {
+                                Valve(At(0.6), ang, "gate", vr);
+                            }
+                            else
+                            {
+                                Valve(At(0.35), ang, "check", vr);
+                                Valve(At(0.75), ang, "gate", vr);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var side in new[] { -1, 1 })
+                {
+                    var off = (wid / 2) - (wid * 0.12);
+                    if (alongX)
+                    {
+                        doc.Entities.Add(new Line(P(e.X0 + (0.05 * len), ((e.Y0 + e.Y1) / 2) + (side * off)), P(e.X1 - (0.05 * len), ((e.Y0 + e.Y1) / 2) + (side * off))) { Layer = equipment });
+                    }
+                    else
+                    {
+                        doc.Entities.Add(new Line(P(((e.X0 + e.X1) / 2) + (side * off), e.Y0 + (0.05 * len)), P(((e.X0 + e.X1) / 2) + (side * off), e.Y1 - (0.05 * len))) { Layer = equipment });
+                    }
+                }
+            }
+
+            if (data.Piping)
+            {
+                // На листе обвязки оборудование — тонким контуром с номером позиции.
+                Rect(e.X0, e.Y0, e.X1, e.Y1, dims);
+                if (e.Position is { } pn)
+                {
+                    Text(e.X0 + (0.3 * h), e.Y0 + (0.3 * h), pn.ToString(System.Globalization.CultureInfo.InvariantCulture), 0.8 * h);
+                }
+
+                continue;
+            }
+
             Rect(e.X0, e.Y0, e.X1, e.Y1, equipment);
 
-            // Диагонали — обозначение оборудования в плане; наименование — в экспликации (примечания).
-            doc.Entities.Add(new Line(P(e.X0, e.Y0), P(e.X1, e.Y1)) { Layer = equipment });
+            // Оборудование без насосов — с диагональю; наименование — в экспликации (примечания).
+            if (e.Pumps.Count == 0)
+            {
+                doc.Entities.Add(new Line(P(e.X0, e.Y0), P(e.X1, e.Y1)) { Layer = equipment });
+            }
             if (e.Position is { } n)
             {
                 var (cx, cy) = ((e.X0 + e.X1) / 2, (e.Y0 + e.Y1) / 2);
@@ -124,7 +297,7 @@ public static class PumpRoomDxfWriter
         // Обвязка: трубы — толстые линии, подпись DN над самым длинным участком.
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 5, LineWeightType.W50);
         var labelled = new List<XY>();
-        foreach (var pipe in data.Pipes.Where(p => p.Path.Count >= 2))
+        foreach (var pipe in data.Pipes.Where(p => p.Path.Count >= 2 && data.Piping))
         {
             doc.Entities.Add(new LwPolyline([.. pipe.Path.Select(p => new XY(p.XMm, p.YMm))]) { Layer = pipes });
             var (a, b) = pipe.Path.Zip(pipe.Path.Skip(1)).MaxBy(s => Math.Abs(s.Second.XMm - s.First.XMm) + Math.Abs(s.Second.YMm - s.First.YMm));
@@ -162,23 +335,61 @@ public static class PumpRoomDxfWriter
             Text(tx, ty, label, 0.8 * h);
         }
 
+        // Арматура: затвор (задвижка) — два треугольника, обратный клапан — треугольник с чертой, воздухоотводчик — кружок с «В».
+        foreach (var (at, angle, kind, pos) in data.Valves.Where(_ => data.Piping))
+        {
+            var (c, sn) = (Math.Cos(angle), Math.Sin(angle));
+            var r = 0.8 * h;
+            XYZ Q(double a, double b) => P(at.XMm + (a * c) - (b * sn), at.YMm + (a * sn) + (b * c));
+            switch (kind)
+            {
+                case "vent":
+                    doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = r, Layer = equipment });
+                    Text(at.XMm - (0.3 * r), at.YMm - (0.4 * r), "В", 0.6 * h);
+                    break;
+                case "check":
+                    doc.Entities.Add(new LwPolyline([new XY(Q(-r, -r).X, Q(-r, -r).Y), new XY(Q(r, 0).X, Q(r, 0).Y), new XY(Q(-r, r).X, Q(-r, r).Y)]) { IsClosed = true, Layer = equipment });
+                    doc.Entities.Add(new Line(Q(r, -r), Q(r, r)) { Layer = equipment });
+                    break;
+                default:
+                    doc.Entities.Add(new LwPolyline([new XY(Q(-r, -r).X, Q(-r, -r).Y), new XY(Q(r, r).X, Q(r, r).Y), new XY(Q(r, -r).X, Q(r, -r).Y), new XY(Q(-r, r).X, Q(-r, r).Y)]) { IsClosed = true, Layer = equipment });
+                    break;
+            }
+
+            if (pos is { } n)
+            {
+                // Номер позиции на выноске под 45° от символа.
+                doc.Entities.Add(new Line(P(at.XMm + r, at.YMm + r), P(at.XMm + (2.2 * r), at.YMm + (2.2 * r))) { Layer = text });
+                Text(at.XMm + (2.3 * r), at.YMm + (2.3 * r), n.ToString(System.Globalization.CultureInfo.InvariantCulture), 0.7 * h);
+            }
+        }
+
         // Цепочки размеров: по X — у нижней стены, по Y — у левой; точки — стены и грани первого (основного) оборудования
         // и узлов управления — привязка к стенам; остальное — по координатам на чертеже.
         var style = new PlanDxfStyle(TextHeightMm: h);
-        var main = data.Equipment.Take(1).ToList();
-        var xs = main.SelectMany(e => new[] { e.X0, e.X1 }).Append(x0).Append(x1).Select(x => Math.Round(x)).Distinct().Order().ToList();
-        var ys = main.SelectMany(e => new[] { e.Y0, e.Y1 }).Append(y0).Append(y1).Select(x => Math.Round(x)).Distinct().Order().ToList();
-        PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. xs.Select(x => new PlanPoint(x, y0))], -6 * h), style, dims);
-        PlanDxfWriter.AddChain(doc, new PlanDimensionChain([new PlanPoint(x0, y0), new PlanPoint(x1, y0)], -10 * h), style, dims);
-        PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. ys.Select(y => new PlanPoint(x0, y))], 6 * h), style, dims);
-        PlanDxfWriter.AddChain(doc, new PlanDimensionChain([new PlanPoint(x0, y0), new PlanPoint(x0, y1)], 10 * h), style, dims);
+        if (!data.Piping)
+        {
+            var main = data.Equipment.Take(1).ToList();
+            var xs = main.SelectMany(e => new[] { e.X0, e.X1 }).Append(x0).Append(x1).Select(x => Math.Round(x)).Distinct().Order().ToList();
+            var ys = main.SelectMany(e => new[] { e.Y0, e.Y1 }).Append(y0).Append(y1).Select(x => Math.Round(x)).Distinct().Order().ToList();
+            var wt = data.WallThicknessMm;
+            PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. xs.Select(x => new PlanPoint(x, y0 - wt))], -6 * h), style, dims);
+            PlanDxfWriter.AddChain(doc, new PlanDimensionChain([new PlanPoint(x0, y0 - wt), new PlanPoint(x1, y0 - wt)], -10 * h), style, dims);
+            PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. ys.Select(y => new PlanPoint(x0 - wt, y))], 6 * h), style, dims);
+            PlanDxfWriter.AddChain(doc, new PlanDimensionChain([new PlanPoint(x0 - wt, y0), new PlanPoint(x0 - wt, y1)], 10 * h), style, dims);
+        }
 
         var top = sheet.At(0, sheet.Format.HeightMm - 15);
-        Text(sheet.At(30, 0).X, top.Y, "План насосной станции пожаротушения", 2 * h);
+        Text(sheet.At(30, 0).X, top.Y, data.Piping ? "План обвязки насосной станции" : "План насосной станции пожаротушения", 2 * h);
         var ny = sheet.At(0, 92).Y;
+        // Примечания — подряд; шаг — по числу строк переноса (≈ 0,6 высоты на знак).
+        var noteWidth = sheet.Format.WidthMm * s * 0.45;
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
-            Text(sheet.At(25, 0).X, ny - (k * 3.6 * h), $"{k + 1}. {note}", 0.9 * h, sheet.Format.WidthMm * s * 0.45);
+            var lines = Math.Ceiling((note.Length + 4) / perLine);
+            Text(sheet.At(25, 0).X, ny, $"{k + 1}. {note}", 0.9 * h, noteWidth);
+            ny -= ((lines * 1.5) + 0.6) * 0.9 * h;
         }
 
         return doc;

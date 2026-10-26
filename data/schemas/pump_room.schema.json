@@ -117,6 +117,14 @@
         "jockeyDn": {
           "type": "integer",
           "minimum": 15
+        },
+        "sleeveExtraMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "foundationMarginMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
         }
       }
     }
