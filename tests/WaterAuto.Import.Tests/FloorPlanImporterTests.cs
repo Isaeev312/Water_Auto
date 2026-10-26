@@ -332,4 +332,31 @@ public class FloorPlanImporterTests
         r.HasErrors.ShouldBeFalse(string.Join("; ", r.Issues.Select(i => i.Message)));
         r.Plan!.Rooms.ShouldHaveSingleItem().Name.ShouldBe("Автостоянка");
     }
+
+    [Fact]
+    public void Pump_room_comes_from_its_own_layer_with_a_door_point()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Rect(FloorPlanImporter.PumpRoomLayer, 1000, 1000, 7000, 5000);
+        b.Point(FloorPlanImporter.PumpRoomLayer, 4000, 5000);
+
+        var r = ImportDxf(b);
+        r.HasErrors.ShouldBeFalse(string.Join("; ", r.Issues.Select(i => i.Message)));
+        var room = r.Plan!.PumpRooms.ShouldHaveSingleItem();
+        room.Outline.AreaMm2.ShouldBe(24e6, 1);
+        room.Door.ShouldBe(new PlanPoint(4000, 5000));
+    }
+
+    [Fact]
+    public void No_sprinkler_zone_labelled_PNS_is_taken_as_the_pump_room()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Rect(FloorPlanImporter.NoSprinklerLayer, 1000, 1000, 7000, 5000);
+        b.Text(FloorPlanImporter.NoSprinklerLayer, 3000, 3000, "ПНС");
+
+        var r = ImportDxf(b);
+        r.Plan!.PumpRooms.ShouldHaveSingleItem().Door.ShouldBeNull();
+        r.Issues.ShouldContain(i => i.Code == "import.pumpRoomFromZone");
+        r.Issues.ShouldNotContain(i => i.Code == "import.annotationSkipped");
+    }
 }

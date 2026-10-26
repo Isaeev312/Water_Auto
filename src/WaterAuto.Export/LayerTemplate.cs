@@ -19,7 +19,7 @@ public static class LayerTemplate
     // Слои входа (что читает импорт) и выхода (что пишет программа); цвета — как в tools/autocad/wa.lsp.
     private static readonly (string Name, short Color)[] Layers =
     [
-        ("ПТ_КОНТУР", 3), ("ПТ_КОЛОННЫ", 8), ("ПТ_БАЛКИ", 30), ("ПТ_КОРОБА", 40), ("ПТ_ЗАПРЕТ", 210), ("ПТ_ВВОД", 5),
+        ("ПТ_КОНТУР", 3), ("ПТ_КОЛОННЫ", 8), ("ПТ_БАЛКИ", 30), ("ПТ_КОРОБА", 40), ("ПТ_ЗАПРЕТ", 210), ("ПТ_ВВОД", 5), ("ПТ_НС", 6),
         (PlanDxfWriter.SprinklerLayer, 1), (PlanDxfWriter.PipeLayer, 4), (PlanDxfWriter.SegmentLayer, 7), (PlanDxfWriter.IssueLayer, 6),
         (PlanDxfWriter.ZoneLayer, 2), (PlanDxfWriter.SummaryLayer, 7), (PlanDxfWriter.SupportLayer, 8), (PlanDxfWriter.DimensionLayer, 3), (PlanDxfWriter.HydrantLayer, 1),
         (AxonometryDxfWriter.PipeLayer, 4), (AxonometryDxfWriter.SprinklerLayer, 1), (AxonometryDxfWriter.LabelLayer, 7),
@@ -32,7 +32,8 @@ public static class LayerTemplate
         "ПТ_БАЛКИ — замкнутые полилинии, «Толщина» = высота балки, мм; «Уровень» = отметка низа перекрытия;\\P" +
         "ПТ_КОРОБА — воздуховоды, площадки, оборудование: замкнутые полилинии, «Уровень» = отметка низа;\\P" +
         "ПТ_ЗАПРЕТ — зоны без оросителей;\\P" +
-        "ПТ_ВВОД — блок WA_ВВОД или точка там, где питающий трубопровод входит в помещение (в каждом защищаемом помещении).\\P" +
+        "ПТ_ВВОД — блок WA_ВВОД или точка там, где питающий трубопровод входит в помещение (в каждом защищаемом помещении);\\P" +
+        "ПТ_НС — замкнутая полилиния помещения насосной станции и точка у двери: оборудование расставляется программой с проходами по п. 6.10.16 СП 485.\\P" +
         "Перед расчётом — команда WA-CHECK (tools/autocad/wa.lsp). Слои ПТ_ОРОСИТЕЛИ, ПТ_ТРУБЫ, ПТ_УЧАСТКИ, ПТ_ЗАМЕЧАНИЯ, ПТ_ДИКТ_ЗОНА, ПТ_РАСЧЁТ, ПТ_АКСОН_* заполняет программа.";
 
     public static void Write(string path) => DxfDrawing.Save(path, Build());

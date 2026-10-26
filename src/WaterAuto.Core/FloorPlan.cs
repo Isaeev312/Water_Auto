@@ -18,6 +18,9 @@ public sealed record NoSprinklerZone(string Id, Polygon Outline);
 /// <summary>Точка подключения: стояк или узел управления (ПТ_ВВОД).</summary>
 public sealed record Inlet(string Id, PlanPoint Location, string? Name);
 
+/// <summary>Помещение насосной станции: контур и, если задана, точка входа (двери) на контуре.</summary>
+public sealed record PumpRoom(string Id, Polygon Outline, PlanPoint? Door = null);
+
 /// <summary>План этажа после импорта (ARCHITECTURE §5). ID — дескрипторы объектов чертежа.</summary>
 public sealed record FloorPlan(
     IReadOnlyList<Room> Rooms,
@@ -25,4 +28,8 @@ public sealed record FloorPlan(
     IReadOnlyList<Beam> Beams,
     IReadOnlyList<Duct> Ducts,
     IReadOnlyList<NoSprinklerZone> NoSprinklerZones,
-    IReadOnlyList<Inlet> Inlets);
+    IReadOnlyList<Inlet> Inlets)
+{
+    /// <summary>Насосные станции на этаже (слой ПТ_НС или зона ПТ_ЗАПРЕТ с подписью «ПНС»).</summary>
+    public IReadOnlyList<PumpRoom> PumpRooms { get; init; } = [];
+}

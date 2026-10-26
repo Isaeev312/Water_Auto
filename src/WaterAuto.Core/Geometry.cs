@@ -57,6 +57,9 @@ public sealed record Polygon(IReadOnlyList<PlanPoint> Vertices)
     }
 
     /// <summary>Точка внутри или на границе (с допуском).</summary>
+    /// <summary>Расстояние от точки до ближайшей стороны контура, мм.</summary>
+    public double DistanceTo(PlanPoint p) => Edges().Min(e => DistanceToSegment(p, e.A, e.B));
+
     public bool Contains(PlanPoint p)
     {
         if (Edges().Any(e => DistanceToSegment(p, e.A, e.B) <= ToleranceMm))
