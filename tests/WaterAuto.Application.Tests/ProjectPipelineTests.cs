@@ -109,8 +109,15 @@ public sealed class ProjectPipelineTests : IDisposable
         var plain = Run(Project()).Design!;
         var result = Run(Project(hydrants: new ProjectHydrants
         {
-            FireResistance = "II", Category = "В", HazardClass = "С0", Volume = 40, BuildingHeight = 12, RoomHeight = 3.3,
-            AboveAxis = 1.35, PipeLength = 15, PipeDn = 65,
+            FireResistance = "II",
+            Category = "В",
+            HazardClass = "С0",
+            Volume = 40,
+            BuildingHeight = 12,
+            RoomHeight = 3.3,
+            AboveAxis = 1.35,
+            PipeLength = 15,
+            PipeDn = 65,
         }));
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Design!.Hydrants.ShouldNotBeNull();
