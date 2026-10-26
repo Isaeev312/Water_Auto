@@ -14,6 +14,9 @@ public class GoldenTests
 {
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
+    // Предел скорости напорных труб — данные норм (6.7.1.37), числа в C# нет: эталоны проверяются тем же пределом.
+    private static readonly Velocity MaxVelocity = LoadMaxVelocity();
+
     // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
     // Ссылка узла на каталог — поле «sprinkler» (tests/Golden/README.md); без неё диапазон не подставляется.
     private static readonly Dictionary<string, PressureRange> Catalog = LoadCatalog();
@@ -166,8 +169,18 @@ public class GoldenTests
 
         var network = new HydraulicNetwork(nodes, pipes);
         var dictating = project.GetProperty("dictating");
-        var solution = TreeSolver.SolveDesign(network, dictating.GetProperty("node").GetString()!, new Pressure(dictating.GetProperty("P").GetDouble()));
+        var solution = TreeSolver.SolveDesign(
+            network, dictating.GetProperty("node").GetString()!, new Pressure(dictating.GetProperty("P").GetDouble()), MaxVelocity);
         return (project, solution, network);
+    }
+
+    private static Velocity LoadMaxVelocity()
+    {
+        var record = Norms.Find("sp485.p6_7_1_37.velocity")
+            ?? throw new InvalidOperationException("В data/norms нет записи «sp485.p6_7_1_37.velocity» (6.7.1.37).");
+        var value = record.Values["pressureMax"]
+            ?? throw new InvalidOperationException($"В записи {record.Id} нет значения pressureMax (6.7.1.37).");
+        return new Velocity(value);
     }
 
     private static PipeCharacteristic Characteristic(JsonElement pipe)

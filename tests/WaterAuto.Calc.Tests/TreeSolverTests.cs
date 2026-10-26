@@ -1,10 +1,27 @@
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Core;
+using WaterAuto.Norms;
 
 namespace WaterAuto.Calc.Tests;
 
 public class TreeSolverTests
 {
+    private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
+
+    // Предел скорости напорных труб — данные норм (data/norms/sp485/clauses_6_7_1_37.json), не число в C#.
+    private static Velocity MaxVelocity()
+    {
+        var record = Norms.Find("sp485.p6_7_1_37.velocity")
+            ?? throw new InvalidOperationException("В data/norms нет записи «sp485.p6_7_1_37.velocity» (6.7.1.37).");
+        var value = record.Values["pressureMax"]
+            ?? throw new InvalidOperationException($"В записи {record.Id} нет значения pressureMax (6.7.1.37).");
+        return new Velocity(value);
+    }
+
+    // Узкая труба для проверки скорости: условный DN15, внутренний Ø 16 мм — скорость выше предела 6.7.1.37.
+    private static PipeGeometry NarrowGeometry() =>
+        new("ГОСТ 3262", 15, Length.FromMillimeters(20.0), Length.FromMillimeters(2.0));
+
     private static NetworkNode Sprinkler(string id, double z = 0, double k = 0.47, PressureRange? range = null) =>
         new(id, NodeKind.Sprinkler, new Length(z), new KFactor(k), range);
 
@@ -390,6 +407,70 @@ public class TreeSolverTests
 
         result.Issues.ShouldBeEmpty();
         result.PipeVelocities.ContainsKey("S-1").ShouldBeTrue();
+    }
+
+    // Предел скорости — данные норм (6.7.1.37), поэтому тест читает его из data/norms через Norms.Find.
+    [Fact]
+    public void Velocity_above_norm_limit_is_a_warning()
+    {
+        var limit = MaxVelocity();
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, NarrowGeometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1), limit);
+
+        var velocity = result.PipeVelocities["S-2"];
+        velocity.MetersPerSecond.ShouldBeGreaterThan(limit.MetersPerSecond);
+        var issue = result.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("pipe.velocity");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.ElementId.ShouldBe("S-2");
+        issue.Message.ShouldContain(velocity.ToString());
+        issue.Message.ShouldContain(limit.ToString());
+        result.HasErrors.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Velocity_at_or_below_norm_limit_has_no_warning()
+    {
+        var limit = MaxVelocity();
+        var wide = new PipeGeometry("ГОСТ 3262", 100, Length.FromMillimeters(108.0), Length.FromMillimeters(4.0));
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, wide), Pipe("2-1", "2", "1", geometry: wide)]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1), limit);
+
+        result.PipeVelocities.Values.ShouldAllBe(v => v.MetersPerSecond <= limit.MetersPerSecond);
+        result.Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Velocity_check_is_skipped_when_limit_is_not_given()
+    {
+        // Необязательный предел (null по умолчанию): существующие вызовы SolveDesign проверку не запускают.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, NarrowGeometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Pipes_without_geometry_are_not_checked_for_velocity()
+    {
+        // Скорость считается только для труб с Geometry: без сортамента проверять нечего (pipe.noGeometry).
+        var limit = MaxVelocity();
+        var net = new HydraulicNetwork([Source("S"), Sprinkler("1")], [Pipe("S-1", "S", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1), limit);
+
+        result.PipeVelocities.ShouldBeEmpty();
+        result.Issues.ShouldContain(i => i.Code == "pipe.noGeometry" && i.ElementId == "S-1");
+        result.Issues.ShouldNotContain(i => i.Code == "pipe.velocity");
     }
 
     [Fact]

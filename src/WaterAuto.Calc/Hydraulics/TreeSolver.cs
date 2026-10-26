@@ -34,7 +34,7 @@ public sealed record TreeSolution(
 /// </summary>
 public static class TreeSolver
 {
-    public static TreeSolution SolveDesign(HydraulicNetwork network, string dictatingNodeId, Pressure dictatingPressure)
+    public static TreeSolution SolveDesign(HydraulicNetwork network, string dictatingNodeId, Pressure dictatingPressure, Velocity? maxVelocity = null)
     {
         ArgumentNullException.ThrowIfNull(network);
         var issues = new List<Issue>();
@@ -201,6 +201,19 @@ public static class TreeSolver
             if (p.Geometry is { } g && pipeFlows.TryGetValue(p.Id, out var q))
             {
                 velocities[p.Id] = Velocity.Of(q, g.InnerDiameter);
+            }
+        }
+
+        // Предел скорости — данные норм (6.7.1.37): Calc норм не знает, предел передаёт вызывающий. null — проверка не выполняется.
+        if (maxVelocity is { } velocityLimit)
+        {
+            foreach (var p in network.Pipes)
+            {
+                if (velocities.TryGetValue(p.Id, out var v) && v.MetersPerSecond > velocityLimit.MetersPerSecond)
+                {
+                    issues.Add(new Issue("pipe.velocity", IssueLevel.Warning,
+                        $"Скорость в трубе {p.Id} ({v}) выше предела {velocityLimit}.", p.Id));
+                }
             }
         }
 
