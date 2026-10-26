@@ -16,6 +16,9 @@ public sealed record PumpRoomEquipment(string Label, double X0, double Y0, doubl
 /// <summary>Трубопровод на плане насосной: ломаная, подпись (DN), уровень (0 — ближе к стене).</summary>
 public sealed record PumpRoomPipe(string Label, IReadOnlyList<PlanPoint> Path)
 {
+    /// <summary>Отметка прокладки, м: на пересечении в плане прерывается нижняя труба.</summary>
+    public double Height { get; init; }
+
     /// <summary>Подъёмы и опуски (стояки): точка в плане, отметки верха и низа, м.</summary>
     public IReadOnlyList<(PlanPoint At, double Top, double Bottom)> Risers { get; init; } = [];
 }
@@ -43,6 +46,12 @@ public sealed record PumpRoomDrawing(Polygon Room, PlanPoint? Door, IReadOnlyLis
     /// <summary>Гильзы в стенах: точка прохода трубы, наружный диаметр гильзы, мм, подпись.</summary>
     public IReadOnlyList<(PlanPoint At, double DiameterMm, string Label)> Sleeves { get; init; } = [];
 
+    /// <summary>Экспликация помещения: номер, наименование, площадь, м², высота, м, категория.</summary>
+    public (string Number, string Name, double Area, double Height, string Category)? Explication { get; init; }
+
+    /// <summary>Буквенное обозначение трубопровода в разрывах линии (ГОСТ 21.205: В2 — противопожарный водопровод).</summary>
+    public string LineCode { get; init; } = "В2";
+
     /// <summary>Арматура на трубах: точка, направление трубы (рад), вид (gate, check, vent), номер позиции.</summary>
     public IReadOnlyList<(PlanPoint At, double Angle, string Kind, int? Position)> Valves { get; init; } = [];
 }
@@ -58,6 +67,24 @@ public static class PumpRoomDxfWriter
     public const string EquipmentLayer = "ПТ_НС_ОБОРУД";
     public const string TextLayer = "ПТ_НС_ТЕКСТ";
     public const string PipeLayer = "ПТ_НС_ТРУБЫ";
+
+    // Точка отрезка a→b при доле t.
+    private static XYZ At(PlanPoint a, PlanPoint b, double t) => new(a.XMm + ((b.XMm - a.XMm) * t), a.YMm + ((b.YMm - a.YMm) * t), 0);
+
+    // Доля t на отрезке a→b, где его пересекает отрезок c→d (внутри обоих, не в концах); null — не пересекаются.
+    private static double? Cross(PlanPoint a, PlanPoint b, PlanPoint c, PlanPoint d)
+    {
+        double rx = b.XMm - a.XMm, ry = b.YMm - a.YMm, sx = d.XMm - c.XMm, sy = d.YMm - c.YMm;
+        var den = (rx * sy) - (ry * sx);
+        if (Math.Abs(den) < 1e-9)
+        {
+            return null;
+        }
+
+        var t = (((c.XMm - a.XMm) * sy) - ((c.YMm - a.YMm) * sx)) / den;
+        var u = (((c.XMm - a.XMm) * ry) - ((c.YMm - a.YMm) * rx)) / den;
+        return t > 0.02 && t < 0.98 && u > 0.02 && u < 0.98 ? t : null;
+    }
 
     public static void Write(string path, PumpRoomDrawing data, TitleBlock stamp, string font = DocumentStyle.DefaultFont) =>
         DxfDrawing.Save(path, Build(data, stamp), font);
@@ -301,9 +328,72 @@ public static class PumpRoomDxfWriter
         // Обвязка: трубы — толстые линии, подпись DN над самым длинным участком.
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 5, LineWeightType.W50);
         var labelled = new List<XY>();
-        foreach (var pipe in data.Pipes.Where(p => p.Path.Count >= 2 && data.Piping))
+        // Трубы рисуются отрезками с разрывами: на пересечении в плане прерывается нижняя труба (разрыв 1,2 h), через ~40 h —
+        // разрыв с буквенным обозначением трубопровода.
+        var allSegments = data.Pipes.SelectMany((p, k) => p.Path.Zip(p.Path.Skip(1)).Select(s => (Pipe: k, p.Height, A: s.First, B: s.Second))).ToList();
+        foreach (var (pipe, k) in data.Pipes.Select((p, k) => (p, k)).Where(x => x.p.Path.Count >= 2 && data.Piping))
         {
-            doc.Entities.Add(new LwPolyline([.. pipe.Path.Select(p => new XY(p.XMm, p.YMm))]) { Layer = pipes });
+            foreach (var (a0, b0) in pipe.Path.Zip(pipe.Path.Skip(1)))
+            {
+                var len = Math.Sqrt(Math.Pow(b0.XMm - a0.XMm, 2) + Math.Pow(b0.YMm - a0.YMm, 2));
+                if (len < 1)
+                {
+                    continue;
+                }
+
+                var cuts = new List<(double T0, double T1)>();
+                foreach (var o in allSegments.Where(o => o.Pipe != k && o.Height > pipe.Height + 1e-6))
+                {
+                    if (Cross(a0, b0, o.A, o.B) is { } tc)
+                    {
+                        var g = 0.6 * h / len;
+                        cuts.Add((tc - g, tc + g));
+                    }
+                }
+
+                // Обозначение трубопровода: по одному на каждые ~40 h длины, не ближе 6 h к концам участка.
+                var codes = new List<double>();
+                for (var dd = 20 * h; dd < len - (6 * h); dd += 40 * h)
+                {
+                    var tc = dd / len;
+                    if (cuts.All(c => tc < c.T0 - (2 * h / len) || tc > c.T1 + (2 * h / len)))
+                    {
+                        codes.Add(tc);
+                        cuts.Add((tc - (1.0 * h / len), tc + (1.0 * h / len)));
+                    }
+                }
+
+                var pos = 0.0;
+                foreach (var (c0, c1) in cuts.OrderBy(c => c.T0))
+                {
+                    if (c0 > pos)
+                    {
+                        doc.Entities.Add(new Line(At(a0, b0, pos), At(a0, b0, Math.Max(pos, c0))) { Layer = pipes });
+                    }
+
+                    pos = Math.Max(pos, c1);
+                }
+
+                if (pos < 1)
+                {
+                    doc.Entities.Add(new Line(At(a0, b0, pos), P(b0.XMm, b0.YMm)) { Layer = pipes });
+                }
+
+                foreach (var tc in codes)
+                {
+                    var c = At(a0, b0, tc);
+                    var vert = Math.Abs(b0.XMm - a0.XMm) < Math.Abs(b0.YMm - a0.YMm);
+                    doc.Entities.Add(new TextEntity
+                    {
+                        Value = data.LineCode,
+                        InsertPoint = vert ? P(c.X + (0.35 * h), c.Y - (0.7 * h)) : P(c.X - (0.7 * h), c.Y - (0.35 * h)),
+                        Height = 0.7 * h,
+                        Rotation = vert ? Math.PI / 2 : 0,
+                        Layer = pipes,
+                    });
+                }
+            }
+
             var (a, b) = pipe.Path.Zip(pipe.Path.Skip(1)).MaxBy(s => Math.Abs(s.Second.XMm - s.First.XMm) + Math.Abs(s.Second.YMm - s.First.YMm));
             var vertical = Math.Abs(b.XMm - a.XMm) < Math.Abs(b.YMm - a.YMm);
             var mid = new XY((a.XMm + b.XMm) / 2, (a.YMm + b.YMm) / 2);
@@ -366,6 +456,76 @@ public static class PumpRoomDxfWriter
             if (topSide.Count > 0)
             {
                 PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. topSide.Select(y => new PlanPoint(x0 + (0.7 * (x1 - x0)), y)), new PlanPoint(x0 + (0.7 * (x1 - x0)), y1)], 0), style2, dims);
+            }
+        }
+
+        // Условные обозначения на листе обвязки — справа от плана.
+        if (data.Piping)
+        {
+            var lx = x1 + (data.WallThicknessMm) + (12 * h);
+            var ly = y1;
+            Text(lx, ly, "Условные обозначения", 1.0 * h);
+            var rows = new (string Kind, string Label)[]
+            {
+                ("line", $"трубопровод противопожарного водопровода ({data.LineCode}), ГОСТ 21.205"),
+                ("gate", "задвижка (затвор)"),
+                ("check", "клапан обратный"),
+                ("vent", "воздухоотводчик автоматический"),
+                ("riser", "подъём (опуск) трубопровода, отметки верха / низа"),
+                ("mark", "ввод, выпуск, патрубок ГМ на стене"),
+            };
+            for (var k = 0; k < rows.Length; k++)
+            {
+                var cy = ly - ((k + 1.6) * 2.4 * h);
+                var c = P(lx + (2 * h), cy);
+                switch (rows[k].Kind)
+                {
+                    case "line":
+                        doc.Entities.Add(new Line(P(lx, cy), P(lx + (1.3 * h), cy)) { Layer = pipes });
+                        doc.Entities.Add(new Line(P(lx + (2.7 * h), cy), P(lx + (4 * h), cy)) { Layer = pipes });
+                        Text(lx + (1.4 * h), cy - (0.35 * h), data.LineCode, 0.7 * h);
+                        break;
+                    case "gate":
+                        Valve(c, 0, "gate", 0.6 * h);
+                        break;
+                    case "check":
+                        Valve(c, 0, "check", 0.6 * h);
+                        break;
+                    case "vent":
+                        doc.Entities.Add(new Circle { Center = c, Radius = 0.6 * h, Layer = equipment });
+                        Text(c.X - (0.25 * h), c.Y - (0.3 * h), "В", 0.5 * h);
+                        break;
+                    case "riser":
+                        doc.Entities.Add(new Circle { Center = c, Radius = 0.45 * h, Layer = equipment });
+                        break;
+                    default:
+                        doc.Entities.Add(new Circle { Center = c, Radius = 0.6 * h, Layer = pipes });
+                        break;
+                }
+
+                Text(lx + (5 * h), cy - (0.35 * h), rows[k].Label, 0.7 * h);
+            }
+        }
+
+        // Экспликация помещения — таблица справа от плана (архитектурный лист).
+        if (!data.Piping && data.Explication is { } ex)
+        {
+            var tx = x1 + data.WallThicknessMm + (12 * h);
+            var ty = y1;
+            double[] widths = [6 * h, 22 * h, 8 * h, 7 * h, 22 * h];
+            string[] head = ["№", "Наименование", "Площадь, м²", "Высота, м", "Категория"];
+            string[] row = [ex.Number, ex.Name, ex.Area.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")), ex.Height.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")), ex.Category];
+            Text(tx, ty + (1.0 * h), "Экспликация помещения", 1.0 * h);
+            var rowH = 3.2 * h;
+            for (var r = 0; r < 2; r++)
+            {
+                var cx = tx;
+                for (var c = 0; c < widths.Length; c++)
+                {
+                    Rect(cx, ty - ((r + 1) * rowH), cx + widths[c], ty - (r * rowH), text);
+                    Text(cx + (0.3 * h), ty - ((r + 1) * rowH) + (1.0 * h), r == 0 ? head[c] : row[c], 0.65 * h, widths[c] - (0.6 * h));
+                    cx += widths[c];
+                }
             }
         }
 

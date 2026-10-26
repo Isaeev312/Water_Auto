@@ -538,6 +538,7 @@ public static class ProjectPipeline
                 ])
             {
                 WallThicknessMm = pr1.WallThickness * 1000,
+                Explication = ("1", "Насосная станция пожаротушения", roomPlan.Room.Outline.AreaMm2 / 1e6, pr1.Height, "по СП 12.13130 (смежный раздел)"),
                 Pit = features.Pit,
                 PitLabel = string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Приямок {pr1.PitSize:0.0}×{pr1.PitSize:0.0}, h = {pr1.PitDepth:0.0} м; дренажные насосы — поз. {PosOf("drainPump")?.ToString(CultureInfo.InvariantCulture) ?? "—"}"),
                 Foundation = features.Foundation,
@@ -564,6 +565,7 @@ public static class ProjectPipeline
                     Piping = true,
                     Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{r.Dn} {(r.RunHeightMm / 1000) + pr1.FloorElevation:+0.000}"), r.Path)
                     {
+                        Height = r.RunHeightMm / 1000,
                         // Стояки — где отметка конца отличается от отметки прокладки (подъём к патрубку, опуск у стены).
                         Risers = [
                             .. Math.Abs(r.FromHeightMm - r.RunHeightMm) > 1 ? new[] { (r.Path[0], (Math.Max(r.FromHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation, (Math.Min(r.FromHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation) } : [],
