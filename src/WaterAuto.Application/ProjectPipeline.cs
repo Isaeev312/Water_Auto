@@ -30,6 +30,7 @@ public static class ProjectPipeline
     public const string SpecificationDocxFile = "specification.docx";
     public const string PumpSchemeFile = "pump_scheme.dxf";
     public const string PumpStationSpecFile = "specification_pns.docx";
+    public const string PumpRoomPlanFile = "pump_room_plan.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string IssuesFile = "issues.txt";
 
@@ -216,6 +217,45 @@ public static class ProjectPipeline
             };
         }
 
+        // Подбор комплектной установки по каталогу (Q, H); насосы, прибор управления, обвязка с арматурой и КИП входят в неё —
+        // эти строки шаблона заменяются строкой установки.
+        var catalogSets = PumpCatalog.Sets(normsDir);
+        var roomData = PumpCatalog.Room(normsDir);
+        PumpSetChoice? setChoice = null;
+        if (catalogSets.Count > 0 && stationTakeoff.Items.Count > 0)
+        {
+            setChoice = PumpSetSelection.Choose(catalogSets, worst.PumpFlow.LitersPerSecond * 3.6, worst.PumpHead.Meters);
+            issues.AddRange(setChoice.Issues);
+            if (setChoice.Chosen is { } set)
+            {
+                string[] covered = ["pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD"];
+                var row = new TakeoffItem(
+                    TakeoffGroup.PumpStation,
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Установка пожаротушения {set.Designation}: {set.MainPumps} основн. + {set.StandbyPumps} резервн. насос {set.Pump}, P2 = {set.PowerKw:0.##} кВт, прибор управления Control MX-II, обвязка с арматурой и КИП; H = {setChoice.HeadAtDuty:0.0} м при Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч"),
+                    roomData?.SetNote ?? "по каталогу изготовителя",
+                    1,
+                    "компл.",
+                    $"коллекторы DN{set.CollectorDn}; или аналог",
+                    Supplier: set.Maker,
+                    Role: "pumpSet");
+                stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !covered.Contains(i.Role))] };
+                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, $"Подобрана установка {set.Designation}: напор по каталогу {setChoice.HeadAtDuty:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем."));
+            }
+        }
+
+        // Расстановка оборудования в помещении насосной (слой ПТ_НС) с проходами п. 6.10.16.
+        PumpRoomPlan? roomPlan = null;
+        if (plan.PumpRooms.Count > 0 && setChoice?.Chosen is { } chosenSet && roomData is { } rd)
+        {
+            roomPlan = PumpRoomLayout.Place(plan.PumpRooms[0], [
+                new StationItem(StationItemKind.PumpSet, chosenSet.Designation, chosenSet.Hydraulic),
+                new StationItem(StationItemKind.Cabinet, "Прибор управления Control MX-II", chosenSet.Cabinet),
+                new StationItem(StationItemKind.ControlUnit, "Узел управления", rd.ControlUnit, Count: sections.Count),
+                new StationItem(StationItemKind.Jockey, "Жокей-насос", rd.Jockey),
+            ], norms);
+            issues.AddRange(roomPlan.Issues);
+        }
+
         // Номера позиций спецификации насосной — на схеме, по роли элемента (сквозная нумерация).
         var schemePositions = SpecificationXlsx.Positions(stationTakeoff, continuous: true)
             .Where(p => p.Item.Role is not null)
@@ -305,6 +345,34 @@ public static class ProjectPipeline
                 sections),
             SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
             project.Font));
+        // План насосной: оборудование по расстановке, номера позиций ПТ2.СО, принятые проходы и допущения.
+        if (roomPlan is { Items.Count: > 0 })
+        {
+            int? PosOf(string role) => schemePositions.TryGetValue(role, out var n) ? n : null;
+            var board = (norms.Find("sp485.p6_10_16.passages")?.Values["switchboard"] ?? 0) * 1000;
+            var equipment = roomPlan.Items.Select(i => new PumpRoomEquipment(
+                i.Label, i.X0, i.Y0, i.X1, i.Y1,
+                i.Kind switch
+                {
+                    StationItemKind.PumpSet or StationItemKind.Cabinet => PosOf("pumpSet"),
+                    StationItemKind.ControlUnit => PosOf("cu"),
+                    _ => PosOf("jockey"),
+                },
+                i.Front,
+                i.Front is null ? 0 : board)).ToList();
+            Write(outDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
+                p,
+                new PumpRoomDrawing(roomPlan.Room.Outline, roomPlan.Room.Door, [.. equipment.OrderBy(e => e.Label == roomPlan.Items[0].Label ? 0 : 1)], [
+                    "Экспликация: " + string.Join("; ", equipment.GroupBy(e => e.Position).Select(g => $"{g.Key?.ToString(CultureInfo.InvariantCulture) ?? "—"} — {string.Join(", ", g.Select(e => e.Label).Distinct())}")) + ".",
+                    .. roomPlan.Rules.Select(r => $"Проход: {r} (п. 6.10.16 СП 485)."),
+                    "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно (data/catalog/pump_room.json), уточнить по выбранному оборудованию.",
+                    "Свободная зона у двери 1 × 1 м — правило программы.",
+                    "Номера позиций — по спецификации ПТ2.СО.",
+                ]),
+                SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
+                project.Font));
+        }
+
         if (stationTakeoff.Items.Count > 0)
         {
             Write(outDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
@@ -343,7 +411,9 @@ public static class ProjectPipeline
                 design.MaxAmbientTemperature,
                 hydrantPoints.Count,
                 hydrantReach,
-                station),
+                station,
+                setChoice,
+                roomPlan),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 

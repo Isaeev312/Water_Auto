@@ -258,7 +258,7 @@ public static class PlanDxfWriter
     }
 
     // Размерная цепочка по ГОСТ 2.307: выносные линии, размерная линия с засечками под 45°, размер в мм над линией.
-    private static void AddChain(CadDocument doc, PlanDimensionChain chain, PlanDxfStyle style, Layer layer)
+    internal static void AddChain(CadDocument doc, PlanDimensionChain chain, PlanDxfStyle style, Layer layer)
     {
         var a = chain.Points[0];
         var b = chain.Points[^1];

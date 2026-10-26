@@ -29,7 +29,9 @@ public sealed record NoteInputs(
     double? MaxAmbient = null,
     int HydrantCount = 0,
     Length? HydrantReach = null,
-    PumpStationResult? Station = null);
+    PumpStationResult? Station = null,
+    PumpSetChoice? SetChoice = null,
+    PumpRoomPlan? RoomPlan = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -405,6 +407,7 @@ public static class ExplanatoryNoteComposer
         return new NoteSection("6", "Насосная установка", [
             .. PumpHeadBlocks(i, supplyDn, kt, m3h, jockey),
             .. i.Station is { } st ? StationBlocks(st, norms) : [],
+            .. SetBlocks(i),
         ]);
     }
 
@@ -449,6 +452,29 @@ public static class ExplanatoryNoteComposer
                 "не менее двух выведенных наружу патрубков DN 80 с соединительными головками для передвижной пожарной техники (п. 6.10.17).",
             ]),
         ];
+    }
+
+    // Подобранная установка и расстановка в помещении насосной (п. 6.10.16).
+    private static List<NoteBlock> SetBlocks(NoteInputs i)
+    {
+        var blocks = new List<NoteBlock>();
+        if (i.SetChoice?.Chosen is { } set)
+        {
+            var q = i.Design.PumpFlow.LitersPerSecond * 3.6;
+            blocks.Add(new NoteParagraph($"**Подбор установки.** По каталогу {set.Maker} принята комплектная установка **{set.Designation}**: {set.MainPumps} основной и {set.StandbyPumps} резервный насос {set.Pump} (*P*_{{2}} = {F(set.PowerKw, "0.##")} кВт), прибор управления, трубная обвязка с арматурой и КИП. Напор по характеристике при *Q* = {F(q, "0.0")} м³/ч — {F(i.SetChoice.HeadAtDuty, "0.0")} м, требуется {F(i.Design.PumpHead.Meters, "0.0")} м. Потери в обвязке установки на характеристиках каталога не учтены — рабочая точка подлежит проверке по данным изготовителя."));
+        }
+
+        if (i.RoomPlan is { } rp)
+        {
+            var v = rp.Room.Outline.Vertices;
+            var (w, h) = ((v.Max(p => p.XMm) - v.Min(p => p.XMm)) / 1000, (v.Max(p => p.YMm) - v.Min(p => p.YMm)) / 1000);
+            blocks.Add(new NoteParagraph(rp.Issues.Any(x => x.Level == IssueLevel.Error)
+                ? $"**Помещение насосной** {F(w, "0.00")} × {F(h, "0.00")} м: оборудование с проходами п. 6.10.16 *не размещается* — см. замечания; помещение следует увеличить."
+                : $"**Помещение насосной** {F(w, "0.00")} × {F(h, "0.00")} м. Оборудование расставлено с проходами (п. 6.10.16):"));
+            blocks.Add(new NoteList([.. rp.Rules.Select(r => r + ";")]));
+        }
+
+        return blocks;
     }
 
     // Насосная станция: состав агрегатов, обвязка по скорости (6.7.1.37), проходы (6.10.16), патрубки (6.10.17, 6.10.18), микроклимат (6.10.12).
