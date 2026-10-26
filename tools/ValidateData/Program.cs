@@ -80,6 +80,7 @@ foreach (var file in Directory.EnumerateFiles(dataDir, "*.json", SearchOption.Al
     if (Path.GetFileName(schemaPath).Equals("norms.schema.json", StringComparison.OrdinalIgnoreCase))
     {
         CheckNorms(rel, doc!, normIds, errors);
+        CheckRequiredKeys(rel, doc!, errors);
         foreach (var record in doc!["records"]!.AsArray())
         {
             normValues[record!["id"]!.GetValue<string>()] = record["values"]!.AsObject();
@@ -157,6 +158,78 @@ static void CheckSprinklers(string rel, JsonNode doc, List<string> errors)
             if (p <= 0 || i <= 0)
             {
                 errors.Add($"{rel}: {id}: точка интенсивности P = {p}, i = {i} должна быть положительной");
+            }
+        }
+    }
+}
+
+static void CheckRequiredKeys(string rel, JsonNode doc, List<string> errors)
+{
+    // Обязательные ключи записей норм: clause → ключи values → ключи attrs. Это единственное место,
+    // где перечислены списки: при переименовании ключа в data/norms ошибку должен дать ValidateData,
+    // а не расчёт с KeyNotFoundException/NullReferenceException.
+    // Источник списков:
+    //   «табл. Б.2» и «табл. Б.3» (строка quantity == "Kt") — WaterAuto.Calc/Hydraulics/PipeCharacteristics.cs,
+    //     Resolve: standard, D_out, wall, Kt и standard, quantity, formula, psi, theta, dnMin, dnMax; dn в Б.2 —
+    //     признак строки таблицы (сверку dn с D_out делает этап «Граф сети», разбор п. 2.4);
+    //   «Б.1.3.13» — localLossFactor, доля местных потерь (appendix_B_clauses.json; README §6.1, ADR 0002);
+    //   «табл. 6.1» — параметры АУП по группе помещения (README §6.1): i, Q, S, t, шаг и attrs.group.
+    //     В текущем срезе Calc эти две записи ещё не читает: списки закрепляют их формат заранее.
+    // Строка «табл. Б.3» с quantity == "A" (формула Б.7) сюда не входит: Calc её не использует.
+    (string Clause, string? SelectAttr, string? SelectValue, string[] Values, string[] Attrs)[] requirements =
+    [
+        ("табл. Б.2", null, null, ["dn", "D_out", "wall", "Kt"], ["standard"]),
+        ("табл. Б.3", "quantity", "Kt", ["psi", "theta", "dnMin", "dnMax"], ["standard", "formula", "quantity"]),
+        ("Б.1.3.13", null, null, ["localLossFactor"], []),
+        ("табл. 6.1", null, null, ["i_water", "i_foam", "Q_water", "Q_foam", "S", "t_min", "maxSpacing"], ["group"]),
+    ];
+
+    foreach (var node in doc["records"]!.AsArray())
+    {
+        var record = node!;
+        var id = record["id"]!.GetValue<string>();
+        var clause = record["clause"]!.GetValue<string>();
+        var attrs = record["attrs"] as JsonObject;
+        foreach (var requirement in requirements)
+        {
+            if (requirement.Clause != clause)
+            {
+                continue;
+            }
+
+            // Для табл. Б.3 обязательные ключи заданы только для строки Kt; строка формулы Б.7 не проверяется.
+            // Если сам ключ-селектор пропал, сказать об этом: иначе переименование quantity молча выключит проверку.
+            if (requirement.SelectAttr is { } selectAttr)
+            {
+                if (attrs is null || !attrs.TryGetPropertyValue(selectAttr, out var selector))
+                {
+                    errors.Add($"{rel}: {id}: нет ключа attrs.{selectAttr} (по нему выбираются обязательные ключи clause «{clause}»)");
+                    continue;
+                }
+
+                if (selector is not JsonValue selectorValue
+                    || !selectorValue.TryGetValue<string>(out var selectorText)
+                    || selectorText != requirement.SelectValue)
+                {
+                    continue;
+                }
+            }
+
+            var values = record["values"]!.AsObject();
+            foreach (var key in requirement.Values)
+            {
+                if (!values.ContainsKey(key))
+                {
+                    errors.Add($"{rel}: {id}: нет обязательного ключа values.{key} (clause «{clause}»)");
+                }
+            }
+
+            foreach (var key in requirement.Attrs)
+            {
+                if (attrs?.ContainsKey(key) != true)
+                {
+                    errors.Add($"{rel}: {id}: нет обязательного ключа attrs.{key} (clause «{clause}»)");
+                }
             }
         }
     }
