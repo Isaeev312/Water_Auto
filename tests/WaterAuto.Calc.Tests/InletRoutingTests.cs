@@ -45,4 +45,29 @@ public class InletRoutingTests
         var r = InletRouting.Route(Plan(), new PlanPoint(0, 5000), new PlanPoint(17000, 5000), clearanceMm: 300);
         r.Issues.ShouldContain(i => i.Code == "inlet.noRoute");
     }
+
+    [Fact]
+    public void Second_route_does_not_cross_the_first()
+    {
+        var first = InletRouting.Route(Plan(), new PlanPoint(0, 5000), new PlanPoint(15000, 5000), 300);
+        var second = InletRouting.Route(Plan(), new PlanPoint(10000, 10000), new PlanPoint(15000, 4000), 300, [first.Path]);
+        second.Issues.ShouldBeEmpty();
+        var crossings = first.Path.Zip(first.Path.Skip(1)).SelectMany(a => second.Path.Zip(second.Path.Skip(1)).Select(b => (a, b)))
+            .Count(x => Intersects(x.a.First, x.a.Second, x.b.First, x.b.Second));
+        crossings.ShouldBe(0);
+    }
+
+    private static bool Intersects(PlanPoint a, PlanPoint b, PlanPoint c, PlanPoint d)
+    {
+        double rx = b.XMm - a.XMm, ry = b.YMm - a.YMm, sx = d.XMm - c.XMm, sy = d.YMm - c.YMm;
+        var den = (rx * sy) - (ry * sx);
+        if (Math.Abs(den) < 1e-9)
+        {
+            return false;
+        }
+
+        var t = (((c.XMm - a.XMm) * sy) - ((c.YMm - a.YMm) * sx)) / den;
+        var u = (((c.XMm - a.XMm) * ry) - ((c.YMm - a.YMm) * rx)) / den;
+        return t > 0 && t < 1 && u > 0 && u < 1;
+    }
 }

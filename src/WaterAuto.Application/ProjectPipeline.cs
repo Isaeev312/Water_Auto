@@ -382,15 +382,28 @@ public static class ProjectPipeline
         if (plan.PumpRooms.Count > 0 && plan.BuildingInlets.Count > 0)
         {
             var pumpInlets = plan.PumpRooms[0].Inlets;
-            for (var k = 0; k < Math.Min(plan.BuildingInlets.Count, pumpInlets.Count); k++)
+            var pairs = Math.Min(plan.BuildingInlets.Count, pumpInlets.Count);
+
+            // Трассы прокладываются по очереди, каждая — в обход уже проложенных; из вариантов соединения вводов (прямой и
+            // обратный порядок вводов насосной) берётся тот, где все трассы найдены, с наименьшей общей длиной.
+            List<InletRoute> Attempt(IReadOnlyList<PlanPoint> targets)
             {
-                var ir = InletRouting.Route(plan, plan.BuildingInlets[k], pumpInlets[k], design.PumpRoom.InletRouteClearance * 1000);
-                issues.AddRange(ir.Issues);
-                if (ir.Issues.Count == 0)
+                var done = new List<InletRoute>();
+                for (var k = 0; k < pairs; k++)
                 {
-                    inletRoutes.Add(ir);
+                    done.Add(InletRouting.Route(plan, plan.BuildingInlets[k], targets[k], design.PumpRoom.InletRouteClearance * 1000, [.. done.Select(d => d.Path)]));
                 }
+
+                return done;
             }
+
+            var best = new[] { pumpInlets.Take(pairs).ToList(), pumpInlets.Take(pairs).Reverse().ToList() }
+                .Select(Attempt)
+                .OrderBy(v => v.Sum(r => r.Issues.Count))
+                .ThenBy(v => v.Sum(r => r.LengthMm))
+                .First();
+            issues.AddRange(best.SelectMany(r => r.Issues));
+            inletRoutes.AddRange(best.Where(r => r.Issues.Count == 0));
 
             if (plan.BuildingInlets.Count != pumpInlets.Count)
             {

@@ -15,7 +15,8 @@ public static class InletRouting
     private const double Step = 250;
     private const double TurnCost = 4000;
 
-    public static InletRoute Route(FloorPlan plan, PlanPoint from, PlanPoint to, double clearanceMm)
+    /// <param name="avoid">Уже проложенные трассы: их не пересекать и не подходить ближе отступа (кроме участков у концов).</param>
+    public static InletRoute Route(FloorPlan plan, PlanPoint from, PlanPoint to, double clearanceMm, IReadOnlyList<IReadOnlyList<PlanPoint>>? avoid = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var all = plan.Rooms.SelectMany(r => r.Contour.Vertices).ToList();
@@ -40,7 +41,8 @@ public static class InletRouting
                 var p = C(i, j);
                 free[i, j] = plan.Rooms.Any(r => r.Contour.Contains(p))
                     && !columns.Any(c => p.XMm > c.X0 && p.XMm < c.X1 && p.YMm > c.Y0 && p.YMm < c.Y1)
-                    && !InsidePump(p);
+                    && !InsidePump(p)
+                    && !(avoid ?? []).Any(path => path.Zip(path.Skip(1)).Any(s => Near(p, s.First, s.Second) < clearanceMm + Step));
             }
         }
 
@@ -148,6 +150,15 @@ public static class InletRouting
         var path = Simplify(pts);
         var length = path.Zip(path.Skip(1), (a, b) => Math.Abs(b.XMm - a.XMm) + Math.Abs(b.YMm - a.YMm)).Sum();
         return new InletRoute(path, length, Math.Max(0, path.Count - 2), []);
+    }
+
+    // Расстояние от точки до отрезка, мм.
+    private static double Near(PlanPoint p, PlanPoint a, PlanPoint b)
+    {
+        double vx = b.XMm - a.XMm, vy = b.YMm - a.YMm;
+        var len2 = (vx * vx) + (vy * vy);
+        var t = len2 < 1e-9 ? 0 : Math.Clamp((((p.XMm - a.XMm) * vx) + ((p.YMm - a.YMm) * vy)) / len2, 0, 1);
+        return Math.Sqrt(Math.Pow(p.XMm - (a.XMm + (t * vx)), 2) + Math.Pow(p.YMm - (a.YMm + (t * vy)), 2));
     }
 
     // Без повторов и промежуточных точек на одной прямой; косые сшивки заменяются ступенькой по осям.
