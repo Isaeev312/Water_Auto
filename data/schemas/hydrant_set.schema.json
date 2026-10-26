@@ -4,15 +4,29 @@
   "title": "Комплект пожарного крана для спецификации",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "items"],
+  "required": [
+    "schemaVersion",
+    "items"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "notes": { "type": "array", "items": { "type": "string" } },
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "barrel": {
       "type": "object",
       "description": "Марка ствола по DN клапана, напр. {\"50\": \"РС-50\"}.",
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "items": {
       "type": "array",
@@ -20,14 +34,33 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "designation", "unit", "perHydrant"],
+        "required": [
+          "name",
+          "designation",
+          "unit",
+          "perHydrant"
+        ],
         "properties": {
-          "name": { "type": "string", "description": "Шаблон: {dn} — DN клапана, {hose} — длина рукава, м, {nozzle} — спрыск, мм, {barrel} — марка ствола." },
-          "designation": { "type": "string" },
-          "unit": { "type": "string" },
-          "perHydrant": { "type": "number", "exclusiveMinimum": 0 }
+          "name": {
+            "type": "string",
+            "description": "Шаблон: {dn} — DN клапана, {hose} — длина рукава, м, {nozzle} — спрыск, мм, {barrel} — марка ствола."
+          },
+          "designation": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "perHydrant": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
         }
       }
+    },
+    "pressureReducer": {
+      "description": "Ставится, если давление у клапана больше предела (замечание vpv.diaphragm); диаметр отверстия — по расчёту.",
+      "$ref": "#/properties/items/items"
     }
   }
 }

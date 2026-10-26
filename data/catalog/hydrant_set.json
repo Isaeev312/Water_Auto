@@ -39,5 +39,11 @@
       "unit": "шт.",
       "perHydrant": 1
     }
-  ]
+  ],
+  "pressureReducer": {
+    "name": "Диафрагма дроссельная DN{dn}",
+    "designation": "",
+    "unit": "шт.",
+    "perHydrant": 1
+  }
 }

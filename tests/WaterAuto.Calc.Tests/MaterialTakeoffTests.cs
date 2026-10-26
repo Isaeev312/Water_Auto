@@ -146,4 +146,89 @@ public class MaterialTakeoffTests
         dn25.Designation.ShouldBe("ГОСТ 3262-75");
         takeoff.Items.First(i => i.Group == TakeoffGroup.Sprinklers).Supplier.ShouldBe("Спецавтоматика");
     }
+
+    // Ввод → питающий DN80 до тройника T → два питающих: DN65 (дальше DN40 до тупика) и DN50 до тупика; на конце тупиков — по рядку.
+    private static readonly PipeRoute Mains = new(
+        "R2",
+        "I1",
+        [
+            new RouteNode("I1", RouteNodeKind.Inlet, new(0, 0)),
+            new RouteNode("T", RouteNodeKind.Tee, new(0, 1000)),
+            new RouteNode("M1", RouteNodeKind.Tee, new(0, 5000)),
+            new RouteNode("M2", RouteNodeKind.Tee, new(0, 9000)),
+            new RouteNode("M3", RouteNodeKind.Tee, new(4000, 1000)),
+            new RouteNode("S1", RouteNodeKind.Sprinkler, new(3000, 9000), "S1"),
+            new RouteNode("S2", RouteNodeKind.Sprinkler, new(4000, 4000), "S2"),
+        ],
+        [
+            new RouteSegment("A", "I1", "T", RouteSegmentRole.Supply, new Length(1.0), 2, 80),
+            new RouteSegment("B", "T", "M1", RouteSegmentRole.Main, new Length(4.0), 1, 65),
+            new RouteSegment("C", "M1", "M2", RouteSegmentRole.Main, new Length(4.0), 1, 40),
+            new RouteSegment("D", "M2", "S1", RouteSegmentRole.Row, new Length(3.0), 1, 25),
+            new RouteSegment("E", "T", "M3", RouteSegmentRole.Main, new Length(4.0), 1, 80),
+            new RouteSegment("F", "M3", "S2", RouteSegmentRole.Row, new Length(3.0), 1, 25),
+        ]);
+
+    [Fact]
+    public void Equal_tee_is_named_by_one_DN()
+    {
+        // T: вход DN80, выходы DN65 и DN80 — тройник DN80×65; M3 — поворот питающего в рядок, не тройник.
+        var route = Mains with
+        {
+            Segments = [.. Mains.Segments.Select(s => s.Id == "B" ? s with { Dn = 80 } : s)],
+        };
+        var t = MaterialTakeoffBuilder.Build([route], 2, Norms, "ГОСТ 3262", Sprinkler);
+        var names = t.Items.Where(i => i.Group == TakeoffGroup.Fittings).Select(i => i.Name).ToList();
+        names.ShouldContain("Тройник DN80");
+        names.ShouldNotContain("Тройник DN80×80");
+    }
+
+    [Fact]
+    public void Fittings_are_grouped_by_kind_elbows_first()
+    {
+        var names = Takeoff().Items.Where(i => i.Group == TakeoffGroup.Fittings).Select(i => i.Name).ToList();
+        int Kind(string n) => n.StartsWith("Отвод", StringComparison.Ordinal) ? 0 : n.StartsWith("Тройник", StringComparison.Ordinal) ? 1 : n.StartsWith("Крестовина", StringComparison.Ordinal) ? 2 : 3;
+        names.Select(Kind).ShouldBe(names.Select(Kind).Order().ToList());
+        names.IndexOf("Отвод под ороситель DN25").ShouldBeGreaterThan(names.IndexOf("Отвод 90° DN80"));
+        names.IndexOf("Тройник под ороситель DN50").ShouldBeGreaterThan(names.IndexOf("Тройник DN80×25"));
+    }
+
+    [Fact]
+    public void Flushing_devices_stand_at_dead_ends_of_mains_6_7_1_15()
+    {
+        // Тупики питающих: M2 (DN40 — меньше DN 50, промывка DN40) и M3 (DN80 — промывка DN 50).
+        var points = FlushingPoints.Find([Mains], Norms);
+        points.Select(p => (p.NodeId, p.PipeDn, p.Dn)).OrderBy(p => p.NodeId).ShouldBe([("M2", 40, 40), ("M3", 80, 50)]);
+    }
+
+    [Fact]
+    public void Ring_gets_one_flushing_device_at_the_far_closure_end()
+    {
+        var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        var plan = new FloorPlan([new Room("R1", "Автостоянка", contour)], [], [], [], [], [new Inlet("I1", new(500, 500), null)]);
+        var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
+        var layout = SprinklerLayouter.Layout(plan, rules);
+        var route = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3), ring: true).Routes[0];
+        route.Loops.ShouldNotBeEmpty();
+        var closureNodes = route.Loops.SelectMany(c => new[] { c.From, c.To }).ToHashSet();
+        var points = FlushingPoints.Find([route], Norms);
+        points.Count(p => closureNodes.Contains(p.NodeId)).ShouldBe(1);
+    }
+
+    [Fact]
+    public void Coating_area_is_the_outer_surface_of_the_pipes()
+    {
+        // DN25 Ø33,5 × 4 м, DN50 Ø60 × 1 м, DN80 Ø88,5 × 2 м.
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler, coating: new CoatingSpec("Покрытие антикоррозионное", null));
+        var item = t.Items.Single(i => i.Group == TakeoffGroup.Materials);
+        item.Unit.ShouldBe("м²");
+        item.Quantity.ShouldBe(Math.PI * ((0.0335 * 4) + (0.060 * 1) + (0.0885 * 2)), 0.05);
+    }
+
+    [Fact]
+    public void Branded_sprinkler_carries_the_analog_note()
+    {
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler with { Note = "или аналог" });
+        t.Items.First(i => i.Group == TakeoffGroup.Sprinklers).Note.ShouldBe("или аналог");
+    }
 }

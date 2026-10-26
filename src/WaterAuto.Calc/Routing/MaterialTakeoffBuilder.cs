@@ -4,11 +4,15 @@ using WaterAuto.Core;
 namespace WaterAuto.Calc.Routing;
 
 /// <summary>Ороситель для спецификации: наименование и марка из каталога или от пользователя.</summary>
-public sealed record SprinklerSpec(string Name, string Designation, string? Supplier = null);
+public sealed record SprinklerSpec(string Name, string Designation, string? Supplier = null, string? Note = null);
+
+/// <summary>Антикоррозионное покрытие труб для спецификации: наименование (состав покрытия) и обозначение; количество — площадь, м².</summary>
+public sealed record CoatingSpec(string Name, string? Designation);
 
 /// <summary>
 /// Ведомость материалов по трассе: оросители и запас (п. 6.1.15), трубы по DN сортамента с длинами,
-/// фасонные части по геометрии трассы (отводы, тройники, крестовины, переходы, подключения оросителей).
+/// фасонные части по геометрии трассы (отводы, тройники, крестовины, переходы, подключения оросителей),
+/// площадь наружной поверхности труб под антикоррозионное покрытие.
 /// Фасонные части — ориентировочно: при оформлении узлов их состав уточняется.
 /// </summary>
 public static class MaterialTakeoffBuilder
@@ -30,14 +34,15 @@ public static class MaterialTakeoffBuilder
     /// <param name="fittingStandard">Стандарты приварных деталей по началу наименования («Отвод» → ГОСТ 17375-2001, «Тройник» → ГОСТ 17376-2001,
     /// «Переход» → ГОСТ 17378-2001); null — не указываются.</param>
     /// <param name="steelDensity">Плотность стали для теоретической массы 1 м трубы, т/м³; null — масса не указывается.</param>
-    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, IReadOnlyDictionary<string, string>? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null)
+    /// <param name="coating">Покрытие труб; null — строка покрытия не добавляется.</param>
+    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, IReadOnlyDictionary<string, string>? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null, CoatingSpec? coating = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(sprinkler);
         var series = new PipeSeries(norms, pipeStandard, sizes);
         var items = new List<TakeoffItem>
         {
-            new(TakeoffGroup.Sprinklers, sprinkler.Name, sprinkler.Designation, installedSprinklers, "шт.", Supplier: sprinkler.Supplier),
+            new(TakeoffGroup.Sprinklers, sprinkler.Name, sprinkler.Designation, installedSprinklers, "шт.", sprinkler.Note, Supplier: sprinkler.Supplier),
             new(TakeoffGroup.Sprinklers, $"{sprinkler.Name} (запас)", sprinkler.Designation, SpareSprinklers(norms, installedSprinklers), "шт.", "запас по п. 6.1.15 СП 485", Supplier: sprinkler.Supplier),
         };
 
@@ -79,7 +84,8 @@ public static class MaterialTakeoffBuilder
                 }
                 else if (outs.Count == 2)
                 {
-                    Fitting($"Тройник DN{inDn}×{outs.Min(Dn)}");
+                    // Равнопроходный тройник обозначается одним DN.
+                    Fitting(outs.Min(Dn) == inDn ? $"Тройник DN{inDn}" : $"Тройник DN{inDn}×{outs.Min(Dn)}");
                 }
                 else if (outs.Count >= 3)
                 {
@@ -103,6 +109,13 @@ public static class MaterialTakeoffBuilder
             "м",
             Mass(p.Value.Pipe) is { } m ? string.Create(Ru, $"общая масса {m * p.Value.Meters:0.#} кг") : null,
             Mass(p.Value.Pipe))));
+        if (coating is not null && pipes.Count > 0)
+        {
+            // Площадь наружной поверхности: π·D·L, м² (D — мм).
+            var area = pipes.Values.Sum(p => Math.PI * p.Pipe.OuterDiameterMm / 1000 * p.Meters);
+            items.Add(new TakeoffItem(TakeoffGroup.Materials, coating.Name, coating.Designation, Math.Round(area, 1), "м²", "по наружной поверхности труб"));
+        }
+
         items.AddRange(fittings
             .OrderBy(f => FittingOrder(f.Key))
             .ThenBy(f => Diameters(f.Key).First)
@@ -113,12 +126,15 @@ public static class MaterialTakeoffBuilder
         return new MaterialTakeoff(items, series.Issues.ToList());
     }
 
+    // Группы фасонных частей (ГОСТ 21.110, п. 4.6): отводы, тройники, крестовины, переходы; подключения оросителей — в конце своей группы.
     private static int FittingOrder(string name) =>
         name.StartsWith("Отвод 90", StringComparison.Ordinal) ? 0
-        : name.StartsWith("Тройник DN", StringComparison.Ordinal) ? 1
-        : name.StartsWith("Крестовина", StringComparison.Ordinal) ? 2
-        : name.StartsWith("Переход", StringComparison.Ordinal) ? 3
-        : 4;
+        : name.StartsWith("Отвод под ороситель", StringComparison.Ordinal) ? 1
+        : name.StartsWith("Тройник DN", StringComparison.Ordinal) ? 2
+        : name.StartsWith("Тройник под ороситель", StringComparison.Ordinal) ? 3
+        : name.StartsWith("Крестовина", StringComparison.Ordinal) ? 4
+        : name.StartsWith("Переход", StringComparison.Ordinal) ? 5
+        : 6;
 
     // DN в названии фасонной части: «Переход DN100×80» → (100, 80) — для сортировки по размеру, а не по тексту.
     private static (int First, int Second) Diameters(string name)

@@ -167,13 +167,30 @@ public static class ProjectPipeline
         issues.AddRange(temperature.Issues);
         var temperatureText = temperature.Choice is { } tc ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $", {tc.Nominal} °С (колба — {Feminine(tc.Color)})") : "";
 
+        var materials = Materials(normsDir);
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
-            sprinklerSupplier),
+            sprinklerSupplier,
+            sprinklerSupplier is null ? null : materials.AnalogNote),
             design.FittingStandards.Count > 0 ? design.FittingStandards : null,
-            SteelDensity(normsDir),
-            pipeSizes);
+            materials.SteelDensity,
+            pipeSizes,
+            materials.Coating);
+
+        // Узел управления — на каждую секцию (ввод), DN подводящего; промывочные устройства — п. 6.7.1.15.
+        var controlUnit = EquipmentSet.PathFor(normsDir, EquipmentSet.ControlUnitFile);
+        if (File.Exists(controlUnit))
+        {
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. EquipmentSet.Items(controlUnit, TakeoffGroup.ControlUnit, routes.Select(r => r.InletId).Distinct().Select(_ => design.SupplyDn))] };
+        }
+
+        var flushingSet = EquipmentSet.PathFor(normsDir, EquipmentSet.FlushingFile);
+        if (File.Exists(flushingSet) && FlushingPoints.Find(routes, norms) is { Count: > 0 } flushing)
+        {
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. EquipmentSet.Items(flushingSet, TakeoffGroup.Valves, flushing.Select(f => f.Dn))] };
+        }
+
         issues.AddRange(takeoff.Issues.Where(i => !issues.Contains(i)));
         // Расстановка ПК (п. 7.14): радиус — из проекта или длина рукава + радиус компактной струи (В-22).
         var hydrantPoints = new List<PlanPoint>();
@@ -192,7 +209,7 @@ public static class ProjectPipeline
         var hydrantSet = HydrantEquipment.PathFor(normsDir);
         if (hydrants is not null && File.Exists(hydrantSet))
         {
-            takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count))] };
+            takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count), issues.Any(i => i.Code == "vpv.diaphragm"))] };
         }
 
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
@@ -310,16 +327,21 @@ public static class ProjectPipeline
     }
 
     // Плотность стали из data/catalog/materials.json — для теоретической массы труб в спецификации.
-    private static double? SteelDensity(string normsDir)
+    // data/catalog/materials.json: плотность стали (масса труб), примечание к марочным изделиям, покрытие труб.
+    private static (double? SteelDensity, string? AnalogNote, CoatingSpec? Coating) Materials(string normsDir)
     {
         var path = Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, "materials.json");
         if (!File.Exists(path))
         {
-            return null;
+            return (null, null, null);
         }
 
         using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
-        return doc.RootElement.GetProperty("steelDensity").GetDouble();
+        var root = doc.RootElement;
+        var coating = root.TryGetProperty("coating", out var c)
+            ? new CoatingSpec(c.GetProperty("name").GetString()!, c.TryGetProperty("designation", out var d) ? d.GetString() : null)
+            : null;
+        return (root.GetProperty("steelDensity").GetDouble(), root.TryGetProperty("analogNote", out var a) ? a.GetString() : null, coating);
     }
 
     // Табличка расчёта и диктующая зона на плане (docs/foreign_drawings_ideas.md, приёмы 1 и 2).

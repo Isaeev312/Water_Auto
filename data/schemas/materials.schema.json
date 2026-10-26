@@ -25,6 +25,26 @@
       "items": {
         "type": "string"
       }
+    },
+    "analogNote": {
+      "type": "string",
+      "description": "Примечание к изделиям с маркой изготовителя (оросители)."
+    },
+    "coating": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "designation": {
+          "type": "string"
+        }
+      },
+      "description": "Антикоррозионное покрытие труб; количество — площадь наружной поверхности, м²."
     }
   }
 }

@@ -36,7 +36,11 @@ public static class GostFrame
         _ => 0,
     };
 
-    /// <summary>Рамка и основные надписи раздела: <paramref name="first"/> — на первом листе, <paramref name="others"/> — на остальных.</summary>
+    /// <summary>
+    /// Рамка и основные надписи раздела: <paramref name="first"/> — на первом листе, <paramref name="others"/> — на остальных.
+    /// Нижнее поле раздела задают под надпись последующих листов; если надпись первого листа выше, его нижний колонтитул
+    /// получает невидимый отступ её высоты — текст первого листа заканчивается над ней, а на остальных листах место не теряется.
+    /// </summary>
     public static void Apply(MainDocumentPart main, SectionProperties section, double pageWidthMm, double pageHeightMm, TitleBlock block, StampForm first, StampForm others)
     {
         ArgumentNullException.ThrowIfNull(main);
@@ -52,13 +56,14 @@ public static class GostFrame
 
             var form = type == HeaderFooterValues.First ? first : others;
             var footer = main.AddNewPart<FooterPart>();
+            var spacer = type == HeaderFooterValues.First && others != StampForm.None && Height(first) > Height(others);
             footer.Footer = form == StampForm.None
                 ? new Footer(Additional(pageHeightMm), Tiny())
                 : new Footer(
                     Stamp(form, block, pageWidthMm, pageHeightMm, type == HeaderFooterValues.First),
                     Tiny(),
                     Additional(pageHeightMm),
-                    Tiny());
+                    spacer ? Spacer(5 + Height(first)) : Tiny());
             section.InsertAfter(new FooterReference { Type = type, Id = main.GetIdOfPart(footer) }, section.Elements<HeaderReference>().Last());
         }
 
@@ -297,6 +302,11 @@ public static class GostFrame
     private static SimpleField Field(string name) => new(Text("1")) { Instruction = $" {name} " };
 
     // Разделитель между плавающими таблицами (иначе Word склеит их), минимальной высоты.
+    // Пустой абзац заданной высоты: колонтитул выше нижнего поля отодвигает текст листа вверх.
+    private static Paragraph Spacer(double mm) => new(new ParagraphProperties(
+        new SpacingBetweenLines { Before = "0", After = "0", Line = Twips(mm).ToString(CultureInfo.InvariantCulture), LineRule = LineSpacingRuleValues.Exact },
+        new ParagraphMarkRunProperties(new FontSize { Val = "2" })));
+
     private static Paragraph Tiny() => new(new ParagraphProperties(
         new SpacingBetweenLines { Before = "0", After = "0", Line = "20", LineRule = LineSpacingRuleValues.Exact },
         new ParagraphMarkRunProperties(new FontSize { Val = "2" })));

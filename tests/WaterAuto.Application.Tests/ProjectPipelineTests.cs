@@ -151,6 +151,45 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Diaphragm_is_added_when_the_valve_pressure_is_too_high()
+    {
+        var s = new WaterAuto.Calc.Hydraulics.HydrantSettings("II", "В", "С0", 40, new Core.Length(12), new Core.Length(3.3), 65, 19, 20, new Core.Length(1.35), new Core.Length(15), 80);
+        HydrantEquipment.Items(HydrantEquipment.PathFor(RepoPaths.Norms), s, 3).ShouldNotContain(i => i.Name.StartsWith("Диафрагма", StringComparison.Ordinal));
+        var reducer = HydrantEquipment.Items(HydrantEquipment.PathFor(RepoPaths.Norms), s, 3, reducer: true).Single(i => i.Name.StartsWith("Диафрагма", StringComparison.Ordinal));
+        reducer.Name.ShouldBe("Диафрагма дроссельная DN65");
+        reducer.Quantity.ShouldBe(3);
+        reducer.Note.ShouldBe("диаметр отверстия — по расчёту");
+    }
+
+    [Fact]
+    public void Control_unit_set_is_counted_per_section_and_summed()
+    {
+        var items = EquipmentSet.Items(EquipmentSet.PathFor(RepoPaths.Norms, EquipmentSet.ControlUnitFile), Core.TakeoffGroup.ControlUnit, [125, 125]);
+        items.Single(i => i.Name == "Узел управления спринклерный водозаполненный DN125").Quantity.ShouldBe(2);
+        items.Single(i => i.Name.StartsWith("Манометр", StringComparison.Ordinal)).Quantity.ShouldBe(4);
+        items.ShouldAllBe(i => i.Group == Core.TakeoffGroup.ControlUnit);
+    }
+
+    [Fact]
+    public void Specification_lists_control_unit_flushing_coating_and_groups_supports_by_kind()
+    {
+        Drawing();
+        var result = Run(Project());
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        using var spec = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationDocxFile, StringComparison.Ordinal)), false);
+        var rows = spec.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>()
+            .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().ElementAtOrDefault(1)?.InnerText ?? "").ToList();
+        rows.ShouldContain("Узел управления спринклерный водозаполненный DN125");
+        rows.ShouldContain("Промывочные устройства");
+        rows.ShouldContain(r => r.StartsWith("Кран шаровой DN", StringComparison.Ordinal));
+        rows.ShouldContain(r => r.StartsWith("Покрытие антикоррозионное", StringComparison.Ordinal));
+        rows.IndexOf("Узел управления").ShouldBeLessThan(rows.IndexOf("Оросители"));
+
+        // Крепления — по видам: все хомуты, затем шпильки (ГОСТ 21.110, п. 4.6).
+        rows.FindLastIndex(r => r.StartsWith("Хомут", StringComparison.Ordinal)).ShouldBeLessThan(rows.FindIndex(r => r.StartsWith("Шпилька", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void Ring_project_reports_both_variants_in_the_note()
     {
         Drawing();

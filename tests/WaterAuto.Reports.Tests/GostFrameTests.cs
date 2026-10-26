@@ -41,15 +41,23 @@ public class GostFrameTests
         [.. footer.Elements<Table>().First().GetFirstChild<TableGrid>()!.Elements<GridColumn>().Select(g => Math.Round(int.Parse(g.Width!.Value!, System.Globalization.CultureInfo.InvariantCulture) * 25.4 / 1440))];
 
     [Fact]
-    public void Specification_has_frame_form_5_on_first_sheet_and_form_6_on_the_others()
+    public void Specification_without_title_sheet_has_form_3_on_first_sheet_and_form_6_on_the_others()
     {
-        var (first, others, frame, title) = Open(p => SpecificationDocx.Write(p, Takeoff, Stamp), d =>
+        // ГОСТ Р 21.101-2020, п. 5.2.3: без титульного листа первый лист — по форме 3, последующие — по форме 6.
+        var (first, others, frame, title, bottomMm) = Open(p => SpecificationDocx.Write(p, Takeoff, Stamp), d =>
         {
             var section = d.MainDocumentPart!.Document.Body!.GetFirstChild<SectionProperties>()!;
             Footer Footer(HeaderFooterValues type) => (Footer)((FooterPart)d.MainDocumentPart.GetPartById(section.Elements<FooterReference>().Single(f => f.Type! == type).Id!)).Footer.CloneNode(true);
             var header = d.MainDocumentPart.HeaderParts.First();
-            return (Footer(HeaderFooterValues.First), Footer(HeaderFooterValues.Default), header.Header.InnerXml, section.GetFirstChild<TitlePage>() is not null);
+            return (Footer(HeaderFooterValues.First), Footer(HeaderFooterValues.Default), header.Header.InnerXml, section.GetFirstChild<TitlePage>() is not null, section.GetFirstChild<PageMargin>()!.Bottom!.Value * 25.4 / 1440);
         });
+        Math.Round(bottomMm).ShouldBe(20); // поле — под форму 6 (5 + 15 мм)
+        first.InnerText.ShouldContain("Подземная автостоянка"); // графа 2 формы 3 — наименование объекта
+
+        // Колонтитул первого листа выше поля на высоту формы 3: текст первого листа заканчивается над ней.
+        var spacer = first.Elements<Paragraph>().Last().ParagraphProperties!.SpacingBetweenLines!;
+        spacer.LineRule!.Value.ShouldBe(LineSpacingRuleValues.Exact);
+        Math.Round(int.Parse(spacer.Line!.Value!, System.Globalization.CultureInfo.InvariantCulture) * 25.4 / 1440).ShouldBe(60);
         title.ShouldBeTrue();
         frame.ShouldContain("margin-left:20mm");
         Widths(first).Sum().ShouldBe(185);
@@ -74,6 +82,16 @@ public class GostFrameTests
         text.ShouldContain("Масса единицы, кг");
         text.ShouldContain("Оросители");
         text.ShouldContain("4,62");
+    }
+
+    [Fact]
+    public void Section_heading_is_followed_by_an_empty_row()
+    {
+        // ГОСТ 21.110, п. 4.5: заголовок раздела отделён от текста пустой строкой.
+        var rows = Open(p => SpecificationDocx.Write(p, Takeoff, Stamp), d => d.MainDocumentPart!.Document.Body!.GetFirstChild<Table>()!.Elements<TableRow>().Select(r => r.InnerText).ToList());
+        var heading = rows.IndexOf("Оросители");
+        rows[heading + 1].ShouldBeEmpty();
+        rows[heading + 2].ShouldContain("Ороситель спринклерный");
     }
 
     [Fact]

@@ -55,6 +55,11 @@ public class SpecificationXlsxTests
         pipe.Cell(6).GetString().ShouldBe("м");
         pipe.Cell(7).GetValue<double>().ShouldBe(119.12);
         rows.Single(r => r.Cell(2).GetString().EndsWith("(запас)", StringComparison.Ordinal)).Cell(9).GetString().ShouldBe("запас по п. 6.1.15");
+
+        // ГОСТ 21.110, п. 4.5: под заголовком раздела — пустая строка.
+        var heading = rows.First(r => r.Cell(2).GetString() == "Оросители").RowNumber();
+        ws.Row(heading + 1).Cell(2).GetString().ShouldBeEmpty();
+        ws.Row(heading + 2).Cell(2).GetString().ShouldBe("Ороситель спринклерный водяной");
     }
 
     [Fact]

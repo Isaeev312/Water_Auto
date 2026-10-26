@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/equipment_set.schema.json",
+  "title": "Комплект изделий для спецификации на одно место установки (узел управления, промывочное устройство)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "verified",
+    "items"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "true — состав и обозначения сверены с выбранным изготовителем."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "unit",
+          "per"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Шаблон: {dn} — DN места установки."
+          },
+          "designation": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "per": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Количество на одно место установки."
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

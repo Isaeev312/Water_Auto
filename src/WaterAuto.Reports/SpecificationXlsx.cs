@@ -11,7 +11,7 @@ public sealed record SpecificationHeader(string Title);
 /// Графы и ширины — по форме 1; заголовки разделов — в графе 2, подчёркнуты;
 /// обозначения документов — с годом утверждения; масса единицы, кг, где она известна (трубы — теоретическая масса 1 м);
 /// в конце — итог массы позиций с известной массой. Шрифт — шрифт проекта (по умолчанию GOST Common).
-/// Позиции нумеруются заново в каждом разделе; строки — по 8 мм (длинный текст — кратно 8 мм).
+/// Позиции нумеруются заново в каждом разделе; заголовок раздела отделён от позиций пустой строкой (п. 4.5); строки — по 8 мм (длинный текст — кратно 8 мм).
 /// Рабочий файл для правки; для выпуска — <see cref="SpecificationDocx"/> в рамке с основной надписью. Внизу оставлено место под основную надпись.
 /// </summary>
 public static class SpecificationXlsx
@@ -43,11 +43,14 @@ public static class SpecificationXlsx
 
     internal static readonly (TakeoffGroup Group, string Title)[] Sections =
     [
+        (TakeoffGroup.ControlUnit, "Узел управления"),
         (TakeoffGroup.Sprinklers, "Оросители"),
         (TakeoffGroup.Pipes, "Трубопроводы"),
         (TakeoffGroup.Fittings, "Фасонные части"),
+        (TakeoffGroup.Valves, "Промывочные устройства"),
         (TakeoffGroup.Hydrants, "Пожарные краны"),
         (TakeoffGroup.Supports, "Крепления трубопроводов"),
+        (TakeoffGroup.Materials, "Материалы"),
     ];
 
     public static void Write(string path, MaterialTakeoff takeoff, SpecificationHeader header, string font = DocumentStyle.DefaultFont)
@@ -100,7 +103,10 @@ public static class SpecificationXlsx
             ws.Cell(row, 2).Value = title;
             ws.Cell(row, 2).Style.Font.SetUnderline().Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
             ws.Row(row).Height = RowHeightPt;
-            row++;
+
+            // Заголовок отделён от позиций пустой строкой (ГОСТ 21.110, п. 4.5).
+            ws.Row(row + 1).Height = RowHeightPt;
+            row += 2;
             var position = 0;
             foreach (var item in items)
             {

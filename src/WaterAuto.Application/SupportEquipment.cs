@@ -25,12 +25,14 @@ public static class SupportEquipment
         string Thread(int dn) => threads.FirstOrDefault(t => dn <= t.DnMax).Thread ?? threads[^1].Thread;
         var rod = rodLengthMm.ToString("0", CultureInfo.InvariantCulture);
         var items = new Dictionary<(string Name, string? Designation, string Unit), double>();
-        // Крепёж группируется по резьбе (М8, М10, М12), внутри — по DN хомута.
-        foreach (var g in supports.Points.GroupBy(p => p.Dn).OrderBy(g => threads.FindIndex(t => g.Key <= t.DnMax) is var k and >= 0 ? k : threads.Count).ThenBy(g => g.Key))
+        // Группы — по виду изделия в порядке шаблона (хомуты, шпильки, анкеры, гайки, шайбы), в группе — по возрастанию DN
+        // и резьбы (ГОСТ 21.110, п. 4.6).
+        var byDn = supports.Points.GroupBy(p => p.Dn).OrderBy(g => g.Key).ToList();
+        foreach (var i in root.GetProperty("items").EnumerateArray())
         {
-            var thread = Thread(g.Key);
-            foreach (var i in root.GetProperty("items").EnumerateArray())
+            foreach (var g in byDn)
             {
+                var thread = Thread(g.Key);
                 var name = i.GetProperty("name").GetString()!
                     .Replace("{dn}", g.Key.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
                     .Replace("{thread}", thread, StringComparison.Ordinal)
