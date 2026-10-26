@@ -222,6 +222,31 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Axes_come_from_the_column_grid_and_carry_ties()
+    {
+        // Колонны 400 × 400 в узлах сетки X = 5000, 15000, 25000 и Y = 5000, 15000.
+        var contour = new Core.Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
+        Core.Column Col(string id, double x, double y) => new(id, new Core.Polygon([new(x - 200, y - 200), new(x + 200, y - 200), new(x + 200, y + 200), new(x - 200, y + 200)]));
+        var columns = new[] { 5000.0, 15000, 25000 }.SelectMany(x => new[] { 5000.0, 15000 }.Select(y => Col($"C{x}{y}", x, y))).ToList();
+        var plan = new Core.FloorPlan([new Core.Room("R1", "Автостоянка", contour)], columns, [], [], [], [new Core.Inlet("I1", new(500, 500), null)]);
+        var axes = PlanDimensions.Axes(plan);
+        axes.Where(a => a.Vertical).Select(a => (a.Name, a.Position)).ShouldBe([("1", 5000), ("2", 15000), ("3", 25000)]);
+        axes.Where(a => !a.Vertical).Select(a => (a.Name, a.Position)).ShouldBe([("А", 5000), ("Б", 15000)]);
+
+        var norms = WaterAuto.Norms.JsonNormsProvider.Load(RepoPaths.Norms);
+        var rules = WaterAuto.Calc.Layout.LayoutRules.Resolve(norms, "2", Core.ConstructionClass.K0).Rules!;
+        var layout = WaterAuto.Calc.Layout.SprinklerLayouter.Layout(plan, rules);
+        var chains = PlanDimensions.Ties(plan, layout, [], [new(10000, 3000)]);
+
+        // Цепочка у левой стены содержит оси А и Б; у каждого рядка — своя цепочка шагов; ввод и ПК привязаны к осям.
+        chains.ShouldContain(c => c.Points.All(p => p.XMm == 0) && c.Points.Any(p => p.YMm == 5000) && c.Points.Any(p => p.YMm == 15000));
+        var rows = layout.Sprinklers.Select(s => Math.Round(s.Location.YMm)).Distinct().Count();
+        chains.Count(c => c.Offset == -300).ShouldBe(rows - 1); // нижний — в цепочке до стен
+        chains.ShouldContain(c => c.Points.Count == 2 && c.Points[0] == new Core.PlanPoint(10000, 3000) && c.Points[1].YMm == 5000);
+        chains.ShouldContain(c => c.Points.Count == 2 && c.Points[0] == new Core.PlanPoint(500, 500) && c.Points[1].XMm == 5000);
+    }
+
+    [Fact]
     public void General_data_lists_the_spec_standards_with_names()
     {
         Drawing();

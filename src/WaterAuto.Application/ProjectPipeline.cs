@@ -223,7 +223,9 @@ public static class ProjectPipeline
 
         var outIssues = issues.ToList();
         var summary = Summary(worst);
-        var dimensions = PlanDimensions.Build(plan, layout);
+        // Привязки: к стенам (нижний ряд, левый столбец), к осям по колоннам, шаги в рядках, трубопроводы, ввод и ПК.
+        var dimensions = (IReadOnlyList<PlanDimensionChain>)[.. PlanDimensions.Build(plan, layout), .. PlanDimensions.Ties(plan, layout, routes, hydrantPoints)];
+        var axes = PlanDimensions.Axes(plan);
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var inletNotes = plan.Inlets.Select(i => new PlanInletNote(i.Location, [
             $"Ввод DN{design.SupplyDn}",
@@ -232,8 +234,8 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, style: new PlanDxfStyle(Font: project.Font)));
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, style: new PlanDxfStyle(Font: project.Font)));
+        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(
             p,
             routes,

@@ -29,6 +29,9 @@ public sealed record PlanCalcSummary(
 /// </summary>
 public sealed record PlanDimensionChain(IReadOnlyList<PlanPoint> Points, double Offset);
 
+/// <summary>Разбивочная ось: марка, направление (вертикальная — постоянный X) и координата, мм.</summary>
+public sealed record PlanAxis(string Name, bool Vertical, double Position);
+
 /// <summary>Выноска у точки ввода: строки текста (DN, отметка, ссылка на раздел НС).</summary>
 public sealed record PlanInletNote(PlanPoint At, IReadOnlyList<string> Lines);
 
@@ -49,17 +52,18 @@ public static class PlanDxfWriter
     public const string SupportLayer = "ПТ_КРЕПЛЕНИЯ";
     public const string DimensionLayer = "ПТ_ПРИВЯЗКИ";
     public const string HydrantLayer = "ПТ_ПК";
+    public const string AxisLayer = "ПТ_ОСИ";
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
     /// <param name="basePath">Исходный чертёж этажа: план труб рисуется поверх него в одном файле; null — только слои программы.</param>
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null)
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null, IReadOnlyList<PlanAxis>? axes = null)
     {
         var source = basePath is null ? null : DxfDrawing.Read(basePath);
         style ??= new PlanDxfStyle();
-        DxfDrawing.Save(path, Build(layout, routes, issues, style, summary, inlets, source, supports, dimensions, hydrants), style.Font);
+        DxfDrawing.Save(path, Build(layout, routes, issues, style, summary, inlets, source, supports, dimensions, hydrants, axes), style.Font);
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null, IReadOnlyList<PlanAxis>? axes = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
@@ -187,6 +191,11 @@ public static class PlanDxfWriter
             }
         }
 
+        if (axes is { Count: > 0 })
+        {
+            AddAxes(doc, axes, style, DxfDrawing.AddLayer(doc, AxisLayer, 8));
+        }
+
         if (dimensions is { Count: > 0 })
         {
             var dimLayer = DxfDrawing.AddLayer(doc, DimensionLayer, 3);
@@ -214,6 +223,38 @@ public static class PlanDxfWriter
         }
 
         return doc;
+    }
+
+    // Разбивочные оси (ГОСТ 21.101): тонкая линия за пределы плана, марка в кружке на обоих концах.
+    private static void AddAxes(CadDocument doc, IReadOnlyList<PlanAxis> axes, PlanDxfStyle style, Layer layer)
+    {
+        var bubble = style.TextHeightMm * 2;
+        var reach = (style.TextHeightMm * 10) + bubble;
+        var vertical = axes.Where(a => a.Vertical).Select(a => a.Position).DefaultIfEmpty(0).ToList();
+        var horizontal = axes.Where(a => !a.Vertical).Select(a => a.Position).DefaultIfEmpty(0).ToList();
+        var (x0, x1, y0, y1) = (vertical.Min(), vertical.Max(), horizontal.Min(), horizontal.Max());
+        foreach (var a in axes)
+        {
+            var (from, to) = a.Vertical
+                ? (new XY(a.Position, y0 - reach), new XY(a.Position, y1 + reach))
+                : (new XY(x0 - reach, a.Position), new XY(x1 + reach, a.Position));
+            doc.Entities.Add(new Line(new XYZ(from.X, from.Y, 0), new XYZ(to.X, to.Y, 0)) { Layer = layer });
+            foreach (var (end, dir) in new[] { (from, -1.0), (to, 1.0) })
+            {
+                var c = a.Vertical ? new XYZ(end.X, end.Y + (dir * bubble), 0) : new XYZ(end.X + (dir * bubble), end.Y, 0);
+                doc.Entities.Add(new Circle { Center = c, Radius = bubble, Layer = layer });
+                doc.Entities.Add(new TextEntity
+                {
+                    Value = a.Name,
+                    InsertPoint = c,
+                    AlignmentPoint = c,
+                    Height = style.TextHeightMm * 1.2,
+                    HorizontalAlignment = TextHorizontalAlignment.Center,
+                    VerticalAlignment = TextVerticalAlignmentType.Middle,
+                    Layer = layer,
+                });
+            }
+        }
     }
 
     // Размерная цепочка по ГОСТ 2.307: выносные линии, размерная линия с засечками под 45°, размер в мм над линией.
