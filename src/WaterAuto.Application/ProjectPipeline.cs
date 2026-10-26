@@ -33,6 +33,7 @@ public static class ProjectPipeline
     public const string PumpRoomPlanFile = "pump_room_plan.dxf";
     public const string PumpRoomPipingFile = "pump_room_piping.dxf";
     public const string PumpRoomSectionFile = "pump_room_section.dxf";
+    public const string InletRouteFile = "inlet_route.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string IssuesFile = "issues.txt";
 
@@ -374,6 +375,46 @@ public static class ProjectPipeline
             stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Where(i => i.Role != "elbowT"), .. pipeRows, .. extraRows] };
         }
 
+        // Трассы от вводов в здание (ПТ_ВВОД_ЗД) до вводов в насосную (ПТ_НС_ВВОД): по порядку, в обход колонн.
+        var inletRoutes = new List<InletRoute>();
+        if (plan.PumpRooms.Count > 0 && plan.BuildingInlets.Count > 0)
+        {
+            var pumpInlets = plan.PumpRooms[0].Inlets;
+            for (var k = 0; k < Math.Min(plan.BuildingInlets.Count, pumpInlets.Count); k++)
+            {
+                var ir = InletRouting.Route(plan, plan.BuildingInlets[k], pumpInlets[k], design.PumpRoom.InletRouteClearance * 1000);
+                issues.AddRange(ir.Issues);
+                if (ir.Issues.Count == 0)
+                {
+                    inletRoutes.Add(ir);
+                }
+            }
+
+            if (plan.BuildingInlets.Count != pumpInlets.Count)
+            {
+                issues.Add(new Issue("inlet.countMismatch", IssueLevel.Warning, $"Вводов в здание {plan.BuildingInlets.Count}, вводов в насосную {pumpInlets.Count}: трассы построены для {Math.Min(plan.BuildingInlets.Count, pumpInlets.Count)} пар по порядку."));
+            }
+
+            if (inletRoutes.Count > 0)
+            {
+                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+                var dnI = station.Suction.Pipe.Dn;
+                var spI = seriesI.Pick(dnI);
+                var ruI = CultureInfo.GetCultureInfo("ru-RU");
+                var meters = inletRoutes.Sum(r => r.LengthMm) / 1000;
+                var outerI = spI?.OuterDiameterMm ?? dnI;
+                stationTakeoff = stationTakeoff with
+                {
+                    Items = [
+                        .. stationTakeoff.Items,
+                        new TakeoffItem(TakeoffGroup.PumpStationPipes, spI is null ? $"Трубы стальные DN{dnI}" : string.Create(ruI, $"Трубы {spI.PipeType} DN{dnI}, Ø{spI.OuterDiameterMm:0.##}×{spI.WallMm:0.##} мм"), spI?.Standard, Math.Round(meters, 1), "м", "трасса от вводов в здание до насосной (план трассы ввода)", Role: "inletPipe"),
+                        new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{dnI}", design.FittingStandards.TryGetValue("Отвод", out var esI) ? esI : null, inletRoutes.Sum(r => r.Elbows), "шт.", "повороты трассы ввода", Role: "inletElbow"),
+                        new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruI, $"Гильза стальная для прохода трубы DN{dnI} через наружную стену: Ø не менее {outerI + PumpCatalog.PipingExtras(normsDir).SleeveExtra:0} мм"), "по месту", inletRoutes.Count, "шт.", "ввод в здание; заделка — по узлу прохода (сальник), Козицина, с. 26", Role: "inletSleeve"),
+                    ],
+                };
+            }
+        }
+
         // Номера позиций спецификации насосной — на схеме, по роли элемента (сквозная нумерация).
         var schemePositions = SpecificationXlsx.Positions(stationTakeoff, continuous: true)
             .Where(p => p.Item.Role is not null)
@@ -634,6 +675,29 @@ public static class ProjectPipeline
                 p,
                 roomDrawing,
                 SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
+                project.Font));
+        }
+
+        // План трассы от ввода в здание до насосной.
+        if (inletRoutes.Count > 0)
+        {
+            var prI = design.PumpRoom;
+            var elevI = prI.InletRouteElevation ?? (prI.GroundElevation - prI.InletDepth);
+            Write(outDir, InletRouteFile, files, p => InletRouteDxfWriter.Write(
+                p,
+                new InletRouteDrawing(
+                    [.. plan.Rooms.Select(r => r.Contour)],
+                    [.. plan.Columns.Select(c => c.Outline)],
+                    plan.PumpRooms[0].Outline,
+                    [.. inletRoutes.Select(r => new InletRouteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{station.Suction.Pipe.Dn}, {elevI:+0.000}"), r.Path, r.LengthMm))],
+                    [
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Вводов — {inletRoutes.Count}, каждый на полный расчётный расход (п. 6.10.27 СП 485); трубы DN{station.Suction.Pipe.Dn}, стальные на сварке."),
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Отметка прокладки {elevI:+0.000} от пола насосной{(prI.InletRouteElevation is null ? " (принята по отметке ввода в насосную; при прокладке по стоянке — уточнить, обычно под перекрытием)" : "")}; всасывающие трубопроводы — с подъёмом к насосной не менее 1:200 (п. 6.10.29)."),
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса — в обход колонн с отступом не менее {prI.InletRouteClearance:0.0} м; привязки поворотов — к ближайшим стенам."),
+                        "Проход через наружную стену — в гильзе с сальниковым уплотнением; узел ввода и водомерный узел — по ТУ водоснабжающей организации.",
+                        "Продолжение трасс в насосной — см. план обвязки насосной станции.",
+                    ]),
+                SheetStamp(project, "План трассы", "План трассы водопровода от ввода до насосной станции") with { Name = "План трассы от ввода до насосной" },
                 project.Font));
         }
 

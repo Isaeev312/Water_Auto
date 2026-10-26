@@ -188,6 +188,12 @@ public sealed class ProjectPumpRoom
     public double PitSize { get; init; } = 0.8;
 
     public double PitDepth { get; init; } = 0.6;
+
+    /// <summary>Отметка прокладки трассы от ввода в здание до насосной, м; null — на отметке ввода в насосную.</summary>
+    public double? InletRouteElevation { get; init; }
+
+    /// <summary>Отступ трассы ввода от колонн, м.</summary>
+    public double InletRouteClearance { get; init; } = 0.3;
 }
 
 /// <summary>Исходные данные ВПВ: признаки здания для табл. Ж.2, ПК для табл. Ж.3, трубопровод до диктующего ПК.</summary>

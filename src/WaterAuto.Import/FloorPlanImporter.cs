@@ -32,8 +32,9 @@ public static class FloorPlanImporter
     public const string PumpInletLayer = "ПТ_НС_ВВОД";
     public const string PumpOutletLayer = "ПТ_НС_ВЫПУСК";
     public const string PumpTruckLayer = "ПТ_НС_ГМ";
+    public const string BuildingInletLayer = "ПТ_ВВОД_ЗД";
 
-    private static readonly string[] KnownLayers = [ContourLayer, ColumnLayer, BeamLayer, DuctLayer, NoSprinklerLayer, InletLayer, PumpRoomLayer, PumpInletLayer, PumpOutletLayer, PumpTruckLayer];
+    private static readonly string[] KnownLayers = [ContourLayer, ColumnLayer, BeamLayer, DuctLayer, NoSprinklerLayer, InletLayer, PumpRoomLayer, PumpInletLayer, PumpOutletLayer, PumpTruckLayer, BuildingInletLayer];
 
     // Шаг разбиения дуг полилиний (bulge) и окружностей колонн, радиан.
     private const double ArcStep = Math.PI / 18;
@@ -92,6 +93,7 @@ public static class FloorPlanImporter
         var stationInlets = new List<PlanPoint>();
         var stationOutlets = new List<PlanPoint>();
         var truckInlets = new List<PlanPoint>();
+        var buildingInlets = new List<PlanPoint>();
         var zoneTexts = new List<(PlanPoint Point, string Text, string Id)>();
 
         foreach (var entity in doc.Entities)
@@ -150,6 +152,12 @@ public static class FloorPlanImporter
                     break;
                 case (PumpOutletLayer, Point pt):
                     stationOutlets.Add(P(pt.Location));
+                    break;
+                case (BuildingInletLayer, Point pt):
+                    buildingInlets.Add(P(pt.Location));
+                    break;
+                case (BuildingInletLayer, Insert ins):
+                    buildingInlets.Add(W(P(ins.InsertPoint), mirror));
                     break;
                 case (PumpTruckLayer, Point pt):
                     truckInlets.Add(P(pt.Location));
@@ -268,6 +276,8 @@ public static class FloorPlanImporter
 
         var plan = issues.Any(i => i.Level == IssueLevel.Error) ? null : new FloorPlan(rooms, columns, beams, ducts, zones, inlets)
         {
+            BuildingInlets = buildingInlets,
+
             // Дверь — точка слоя ПТ_НС на контуре или рядом с ним (не дальше 0,5 м).
             // Ввод и выпуски — точки слоёв ПТ_НС_ВВОД и ПТ_НС_ВЫПУСК на стене насосной (не дальше 0,5 м).
             PumpRooms = [.. pumpRooms.Select(r => new PumpRoom(r.Id, r.Outline, doors.Where(d => r.Outline.DistanceTo(d) <= 500).Select(d => (PlanPoint?)d).FirstOrDefault())
@@ -511,6 +521,7 @@ public static class FloorPlanImporter
         PumpRoomLayer => "замкнутая полилиния (контур насосной) и точка (дверь)",
         PumpInletLayer or PumpOutletLayer => "точка или блок на стене насосной",
         PumpTruckLayer => "точка на наружной стене насосной",
+        BuildingInletLayer => "точка или блок на наружной стене (ввод водопровода в здание)",
         ContourLayer => "замкнутая полилиния (и текст с именем)",
         _ => "замкнутая полилиния",
     };

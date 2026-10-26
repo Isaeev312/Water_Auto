@@ -373,4 +373,13 @@ public class FloorPlanImporterTests
         r.Issues.ShouldContain(i => i.Code == "import.pumpRoomFromZone");
         r.Issues.ShouldNotContain(i => i.Code == "import.annotationSkipped");
     }
+
+    [Fact]
+    public void Building_inlets_are_points_of_their_layer()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Point(FloorPlanImporter.BuildingInletLayer, 0, 5000);
+        b.Point(FloorPlanImporter.BuildingInletLayer, 0, 8000);
+        ImportDxf(b).Plan!.BuildingInlets.ShouldBe([new PlanPoint(0, 5000), new PlanPoint(0, 8000)]);
+    }
 }

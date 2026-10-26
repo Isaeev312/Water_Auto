@@ -43,6 +43,9 @@ public sealed record FloorPlan(
     IReadOnlyList<NoSprinklerZone> NoSprinklerZones,
     IReadOnlyList<Inlet> Inlets)
 {
+    /// <summary>Точки ввода водопровода в здание (слой ПТ_ВВОД_ЗД) — начала трасс до насосной.</summary>
+    public IReadOnlyList<PlanPoint> BuildingInlets { get; init; } = [];
+
     /// <summary>Насосные станции на этаже (слой ПТ_НС или зона ПТ_ЗАПРЕТ с подписью «ПНС»).</summary>
     public IReadOnlyList<PumpRoom> PumpRooms { get; init; } = [];
 }
