@@ -172,7 +172,7 @@ public static class TreeSolver
         var emitters = new Dictionary<string, Flow>(StringComparer.Ordinal);
 
         // h = P + z/100 — пьезометрическое давление (README §5.3).
-        head[dictating.Id] = dictatingPressure.Mpa + (dictating.Elevation.Meters / 100.0);
+        head[dictating.Id] = dictatingPressure.Mpa + Pressure.FromHeight(dictating.Elevation).Mpa;
         var flow = NodeOutflow(dictating, null, head[dictating.Id], children, nodes, characteristic, head, pipeFlows, losses, emitters, issues);
         for (var i = 0; i < pathPipes.Count; i++)
         {
@@ -185,7 +185,7 @@ public static class TreeSolver
             flow += NodeOutflow(upstream, p.Id, head[upstream.Id], children, nodes, characteristic, head, pipeFlows, losses, emitters, issues);
         }
 
-        var pressures = head.ToDictionary(kv => kv.Key, kv => new Pressure(kv.Value - (nodes[kv.Key].Elevation.Meters / 100.0)), StringComparer.Ordinal);
+        var pressures = head.ToDictionary(kv => kv.Key, kv => new Pressure(kv.Value - Pressure.FromHeight(nodes[kv.Key].Elevation).Mpa), StringComparer.Ordinal);
         var velocities = new Dictionary<string, Velocity>(StringComparer.Ordinal);
         foreach (var p in network.Pipes)
         {
@@ -233,7 +233,7 @@ public static class TreeSolver
         var total = 0.0;
         if (node.Emitter is { } k)
         {
-            var q = EmitterFlow(k, new Pressure(h - (node.Elevation.Meters / 100.0)));
+            var q = EmitterFlow(k, new Pressure(h - Pressure.FromHeight(node.Elevation).Mpa));
             emitters[node.Id] = q;
             total += q.LitersPerSecond;
         }
@@ -297,7 +297,7 @@ public static class TreeSolver
         if (node.Emitter is { } k)
         {
             c += 10.0 * k.Value;
-            level = node.Elevation.Meters / 100.0;
+            level = Pressure.FromHeight(node.Elevation).Mpa;
         }
 
         foreach (var child in children.GetValueOrDefault(node.Id, []))
