@@ -26,7 +26,7 @@ public static class SupportEquipment
         var rod = rodLengthMm.ToString("0", CultureInfo.InvariantCulture);
         var items = new Dictionary<(string Name, string? Designation, string Unit), double>();
         // Группы — по виду изделия в порядке шаблона (хомуты, шпильки, анкеры, гайки, шайбы), в группе — по возрастанию DN
-        // и резьбы (ГОСТ 21.110, п. 4.6).
+        // и резьбы (ГОСТ 21.110, п. 4.5).
         var byDn = supports.Points.GroupBy(p => p.Dn).OrderBy(g => g.Key).ToList();
         foreach (var i in root.GetProperty("items").EnumerateArray())
         {

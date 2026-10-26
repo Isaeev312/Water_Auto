@@ -190,7 +190,7 @@ public sealed class ProjectPipelineTests : IDisposable
         rows.ShouldContain(r => r.StartsWith("Покрытие антикоррозионное", StringComparison.Ordinal));
         rows.IndexOf("Узел управления").ShouldBeLessThan(rows.IndexOf("Оросители"));
 
-        // Крепления — по видам: все хомуты, затем шпильки (ГОСТ 21.110, п. 4.6).
+        // Крепления — по видам: все хомуты, затем шпильки (ГОСТ 21.110, п. 4.5).
         rows.FindLastIndex(r => r.StartsWith("Хомут", StringComparison.Ordinal)).ShouldBeLessThan(rows.FindIndex(r => r.StartsWith("Шпилька", StringComparison.Ordinal)));
     }
 

@@ -23,7 +23,7 @@ public static class EquipmentSet
         var templates = doc.RootElement.GetProperty("items").EnumerateArray().ToList();
         var items = new List<TakeoffItem>();
 
-        // Строки — по позициям шаблона, внутри — по возрастанию DN (ГОСТ 21.110, п. 4.6).
+        // Строки — по позициям шаблона, внутри — по возрастанию DN (ГОСТ 21.110, п. 4.5).
         var byDn = places.GroupBy(dn => dn).OrderBy(g => g.Key).ToList();
         foreach (var t in templates)
         {

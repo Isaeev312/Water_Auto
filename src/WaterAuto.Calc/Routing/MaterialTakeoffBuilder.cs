@@ -126,7 +126,7 @@ public static class MaterialTakeoffBuilder
         return new MaterialTakeoff(items, series.Issues.ToList());
     }
 
-    // Группы фасонных частей (ГОСТ 21.110, п. 4.6): отводы, тройники, крестовины, переходы; подключения оросителей — в конце своей группы.
+    // Группы фасонных частей (ГОСТ 21.110, п. 4.5): отводы, тройники, крестовины, переходы; подключения оросителей — в конце своей группы.
     private static int FittingOrder(string name) =>
         name.StartsWith("Отвод 90", StringComparison.Ordinal) ? 0
         : name.StartsWith("Отвод под ороситель", StringComparison.Ordinal) ? 1
