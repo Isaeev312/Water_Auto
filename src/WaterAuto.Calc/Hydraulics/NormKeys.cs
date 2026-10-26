@@ -21,4 +21,5 @@ internal static class NormKeys
     public const string AttrStandard = "standard";
     public const string AttrQuantity = "quantity";
     public const string AttrOutdoorOnly = "outdoorOnly";
+    public const string AttrUsable = "usable";
 }

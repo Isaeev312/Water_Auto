@@ -61,6 +61,43 @@ public class FormulaTests
     }
 
     [Fact]
+    public void Formula_B7_row_is_marked_unusable_and_not_used()
+    {
+        // Сноска footnotes.B7: с напечатанными коэффициентами формула Б.7 не воспроизводит табл. Б.1,
+        // поэтому строка помечена usable=false и в расчёте не применяется.
+        var b7 = Norms.Find("sp485.tB_3.A.gost3262")!;
+        b7.Attributes.GetValueOrDefault(NormKeys.AttrUsable).ShouldBe("false");
+
+        // ГОСТ 3262, ВГП 42,3×4,0 — вне табл. Б.2: Resolve берёт коэффициенты Kt формулы Б.8 (quantity == "Kt"),
+        // а не коэффициенты A формулы Б.7.
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!;
+        kt.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        var used = Norms.Find(kt.NormId)!;
+        used.Attributes.GetValueOrDefault(NormKeys.AttrQuantity).ShouldBe(NormKeys.Kt);
+        used.Attributes.GetValueOrDefault(NormKeys.AttrUsable).ShouldNotBe("false");
+    }
+
+    [Fact]
+    public void Resolve_does_not_use_records_marked_usable_false()
+    {
+        // Записи — копии настоящих строк норм; добавлен только признак usable=false.
+        // Если подходящая по стандарту и DN строка помечена неприменимой, Resolve её не берёт:
+        // ни строку табл. Б.2, ни коэффициенты формулы Б.8.
+        var b2 = Norms.Find("sp485.tB_2.gost3262.dn32.42_3x2_8")!;
+        var b2Unusable = b2 with { Attributes = MarkUnusable(b2.Attributes) };
+        var kt = Norms.Find("sp485.tB_3.Kt.gost3262")!;
+
+        // Строка табл. Б.2 неприменима — остаётся формула Б.8.
+        var resolved = PipeCharacteristics.Resolve(new FixedNorms(b2Unusable, kt), "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
+        resolved.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        resolved.NormId.ShouldBe(kt.Id);
+
+        // Коэффициенты формулы Б.8 тоже неприменимы — считать нечем.
+        var ktUnusable = kt with { Attributes = MarkUnusable(kt.Attributes) };
+        PipeCharacteristics.Resolve(new FixedNorms(ktUnusable), "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8)).ShouldBeNull();
+    }
+
+    [Fact]
     public void Formula_B8_rejects_invalid_dimensions_and_results()
     {
         PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(22)).ShouldBeNull();
@@ -114,5 +151,23 @@ public class FormulaTests
     {
         // 10 л/с через Ø 100 мм: 0,01 / (π·0,01/4) = 1,2732 м/с.
         Velocity.Of(new Flow(10), Length.FromMillimeters(100)).MetersPerSecond.ShouldBe(1.27324, 1e-5);
+    }
+
+    private static Dictionary<string, string> MarkUnusable(IReadOnlyDictionary<string, string> attributes)
+    {
+        var copy = attributes.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+        copy[NormKeys.AttrUsable] = "false";
+        return copy;
+    }
+
+    private sealed class FixedNorms : INormsProvider
+    {
+        private readonly NormRecord[] _records;
+
+        public FixedNorms(params NormRecord[] records) => _records = records;
+
+        public NormRecord? Find(string id) => Array.Find(_records, r => r.Id == id);
+
+        public IEnumerable<NormRecord> ByClause(string clause) => Array.FindAll(_records, r => r.Clause == clause);
     }
 }

@@ -37,7 +37,7 @@ public static class PipeCharacteristics
             return null;
         }
 
-        foreach (var r in norms.ByClause(NormKeys.ClauseTableB2))
+        foreach (var r in norms.ByClause(NormKeys.ClauseTableB2).Where(IsUsable))
         {
             if (r.Attributes.GetValueOrDefault(NormKeys.AttrStandard) == standard
                 && Math.Abs(r.Values[NormKeys.DOut]!.Value - outerDiameterMm) < 1e-9
@@ -49,7 +49,7 @@ public static class PipeCharacteristics
         }
 
         var coefficients = norms.ByClause(NormKeys.ClauseTableB3).FirstOrDefault(r =>
-            r.Attributes.GetValueOrDefault(NormKeys.AttrStandard) == standard && r.Attributes.GetValueOrDefault(NormKeys.AttrQuantity) == NormKeys.Kt);
+            IsUsable(r) && r.Attributes.GetValueOrDefault(NormKeys.AttrStandard) == standard && r.Attributes.GetValueOrDefault(NormKeys.AttrQuantity) == NormKeys.Kt);
         if (coefficients?.Values.GetValueOrDefault(NormKeys.DnMin) is not { } dnMin || coefficients.Values.GetValueOrDefault(NormKeys.DnMax) is not { } dnMax
             || dn < dnMin || dn > dnMax)
         {
@@ -66,4 +66,8 @@ public static class PipeCharacteristics
 
         return new ResolvedCharacteristic(new PipeCharacteristic(kt), CharacteristicSource.FormulaB8, coefficients.Id);
     }
+
+    // attrs.usable == "false" — строка неприменима: Б.7 не воспроизводит табл. Б.1 (сноска в table_B_3.json).
+    private static bool IsUsable(NormRecord record) =>
+        !string.Equals(record.Attributes.GetValueOrDefault(NormKeys.AttrUsable), "false", StringComparison.OrdinalIgnoreCase);
 }
