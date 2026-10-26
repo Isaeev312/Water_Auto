@@ -41,10 +41,9 @@ public static class PumpRoomPiping
         var outerOfLevel0 = requests.Where(r => r.Level == 0).Select(r => r.OuterMm).DefaultIfEmpty(0).Max();
         foreach (var r in requests)
         {
-            // Ось яруса 0 — отступ + половина диаметра; ярус 1 — за трубой яруса 0 через зазор.
-            var d = r.Level == 0
-                ? rules.WallOffsetMm + (r.OuterMm / 2)
-                : rules.WallOffsetMm + outerOfLevel0 + rules.LevelGapMm + (r.OuterMm / 2);
+            // Ось яруса 0 — отступ + половина диаметра; ярусы 1, 2… — каждый за предыдущим через зазор
+            // (ширина яруса — наибольший наружный диаметр яруса 0).
+            var d = rules.WallOffsetMm + (r.Level * (outerOfLevel0 + rules.LevelGapMm)) + (r.OuterMm / 2);
 
             var (ix0, iy0, ix1, iy1) = (x0 + d, y0 + d, x1 - d, y1 - d);
             PlanPoint? Project(PlanPoint p, bool wall)

@@ -43,7 +43,7 @@ public static class PumpCatalog
     }
 
     /// <summary>Правила прокладки обвязки из data/catalog/pump_room.json (рекомендации литературы); null — нет данных.</summary>
-    public static (double WallOffset, double BracketHeight, double LevelGap, string Source)? Piping(string normsDir)
+    public static (double WallOffset, double BracketHeight, double LevelGap, string Source, int JockeyDn)? Piping(string normsDir)
     {
         var path = Path.Combine(Dir(normsDir), "pump_room.json");
         if (!File.Exists(path))
@@ -57,7 +57,7 @@ public static class PumpCatalog
             return null;
         }
 
-        return (p.GetProperty("wallOffsetMm").GetDouble(), p.GetProperty("bracketHeightMm").GetDouble(), p.GetProperty("levelGapMm").GetDouble(), p.GetProperty("source").GetString()!);
+        return (p.GetProperty("wallOffsetMm").GetDouble(), p.GetProperty("bracketHeightMm").GetDouble(), p.GetProperty("levelGapMm").GetDouble(), p.GetProperty("source").GetString()!, p.TryGetProperty("jockeyDn", out var j) ? j.GetInt32() : 32);
     }
 
     /// <summary>Условные габариты узла управления и жокей-насоса; обозначение ТУ установки (если задано).</summary>

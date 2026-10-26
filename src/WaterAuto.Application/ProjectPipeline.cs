@@ -294,6 +294,30 @@ public static class ProjectPipeline
                 }
             }
 
+            // Жокей-насос: от всасывающего патрубка установки и в напорный — над проходом.
+            if (roomPlan.Items.FirstOrDefault(i => i.Kind == StationItemKind.Jockey) is { } jockey)
+            {
+                var jc = new PlanPoint((jockey.X0 + jockey.X1) / 2, (jockey.Y0 + jockey.Y1) / 2);
+                var outerJ = series.Pick(pr.JockeyDn)?.OuterDiameterMm ?? pr.JockeyDn;
+                requests.Add(new("Жокей-насос, всасывающий", pr.JockeyDn, outerJ, suctionAt, pipedSet.CollectorAxisMm, jc, 300, 0));
+                requests.Add(new("Жокей-насос, напорный", pr.JockeyDn, outerJ, jc, 600, dischargeAt, pipedSet.Hydraulic.HeightMm, 1));
+            }
+
+            // Патрубки ГМ для мобильной техники: точки слоя ПТ_НС_ГМ; нет — на стене ввода по обе стороны от него через 800 мм.
+            var truckPoints = pumpRoom.TruckInlets.Count > 0
+                ? pumpRoom.TruckInlets
+                : Enumerable.Range(0, station.TruckInlets).Select(k => AlongWall(pumpRoom.Outline, stationInlet, (k % 2 == 0 ? 1 : -1) * 800 * ((k / 2) + 1))).ToList();
+            var outerT = series.Pick(station.TruckInletDn)?.OuterDiameterMm ?? station.TruckInletDn;
+            foreach (var (tp, k) in truckPoints.Select((p, k) => (p, k)))
+            {
+                requests.Add(new($"Патрубок ГМ {k + 1}", station.TruckInletDn, outerT, tp, null, dischargeAt, pipedSet.Hydraulic.HeightMm, 2));
+            }
+
+            if (pumpRoom.TruckInlets.Count == 0)
+            {
+                issues.Add(new Issue("pumpRoom.truckInletsAuto", IssueLevel.Info, "Патрубки ГМ поставлены на стене ввода (слой ПТ_НС_ГМ пуст): стена должна быть наружной, с подъездом пожарной техники (п. 6.10.18) — проверить.", pumpRoom.Id));
+            }
+
             piping = PumpRoomPiping.Route(pumpRoom.Outline, requests, new PipingRules(pr.WallOffset, pr.BracketHeight, pr.LevelGap));
             issues.AddRange(piping.Issues);
             var ruP = CultureInfo.GetCultureInfo("ru-RU");
@@ -310,7 +334,8 @@ public static class ProjectPipeline
                     new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "повороты трассы и опуски к оборудованию"),
                 };
             });
-            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items, .. pipeRows] };
+            // Отводы патрубков ГМ теперь считаются по трассе — строка шаблона убирается.
+            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Where(i => i.Role != "elbowT"), .. pipeRows] };
         }
 
         // Номера позиций спецификации насосной — на схеме, по роли элемента (сквозная нумерация).
@@ -432,6 +457,7 @@ public static class ProjectPipeline
                     WallMarks = [
                         .. plan.PumpRooms[0].Inlet is { } wi ? new[] { (wi, $"Ввод DN{station.Suction.Pipe.Dn}") } : [],
                         .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, $"Выпуск в сеть, секция {k + 1}")),
+                        .. (piping?.Runs ?? []).Where(r => r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal)).Select(r => (r.Path[0], $"ГМ-{station.TruckInletDn}")),
                     ],
                 },
                 SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
@@ -513,6 +539,15 @@ public static class ProjectPipeline
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Точка на той же стене прямоугольного контура, сдвинутая вдоль стены на shift, мм (в пределах стены).
+    private static PlanPoint AlongWall(Polygon room, PlanPoint p, double shift)
+    {
+        var v = room.Vertices;
+        var (x0, y0, x1, y1) = (v.Min(q => q.XMm), v.Min(q => q.YMm), v.Max(q => q.XMm), v.Max(q => q.YMm));
+        var onVertical = Math.Min(Math.Abs(p.XMm - x0), Math.Abs(p.XMm - x1)) < Math.Min(Math.Abs(p.YMm - y0), Math.Abs(p.YMm - y1));
+        return onVertical ? new PlanPoint(p.XMm, Math.Clamp(p.YMm + shift, y0 + 300, y1 - 300)) : new PlanPoint(Math.Clamp(p.XMm + shift, x0 + 300, x1 - 300), p.YMm);
+    }
 
     // Цвет колбы в данных — прилагательное мужского рода («красный»); в спецификации — «колба красная».
     private static string Feminine(string color) => color.EndsWith("ый", StringComparison.Ordinal) || color.EndsWith("ий", StringComparison.Ordinal) || color.EndsWith("ой", StringComparison.Ordinal)

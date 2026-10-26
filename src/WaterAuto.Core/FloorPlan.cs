@@ -26,6 +26,9 @@ public sealed record PumpRoom(string Id, Polygon Outline, PlanPoint? Door = null
     public PlanPoint? Inlet { get; init; }
 
     public IReadOnlyList<PlanPoint> Outlets { get; init; } = [];
+
+    /// <summary>Патрубки для мобильной пожарной техники на наружной стене (слой ПТ_НС_ГМ); пусто — у ввода.</summary>
+    public IReadOnlyList<PlanPoint> TruckInlets { get; init; } = [];
 }
 
 /// <summary>План этажа после импорта (ARCHITECTURE §5). ID — дескрипторы объектов чертежа.</summary>

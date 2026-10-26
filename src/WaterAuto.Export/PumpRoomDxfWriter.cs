@@ -123,11 +123,21 @@ public static class PumpRoomDxfWriter
 
         // Обвязка: трубы — толстые линии, подпись DN над самым длинным участком.
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 5, LineWeightType.W50);
+        var labelled = new List<XY>();
         foreach (var pipe in data.Pipes.Where(p => p.Path.Count >= 2))
         {
             doc.Entities.Add(new LwPolyline([.. pipe.Path.Select(p => new XY(p.XMm, p.YMm))]) { Layer = pipes });
             var (a, b) = pipe.Path.Zip(pipe.Path.Skip(1)).MaxBy(s => Math.Abs(s.Second.XMm - s.First.XMm) + Math.Abs(s.Second.YMm - s.First.YMm));
             var vertical = Math.Abs(b.XMm - a.XMm) < Math.Abs(b.YMm - a.YMm);
+            var mid = new XY((a.XMm + b.XMm) / 2, (a.YMm + b.YMm) / 2);
+
+            // Подпись DN не ставится, если рядом уже есть подпись (трубы одного яруса идут рядом).
+            if (labelled.Any(l => Math.Abs(l.X - mid.X) < 6 * h && Math.Abs(l.Y - mid.Y) < 2 * h))
+            {
+                continue;
+            }
+
+            labelled.Add(mid);
             doc.Entities.Add(new TextEntity
             {
                 Value = pipe.Label,
@@ -138,10 +148,18 @@ public static class PumpRoomDxfWriter
             });
         }
 
+        // Отметки на стенах (ввод, выпуски, ГМ) — подпись снаружи помещения, за ближайшей стеной.
         foreach (var (at, label) in data.WallMarks)
         {
             doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.6 * h, Layer = pipes });
-            Text(at.XMm + h, at.YMm - (2 * h), label, 0.8 * h);
+            var width = 0.8 * h * 0.75 * label.Length;
+            var (dl, dr, db, dt) = (at.XMm - x0, x1 - at.XMm, at.YMm - y0, y1 - at.YMm);
+            var m = new[] { dl, dr, db, dt }.Min();
+            var (tx, ty) = m == dl ? (at.XMm - width - h, at.YMm - (0.4 * h))
+                : m == dr ? (at.XMm + h, at.YMm - (0.4 * h))
+                : m == db ? (at.XMm - (width / 2), at.YMm - (2 * h))
+                : (at.XMm - (width / 2), at.YMm + h);
+            Text(tx, ty, label, 0.8 * h);
         }
 
         // Цепочки размеров: по X — у нижней стены, по Y — у левой; точки — стены и грани первого (основного) оборудования

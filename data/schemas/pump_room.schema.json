@@ -113,6 +113,10 @@
         },
         "notes": {
           "type": "string"
+        },
+        "jockeyDn": {
+          "type": "integer",
+          "minimum": 15
         }
       }
     }

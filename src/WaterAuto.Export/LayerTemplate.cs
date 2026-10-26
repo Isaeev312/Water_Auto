@@ -19,7 +19,7 @@ public static class LayerTemplate
     // Слои входа (что читает импорт) и выхода (что пишет программа); цвета — как в tools/autocad/wa.lsp.
     private static readonly (string Name, short Color)[] Layers =
     [
-        ("ПТ_КОНТУР", 3), ("ПТ_КОЛОННЫ", 8), ("ПТ_БАЛКИ", 30), ("ПТ_КОРОБА", 40), ("ПТ_ЗАПРЕТ", 210), ("ПТ_ВВОД", 5), ("ПТ_НС", 6), ("ПТ_НС_ВВОД", 5), ("ПТ_НС_ВЫПУСК", 1),
+        ("ПТ_КОНТУР", 3), ("ПТ_КОЛОННЫ", 8), ("ПТ_БАЛКИ", 30), ("ПТ_КОРОБА", 40), ("ПТ_ЗАПРЕТ", 210), ("ПТ_ВВОД", 5), ("ПТ_НС", 6), ("ПТ_НС_ВВОД", 5), ("ПТ_НС_ВЫПУСК", 1), ("ПТ_НС_ГМ", 1),
         (PlanDxfWriter.SprinklerLayer, 1), (PlanDxfWriter.PipeLayer, 4), (PlanDxfWriter.SegmentLayer, 7), (PlanDxfWriter.IssueLayer, 6),
         (PlanDxfWriter.ZoneLayer, 2), (PlanDxfWriter.SummaryLayer, 7), (PlanDxfWriter.SupportLayer, 8), (PlanDxfWriter.DimensionLayer, 3), (PlanDxfWriter.HydrantLayer, 1),
         (AxonometryDxfWriter.PipeLayer, 4), (AxonometryDxfWriter.SprinklerLayer, 1), (AxonometryDxfWriter.LabelLayer, 7),
