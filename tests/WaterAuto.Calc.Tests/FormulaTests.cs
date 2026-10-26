@@ -76,4 +76,13 @@ public class FormulaTests
     {
         Norms.Find("sp485.tB_3.Kt.gost3262")!.Edition.ShouldBe("с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)");
     }
+
+    [Fact]
+    public void Table_B2_rows_marked_for_outdoor_networks_are_flagged()
+    {
+        // 159×4 отмечена «*» — трубы наружного водоснабжения; 159×3,2 — нет.
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 10704", 150, Length.FromMillimeters(159), Length.FromMillimeters(4.0))!.OutdoorOnly.ShouldBeTrue();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 10704", 150, Length.FromMillimeters(159), Length.FromMillimeters(3.2))!.OutdoorOnly.ShouldBeFalse();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!.OutdoorOnly.ShouldBeFalse();
+    }
 }

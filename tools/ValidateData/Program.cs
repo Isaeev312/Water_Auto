@@ -19,6 +19,7 @@ var normValues = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
 var profiles = new List<(string Rel, JsonNode Doc)>();
 var errors = new List<string>();
 var checkedFiles = 0;
+var unverified = new List<string>();
 
 foreach (var file in Directory.EnumerateFiles(dataDir, "*.json", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
 {
@@ -88,6 +89,15 @@ foreach (var file in Directory.EnumerateFiles(dataDir, "*.json", SearchOption.Al
     {
         profiles.Add((rel, doc!));
     }
+    else if (Path.GetFileName(schemaPath).Equals("sprinklers.schema.json", StringComparison.OrdinalIgnoreCase))
+    {
+        CheckSprinklers(rel, doc!, errors);
+    }
+
+    if (doc!["verified"]?.GetValue<bool>() == false)
+    {
+        unverified.Add(rel);
+    }
 }
 
 // Профили проверяются после всех норм: профиль может только ужесточать норму (ARCHITECTURE §9.1).
@@ -102,7 +112,55 @@ foreach (var error in errors)
 }
 
 Console.WriteLine($"Проверено файлов: {checkedFiles}, записей норм: {normIds.Count}, ошибок: {errors.Count}.");
+if (unverified.Count > 0)
+{
+    // Не ошибка: данные перенесены, но специалист их не сверял. Перед выпуском список должен быть пустым.
+    Console.WriteLine($"Не сверено специалистом (verified: false): {unverified.Count} — {string.Join(", ", unverified)}.");
+}
+
 return errors.Count == 0 ? 0 : 1;
+
+static void CheckSprinklers(string rel, JsonNode doc, List<string> errors)
+{
+    // K в q = 10·K·√P (л/с, МПа) и K-фактор в л/(мин·бар^0,5) связаны только единицами: K = K_lpm / (60·√10).
+    // Расхождение больше допуска округления каталога — ошибка переноса.
+    var lpmToCore = 60 * Math.Sqrt(10);
+    const double tolerance = 0.02;
+    var ids = new HashSet<string>(StringComparer.Ordinal);
+    foreach (var sprinkler in doc["sprinklers"]!.AsArray())
+    {
+        var id = sprinkler!["id"]!.GetValue<string>();
+        if (!ids.Add(id))
+        {
+            errors.Add($"{rel}: id {id} повторяется");
+        }
+
+        var k = sprinkler["K"]!.GetValue<double>();
+        if (sprinkler["K_lpm"] is { } kLpm)
+        {
+            var expected = kLpm.GetValue<double>() / lpmToCore;
+            if (Math.Abs(k - expected) / expected > tolerance)
+            {
+                errors.Add($"{rel}: {id}: K = {k} не согласуется с K_lpm = {kLpm} (ожидается ≈ {expected:0.000})");
+            }
+        }
+
+        if (sprinkler["pMin"]!.GetValue<double>() >= sprinkler["pMax"]!.GetValue<double>())
+        {
+            errors.Add($"{rel}: {id}: pMin должен быть меньше pMax");
+        }
+
+        foreach (var point in sprinkler["intensity"]?.AsArray() ?? [])
+        {
+            var p = point!["P"]!.GetValue<double>();
+            var i = point["i"]!.GetValue<double>();
+            if (p <= 0 || i <= 0)
+            {
+                errors.Add($"{rel}: {id}: точка интенсивности P = {p}, i = {i} должна быть положительной");
+            }
+        }
+    }
+}
 
 static void CheckProfile(string rel, JsonNode doc, Dictionary<string, JsonObject> norms, List<string> errors)
 {

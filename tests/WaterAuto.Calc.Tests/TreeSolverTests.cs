@@ -154,4 +154,117 @@ public class TreeSolverTests
             new HydraulicNetwork([Source("S"), Sprinkler("1"), Sprinkler("x")], [Pipe("S-1", "S", "1")]), "1", new Pressure(0.1));
         loose.Issues.ShouldContain(i => i.Code == "topology.disconnected" && i.ElementId == "x");
     }
+
+    [Fact]
+    public void Dictating_node_must_have_the_lowest_emitter_pressure()
+    {
+        // Диктующий — ороситель с наименьшим давлением (Б.1.2.1). Узел «2» выбран диктующим,
+        // но за ним стоит «1» с меньшим давлением: расчёт идёт, величины заполнены, но результат — ошибка.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2"), Sprinkler("3")],
+            [Pipe("S-3", "S", "3"), Pipe("3-2", "3", "2"), Pipe("2-1", "2", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "2", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "dictating.notMinimum" && i.ElementId == "1");
+        result.NodePressures["1"].Mpa.ShouldBeLessThan(0.1);
+        result.SourcePressure.Mpa.ShouldBeGreaterThan(0.1);
+    }
+
+    [Fact]
+    public void Terminal_dictating_node_passes_the_minimum_pressure_check()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2"), Sprinkler("3")],
+            [Pipe("S-3", "S", "3"), Pipe("3-2", "3", "2"), Pipe("2-1", "2", "1")]);
+
+        TreeSolver.SolveDesign(net, "1", new Pressure(0.1)).Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Side_branch_without_pressure_is_an_error_not_a_silent_zero()
+    {
+        // Ороситель «2» на 30 м выше: воды он не получит. Раньше — только предупреждение и q = 0.
+        var net = new HydraulicNetwork(
+            [Source("S"), Tee("a"), Sprinkler("1", 0), Sprinkler("2", 30)],
+            [Pipe("S-a", "S", "a"), Pipe("a-1", "a", "1"), Pipe("a-2", "a", "2")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "branch.noPressure");
+        result.Issues.ShouldContain(i => i.Code == "dictating.notMinimum" && i.ElementId == "2");
+    }
+
+    [Fact]
+    public void Non_finite_or_non_positive_emitter_K_is_rejected()
+    {
+        foreach (var k in new[] { double.NaN, double.PositiveInfinity, 0, -0.47 })
+        {
+            var net = new HydraulicNetwork(
+                [Source("S"), Sprinkler("1", 0, k), Sprinkler("2")],
+                [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+
+            var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+            result.HasErrors.ShouldBeTrue(k.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            result.Issues.ShouldContain(i => i.Code == "node.emitter" && i.ElementId == "1");
+            double.IsFinite(result.SourcePressure.Mpa).ShouldBeTrue();
+        }
+    }
+
+    [Fact]
+    public void Non_finite_elevation_is_rejected()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Tee("a", double.NaN), Sprinkler("1"), Sprinkler("2")],
+            [Pipe("S-a", "S", "a"), Pipe("a-1", "a", "1"), Pipe("a-2", "a", "2")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "node.elevation" && i.ElementId == "a");
+    }
+
+    [Fact]
+    public void Non_finite_or_non_positive_dictating_pressure_is_rejected()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+
+        foreach (var p in new[] { double.NaN, double.PositiveInfinity, 0, -0.1 })
+        {
+            var result = TreeSolver.SolveDesign(net, "1", new Pressure(p));
+
+            result.HasErrors.ShouldBeTrue(p.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            result.Issues.ShouldContain(i => i.Code == "dictating.pressure");
+        }
+    }
+
+    [Fact]
+    public void Node_kind_and_emitter_must_agree()
+    {
+        // Ороситель без K раньше молча считался тройником и выпадал из расхода установки.
+        var noK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([Source("S"), Sprinkler("1"), new NetworkNode("2", NodeKind.Sprinkler, new Length(0))], [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]),
+            "1", new Pressure(0.1));
+        noK.Issues.ShouldContain(i => i.Code == "node.emitterMissing" && i.ElementId == "2");
+
+        var hydrantNoK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([Source("S"), Sprinkler("1"), new NetworkNode("pk", NodeKind.Hydrant, new Length(0))], [Pipe("S-pk", "S", "pk"), Pipe("pk-1", "pk", "1")]),
+            "1", new Pressure(0.1));
+        hydrantNoK.Issues.ShouldContain(i => i.Code == "node.emitterMissing" && i.ElementId == "pk");
+
+        var teeWithK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([Source("S"), Sprinkler("1"), new NetworkNode("a", NodeKind.Tee, new Length(0), new KFactor(0.47))], [Pipe("S-a", "S", "a"), Pipe("a-1", "a", "1")]),
+            "1", new Pressure(0.1));
+        teeWithK.Issues.ShouldContain(i => i.Code == "node.emitterUnexpected" && i.ElementId == "a");
+
+        var sourceWithK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([new NetworkNode("S", NodeKind.Source, new Length(0), new KFactor(0.47)), Sprinkler("1")], [Pipe("S-1", "S", "1")]),
+            "1", new Pressure(0.1));
+        sourceWithK.Issues.ShouldContain(i => i.Code == "node.emitterUnexpected" && i.ElementId == "S");
+    }
 }

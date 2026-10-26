@@ -9,7 +9,8 @@ public enum CharacteristicSource
     FormulaB8,
 }
 
-public sealed record ResolvedCharacteristic(PipeCharacteristic Value, CharacteristicSource Source, string NormId);
+/// <param name="OutdoorOnly">Строка табл. Б.2 отмечена «*» — трубы сетей наружного водоснабжения; для внутренней сети нужно замечание.</param>
+public sealed record ResolvedCharacteristic(PipeCharacteristic Value, CharacteristicSource Source, string NormId, bool OutdoorOnly = false);
 
 /// <summary>
 /// Kт стальной трубы: строка табл. Б.2 по стандарту, наружному диаметру и стенке; если строки нет —
@@ -36,14 +37,17 @@ public static class PipeCharacteristics
                 && Math.Abs(r.Values["D_out"]!.Value - outerDiameterMm) < 1e-9
                 && Math.Abs(r.Values["wall"]!.Value - wallMm) < 1e-9)
             {
-                return new ResolvedCharacteristic(new PipeCharacteristic(r.Values["Kt"]!.Value), CharacteristicSource.TableB2, r.Id);
+                var outdoorOnly = string.Equals(r.Attributes.GetValueOrDefault("outdoorOnly"), "true", StringComparison.OrdinalIgnoreCase);
+                return new ResolvedCharacteristic(new PipeCharacteristic(r.Values["Kt"]!.Value), CharacteristicSource.TableB2, r.Id, outdoorOnly);
             }
         }
 
         var coefficients = norms.ByClause("табл. Б.3").FirstOrDefault(r =>
             r.Attributes.GetValueOrDefault("standard") == standard && r.Attributes.GetValueOrDefault("quantity") == "Kt");
-        if (coefficients is null || dn < coefficients.Values["dnMin"] || dn > coefficients.Values["dnMax"])
+        if (coefficients?.Values.GetValueOrDefault("dnMin") is not { } dnMin || coefficients.Values.GetValueOrDefault("dnMax") is not { } dnMax
+            || dn < dnMin || dn > dnMax)
         {
+            // Нет коэффициентов или не задан диапазон DN формулы — считать нельзя (раньше null в dnMin/dnMax молча пропускал проверку).
             return null;
         }
 
