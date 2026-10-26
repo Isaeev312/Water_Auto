@@ -36,8 +36,18 @@ public static class HydrantEquipment
             i.GetProperty("designation").GetString() is { Length: > 0 } d ? d : null,
             i.GetProperty("perHydrant").GetDouble() * hydrants,
             i.GetProperty("unit").GetString()!,
-            i.GetProperty("name").GetString()!.StartsWith("Диафрагма", StringComparison.Ordinal)
-                ? "диаметр отверстия — по расчёту"
-                : hydrants == 1 ? "на один пожарный кран" : null)).ToList();
+            Note(i))).ToList();
+
+        // Примечание строки: своё из шаблона и «на один пожарный кран», для диафрагмы — про отверстие.
+        string? Note(JsonElement i)
+        {
+            if (i.GetProperty("name").GetString()!.StartsWith("Диафрагма", StringComparison.Ordinal))
+            {
+                return "диаметр отверстия — по расчёту";
+            }
+
+            var parts = new[] { hydrants == 1 ? "на один пожарный кран" : null, i.TryGetProperty("note", out var n) ? n.GetString() : null }.OfType<string>().ToList();
+            return parts.Count > 0 ? string.Join("; ", parts) : null;
+        }
     }
 }

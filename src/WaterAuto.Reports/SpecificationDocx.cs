@@ -62,8 +62,8 @@ public static class SpecificationDocx
             {
                 table.Append(Row(
                     [
-                        (++position).ToString(CultureInfo.InvariantCulture),
-                        item.Name,
+                        "",
+                        SpecificationXlsx.Numbered(++position, item.Name),
                         item.Designation ?? "",
                         "",
                         item.Supplier ?? "",

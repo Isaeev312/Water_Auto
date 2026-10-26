@@ -19,11 +19,12 @@ public sealed record GeneralDataInputs(
     int HydrantCount,
     string PipeStandard,
     string WeldStandard,
-    IReadOnlyDictionary<string, string> FittingStandards);
+    IReadOnlyDictionary<string, string> FittingStandards,
+    string? SpecificationDesignation = null);
 
 /// <summary>
 /// Лист «Общие данные» (ГОСТ Р 21.101): ведомость чертежей — из проекта; ссылочные документы — нормы расчёта и все
-/// обозначения из спецификации с наименованиями из data/catalog/documents.json; основные показатели — из расчёта;
+/// обозначения из спецификации с наименованиями из data/catalog/documents.json; прилагаемые — спецификация ПТ.СО; основные показатели — из расчёта;
 /// общие указания — решения проекта со ссылками на пункты норм (числа — из данных норм).
 /// </summary>
 public static class GeneralDataComposer
@@ -52,7 +53,8 @@ public static class GeneralDataComposer
         }
 
         designations.AddRange(["СП 7.13130.2013", "СП 75.13330.2011", "ГОСТ Р 50680-94", "ГОСТ Р 51043-2002", "ГОСТ Р 51052-2002", i.WeldStandard]);
-        designations.AddRange(i.Takeoff.Items.Select(t => t.Designation).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!));
+        // Обозначение может перечислять несколько документов через запятую (покрытие: грунтовка и эмаль).
+        designations.AddRange(i.Takeoff.Items.Select(t => t.Designation).Where(x => !string.IsNullOrWhiteSpace(x)).SelectMany(x => x!.Split(", ", StringSplitOptions.TrimEntries)));
         designations.AddRange(["ГОСТ 21.110-2013", "ГОСТ Р 21.101-2026"]);
         // Только обозначения документов (марки изделий из спецификации, например «СВВ-12», сюда не входят).
         string[] kinds = ["ГОСТ", "СП ", "СН ", "СНиП", "ТУ ", "DIN", "ISO", "РД ", "ОСТ"];
@@ -113,7 +115,9 @@ public static class GeneralDataComposer
             i.Sheets.Select(s => new SheetRow(s.Sheet, s.Name, s.Note)).ToList(),
             references,
             indicators,
-            instructions);
+            instructions,
+            // Спецификация — в прилагаемых документах (ГОСТ 21.110, п. 4.13).
+            i.SpecificationDesignation is { } spec ? [new ReferenceRow(spec, "Спецификация оборудования, изделий и материалов", "")] : null);
     }
 
     // Наименование и признак «сверено с источником» (поле source в справочнике).

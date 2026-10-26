@@ -147,7 +147,10 @@ public sealed class ProjectPipelineTests : IDisposable
         items.ShouldContain(i => i.Name == "Клапан пожарный запорный угловой DN65" && i.Quantity == 1);
         items.ShouldContain(i => i.Name.Contains("РС-70", StringComparison.Ordinal) && i.Name.Contains("19 мм", StringComparison.Ordinal));
         items.ShouldContain(i => i.Name.Contains("длина 20 м", StringComparison.Ordinal));
-        items.ShouldAllBe(i => i.Group == Core.TakeoffGroup.Hydrants && i.Note == "на один пожарный кран");
+        items.ShouldAllBe(i => i.Group == Core.TakeoffGroup.Hydrants && i.Note!.StartsWith("на один пожарный кран", StringComparison.Ordinal));
+
+        // Трубопроводы к кранам не трассируются — об этом сказано у клапана, чтобы монтажник не искал их в разделе труб.
+        items[0].Note!.ShouldContain("не учтена");
     }
 
     [Fact]
@@ -178,7 +181,9 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         using var spec = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationDocxFile, StringComparison.Ordinal)), false);
         var rows = spec.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>()
-            .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().ElementAtOrDefault(1)?.InnerText ?? "").ToList();
+            .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().ElementAtOrDefault(1)?.InnerText ?? "")
+            .Select(n => System.Text.RegularExpressions.Regex.Replace(n, @"^\d+ ", "")) // порядковый номер записи перед наименованием
+            .ToList();
         rows.ShouldContain("Узел управления спринклерный водозаполненный DN125");
         rows.ShouldContain("Промывочные устройства");
         rows.ShouldContain(r => r.StartsWith("Кран шаровой DN", StringComparison.Ordinal));
@@ -229,5 +234,11 @@ public sealed class ProjectPipelineTests : IDisposable
         text.ShouldContain("ГОСТ 3262-75");
         text.ShouldContain("Трубы стальные водогазопроводные. Технические условия");
         text.ShouldContain("Расход пожарного насоса");
+
+        // Спецификация — в прилагаемых документах (ГОСТ 21.110, п. 4.13); составное обозначение покрытия — двумя строками.
+        text.ShouldContain("Прилагаемые документы");
+        text.ShouldContain("-ПТ.СОСпецификация оборудования, изделий и материалов");
+        text.ShouldContain("ГОСТ 25129-2020Грунтовка ГФ-021");
+        text.ShouldNotContain("ГОСТ 25129-2020, ГОСТ 6465-76");
     }
 }

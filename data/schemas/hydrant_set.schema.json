@@ -54,6 +54,9 @@
           "perHydrant": {
             "type": "number",
             "exclusiveMinimum": 0
+          },
+          "note": {
+            "type": "string"
           }
         }
       }

@@ -20,7 +20,8 @@ public sealed record GeneralData(
     IReadOnlyList<SheetRow> Sheets,
     IReadOnlyList<ReferenceRow> References,
     IReadOnlyList<IndicatorRow> Indicators,
-    IReadOnlyList<string> Instructions);
+    IReadOnlyList<string> Instructions,
+    IReadOnlyList<ReferenceRow>? Attached = null);
 
 /// <summary>
 /// Лист «Общие данные по рабочим чертежам» основного комплекта (ГОСТ Р 21.101) в docx A3 альбомный:
@@ -32,6 +33,7 @@ public static class GeneralDataDocx
     private const string Font = GostFrame.Font;
     private const string Size = "24";
     private static readonly string[] ReferencesCaption = ["", "Ссылочные документы", ""];
+    private static readonly string[] AttachedCaption = ["", "Прилагаемые документы", ""];
 
     public static void Write(string path, GeneralData data, TitleBlock? stamp = null, string font = GostFrame.Font)
     {
@@ -49,7 +51,11 @@ public static class GeneralDataDocx
         body.Append(Heading("Ведомость рабочих чертежей основного комплекта"));
         body.Append(Table([20, 130, 35], ["Лист", "Наименование", "Примечание"], data.Sheets.Select(s => new[] { s.Sheet, s.Name, s.Note })));
         body.Append(Heading("Ведомость ссылочных и прилагаемых документов"));
-        body.Append(Table([50, 100, 35], ["Обозначение", "Наименование", "Примечание"], [ReferencesCaption, .. data.References.Select(r => new[] { r.Designation, r.Name, r.Note })]));
+        body.Append(Table([50, 100, 35], ["Обозначение", "Наименование", "Примечание"], [
+            ReferencesCaption,
+            .. data.References.Select(r => new[] { r.Designation, r.Name, r.Note }),
+            .. data.Attached is { Count: > 0 } attached ? [AttachedCaption, .. attached.Select(r => new[] { r.Designation, r.Name, r.Note })] : Array.Empty<string[]>(),
+        ]));
         body.Append(Heading("Основные показатели"));
         body.Append(Table([110, 30, 45], ["Наименование показателя", "Единица измерения", "Значение"], data.Indicators.Select(i => new[] { i.Name, i.Unit, i.Value })));
         body.Append(Heading("Общие указания"));

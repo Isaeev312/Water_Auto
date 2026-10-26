@@ -11,7 +11,8 @@ public sealed record SpecificationHeader(string Title);
 /// Графы и ширины — по форме 1; заголовки разделов — в графе 2, подчёркнуты;
 /// обозначения документов — с годом утверждения; масса единицы, кг, где она известна (трубы — теоретическая масса 1 м);
 /// в конце — итог массы позиций с известной массой. Шрифт — шрифт проекта (по умолчанию GOST Common).
-/// Позиции нумеруются заново в каждом разделе; заголовок раздела отделён от позиций пустой строкой (п. 4.5); строки — по 8 мм (длинный текст — кратно 8 мм).
+/// Порядковый номер записи — перед наименованием, заново в каждом разделе; графа «Позиция» — для позиционных обозначений
+/// с чертежей, на чертежах программы их нет — графа не заполняется (ГОСТ 21.110, п. 4.7); заголовок раздела отделён от позиций пустой строкой (п. 4.5); строки — по 8 мм (длинный текст — кратно 8 мм).
 /// Рабочий файл для правки; для выпуска — <see cref="SpecificationDocx"/> в рамке с основной надписью. Внизу оставлено место под основную надпись.
 /// </summary>
 public static class SpecificationXlsx
@@ -110,8 +111,7 @@ public static class SpecificationXlsx
             var position = 0;
             foreach (var item in items)
             {
-                ws.Cell(row, 1).Value = (++position).ToString(System.Globalization.CultureInfo.InvariantCulture);
-                ws.Cell(row, 2).Value = item.Name;
+                ws.Cell(row, 2).Value = Numbered(++position, item.Name);
                 ws.Cell(row, 3).Value = item.Designation ?? "";
                 ws.Cell(row, 5).Value = item.Supplier ?? "";
                 ws.Cell(row, 6).Value = item.Unit;
@@ -125,7 +125,7 @@ public static class SpecificationXlsx
                 }
 
                 ws.Cell(row, 9).Value = item.Note ?? "";
-                Height(row, "", item.Name, item.Designation ?? "", "", item.Supplier ?? "", item.Unit, "", "", item.Note ?? "");
+                Height(row, "", Numbered(position, item.Name), item.Designation ?? "", "", item.Supplier ?? "", item.Unit, "", "", item.Note ?? "");
                 row++;
             }
         }
@@ -159,4 +159,7 @@ public static class SpecificationXlsx
         ws.PageSetup.Margins.Footer = 0;
         book.SaveAs(path);
     }
+
+    /// <summary>Наименование с порядковым номером записи в разделе перед ним (ГОСТ 21.110, п. 4.7).</summary>
+    internal static string Numbered(int position, string name) => $"{position.ToString(System.Globalization.CultureInfo.InvariantCulture)} {name}";
 }
