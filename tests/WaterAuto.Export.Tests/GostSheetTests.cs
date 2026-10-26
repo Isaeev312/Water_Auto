@@ -66,7 +66,8 @@ public class GostSheetTests
         sheet.OfType<Line>().Count().ShouldBeGreaterThan(30);
         var labels = doc.Entities.Where(e => e.Layer.Name == AxonometryDxfWriter.LabelLayer).OfType<MText>().Select(t => t.Value).ToList();
         labels.ShouldContain("Условные обозначения");
-        labels.ShouldContain("Ороситель спринклерный");
+        labels.ShouldContain("Ороситель спринклерный, розеткой вверх");
+        labels.ShouldContain(t => t.StartsWith("ПРИМЕЧАНИЯ", StringComparison.Ordinal));
         labels.ShouldContain("Аксонометрическая схема"); // заголовок над схемой
 
         // 31 м с запасами на А3 — 1:100; подписи схемы — 2,5 мм на листе.

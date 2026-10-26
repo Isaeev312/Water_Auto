@@ -295,18 +295,9 @@ public static class ExplanatoryNoteComposer
         ]));
         blocks.Add(new NoteParagraph("Давление и расход каждого следующего оросителя: *p*_{n} = *p*_{n−1} + Δ*P*′, *q*_{n} = 10*K*·√*p*_{n} (Б.4); расходы рядков — по их характеристикам (Б.17–Б.21). Результаты по расчётному направлению — в таблице 5."));
 
-        // Расчётные точки, как в приложении Б: оросители — 1, 2, 3…, узлы — а, б, в…, точка подключения — ВВ.
-        var kinds = d.Route.Nodes.ToDictionary(n => n.Id, n => n.Kind);
-        var labels = new Dictionary<string, string>();
-        var (sprinklerNo, letterNo) = (0, 0);
-        const string Letters = "абвгдежзиклмнопрстуфхцчшэюя";
-        string Label(string id) => labels.TryGetValue(id, out var l) ? l
-            : labels[id] = kinds.GetValueOrDefault(id) switch
-            {
-                RouteNodeKind.Sprinkler => (++sprinklerNo).ToString(Ru),
-                RouteNodeKind.Inlet => "ВВ",
-                _ => letterNo < Letters.Length ? Letters[letterNo++].ToString() : $"у{++letterNo}",
-            };
+        // Расчётные точки, как в приложении Б (те же — на аксонометрической схеме).
+        var labels = CalcPoints.Labels(d);
+        string Label(string id) => labels[id];
         // При ВПВ, требующем большего давления, сеть рассчитана от поднятого давления диктующего оросителя (ADR 0010).
         var pStart = d.Hydrants is { Raised: true } raised ? raised.DictatingPressureActual.Mpa : d.DictatingPressure.Mpa;
         var pressure = pStart;
@@ -329,7 +320,7 @@ public static class ExplanatoryNoteComposer
 
         blocks.Add(new NoteTable("Таблица 5 — Гидравлический расчёт по расчётному направлению (от диктующего оросителя 1 к точке подключения ВВ)",
             ["Участок", "DN", "L, м", "Kт, л²/с²", "Q, л/с", "ΔP, МПа", "ΔP′, МПа", "P в конце, МПа", "v, м/с"], rows));
-        blocks.Add(new NoteParagraph("Обозначения расчётных точек: 1, 2, 3… — оросители по ходу от диктующего; а, б, в… — узлы ответвлений; ВВ — точка подключения (ПТ_ВВОД). *P в конце* — давление в конце участка по ходу к источнику: *p*_{1} плюс сумма Δ*P*′."));
+        blocks.Add(new NoteParagraph("Обозначения расчётных точек: 1, 2, 3… — оросители по ходу от диктующего; а, б, в… — узлы ответвлений; ВВ — точка подключения (ПТ_ВВОД). *P в конце* — давление в конце участка по ходу к источнику: *p*_{1} плюс сумма Δ*P*′. Расчётные точки, расчётное направление и оросители диктующей зоны показаны на аксонометрической схеме трубопроводов."));
 
         blocks.Add(new NoteParagraph("Расчётный расход установки — сумма расходов оросителей диктующей зоны (Б.23):"));
         blocks.Add(new NoteFormula($"*Q*_{{р}} = Σ*q*_{{n}} = **{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с**,", "5.7", [
