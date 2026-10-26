@@ -9,7 +9,8 @@ namespace WaterAuto.Export;
 /// <summary>
 /// Данные принципиальной схемы насосной станции: число агрегатов, DN обвязки, патрубки для пожарной техники, подписи.
 /// Собирается из расчёта (Application): Export не знает про Calc. Positions — номер позиции спецификации по роли элемента
-/// (pump, valveS, teeS…); у элемента без номера выноска не ставится.
+/// (pump, valveS, teeS…); у элемента без номера выноска не ставится. Outlets — выходы гребёнки к сети секций (подпись точки
+/// ввода на плане); по одному узлу управления на выход.
 /// </summary>
 public sealed record PumpSchemeData(
     int Pumps,
@@ -22,7 +23,8 @@ public sealed record PumpSchemeData(
     string JockeyText,
     string SourceText,
     IReadOnlyList<string> Notes,
-    IReadOnlyDictionary<string, int>? Positions = null);
+    IReadOnlyDictionary<string, int>? Positions = null,
+    IReadOnlyList<string>? Outlets = null);
 
 /// <summary>
 /// Принципиальная схема насосной станции пожаротушения на листе A3 с рамкой и основной надписью по форме 3:
@@ -67,11 +69,13 @@ public static class PumpSchemeDxfWriter
         d.Pipe(25, yS, xJ + 8, yS);
         d.Cap(xJ + 8, yS, horizontal: true);
         Pos(xJ + 8, yS, "capS");
-        d.Pipe(x0, yD, xEnd + 60, yD);
+        d.Pipe(x0, yD, xEnd + (Math.Max(1, data.Outlets?.Count ?? 1) - 1) * 30, yD);
         d.Cap(x0, yD, horizontal: true, left: true);
         Pos(x0, yD, "capD", -1);
         d.Text(27, yS + 3, $"{data.SourceText}, DN{data.SuctionDn}", 2.5);
         d.Arrow(40, yS, 1, 0);
+        d.Valve(85, yS, vertical: false, sensor: true);
+        Pos(85, yS, "inletValve", -1);
 
         for (var k = 0; k < branches.Count; k++)
         {
@@ -127,11 +131,34 @@ public static class PumpSchemeDxfWriter
         d.Tank(xJ + 18, 152);
         d.Text(xJ + 7, 128, data.JockeyText, 2.5, width: 40);
 
-        // Узел управления и выход в сеть.
-        d.Box(xEnd, yD, "УУ");
-        d.Valve(xEnd - 14, yD, vertical: false, sensor: true);
-        d.Arrow(xEnd + 50, yD, 1, 0);
-        d.Text(xEnd + 18, yD + 3, $"В сеть АУП DN{data.SupplyDn}", 2.5);
+        // Напорный коллектор — гребёнка: по ветви на секцию с затворами до и после узла управления и манометрами;
+        // выход — к точке ввода сети секции на плане.
+        var outlets = data.Outlets is { Count: > 0 } o ? o : ["сеть АУП"];
+        for (var k = 0; k < outlets.Count; k++)
+        {
+            var x = xEnd + (k * 30);
+            d.Pipe(x, yD, x, 250);
+            d.Valve(x, 199, vertical: true, sensor: true);
+            d.Gauge(x, 206, "Р", vacuum: false);
+            d.Box(x - 7, 216, "УУ");
+            d.Valve(x, 233, vertical: true, sensor: true);
+            d.Gauge(x, 239, "Р", vacuum: false);
+            d.Arrow(x, 250, 0, 1);
+            d.Text(x - 3, 253, $"Секция {k + 1}", 2.5);
+            d.Text(x - 3, 257.5, $"→ {outlets[k]}", 2.5);
+            d.Text(x + 2, 245, $"DN{data.SupplyDn}", 2);
+            if (k == 0)
+            {
+                Pos(x + 7, 216, "cu");
+                Pos(x + 3, 233, "cuValve");
+                Pos(x - 11, 239, "cuGauge", -1);
+            }
+
+            if (k > 0)
+            {
+                Pos(x, yD, "teeCU");
+            }
+        }
 
         // Патрубки для мобильной пожарной техники — сверху в напорный коллектор; у фасада — отвод и головка.
         for (var k = 0; k < data.TruckInlets; k++)
@@ -157,38 +184,37 @@ public static class PumpSchemeDxfWriter
         d.Text(x0 + 30 + (data.TruckInlets * 22), 222, "задвижки опломбированы «открыто»", 2);
 
         d.Text(150, 280, "Принципиальная схема насосной станции пожаротушения", 5);
-        Legend(d, 300, 272);
+        Legend(d, 262, 104);
         var y = 92.0;
         foreach (var note in data.Notes.Select((n, k) => $"{k + 1}. {n}"))
         {
             d.Text(25, y, note, 2.5, width: 200);
-            y -= 8;
+            y -= 9.5;
         }
 
         return doc;
     }
 
-    // Таблица условных обозначений.
+    // Таблица условных обозначений — над основной надписью, в два столбца.
     private static void Legend(Drawer d, double x, double top)
     {
-        d.Text(x, top, "Условные обозначения", 3.5);
+        d.Text(x, top, "Условные обозначения", 3);
         var rows = new (string Text, Action<double, double> Draw)[]
         {
-            ("Затвор (задвижка) с датчиком положения", (cx, cy) => d.Valve(cx, cy, vertical: false, sensor: true)),
-            ("Затвор (задвижка)", (cx, cy) => d.Valve(cx, cy, vertical: false, sensor: false)),
+            ("Затвор (задвижка) с датчиком положения", (cx, cy) => d.Valve(cx, cy, vertical: false, sensor: false)),
             ("Клапан обратный", (cx, cy) => d.Check(cx, cy, horizontal: true)),
             ("Насос центробежный", (cx, cy) => d.Pump(cx, cy, 3)),
             ("Вставка виброизолирующая", (cx, cy) => d.Insert(cx, cy, horizontal: true)),
-            ("Манометр (мановакуумметр)", (cx, cy) => d.Gauge(cx - 3, cy, "Р", vacuum: false)),
+            ("Манометр", (cx, cy) => d.Gauge(cx + 4, cy, "Р", vacuum: false)),
+            ("Переход", (cx, cy) => d.Reducer(cx, cy, wideBelow: true)),
             ("Головка соединительная", (cx, cy) => d.Head(cx, cy)),
-            ("Трубопровод", (cx, cy) => d.Pipe(cx - 6, cy, cx + 6, cy)),
+            ("Трубопровод", (cx, cy) => d.Pipe(cx - 5, cy, cx + 5, cy)),
         };
-        var y = top - 12;
-        foreach (var (label, draw) in rows)
+        for (var k = 0; k < rows.Length; k++)
         {
-            draw(x + 8, y);
-            d.Text(x + 20, y - 1.2, label, 2.5);
-            y -= 7.5;
+            var (cx, cy) = (x + 6 + ((k / 4) * 78), top - 8 - ((k % 4) * 8));
+            rows[k].Draw(cx, cy);
+            d.Text(cx + 9, cy - 1, rows[k].Text, 2.2);
         }
     }
 

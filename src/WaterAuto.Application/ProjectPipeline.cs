@@ -186,6 +186,13 @@ public static class ProjectPipeline
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
         var stationTakeoff = new MaterialTakeoff([], []);
+
+        // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
+        var sections = routes.Select(r => r.InletId).Distinct()
+            .Select(id => plan.Inlets.Select((inlet, k) => (inlet, k)).FirstOrDefault(x => x.inlet.Id == id) is { inlet: not null } found
+                ? $"точка ввода {found.inlet.Name ?? (found.k + 1).ToString(CultureInfo.InvariantCulture)}"
+                : id)
+            .ToList();
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -205,7 +212,7 @@ public static class ProjectPipeline
                         ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                         ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
                     },
-                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets })],
+                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1 })],
             };
         }
 
@@ -214,13 +221,7 @@ public static class ProjectPipeline
             .Where(p => p.Item.Role is not null)
             .ToDictionary(p => p.Item.Role!, p => p.Position);
 
-        // Узел управления — на каждую секцию (ввод), DN подводящего; промывочные устройства — п. 6.7.1.15.
-        var controlUnit = EquipmentSet.PathFor(normsDir, EquipmentSet.ControlUnitFile);
-        if (File.Exists(controlUnit))
-        {
-            takeoff = takeoff with { Items = [.. takeoff.Items, .. EquipmentSet.Items(controlUnit, TakeoffGroup.ControlUnit, routes.Select(r => r.InletId).Distinct().Select(_ => design.SupplyDn))] };
-        }
-
+        // Промывочные устройства — п. 6.7.1.15 (узлы управления — в спецификации насосной, ПТ2.СО).
         var flushingSet = EquipmentSet.PathFor(normsDir, EquipmentSet.FlushingFile);
         if (File.Exists(flushingSet) && FlushingPoints.Find(routes, norms) is { Count: > 0 } flushing)
         {
@@ -300,7 +301,8 @@ public static class ProjectPipeline
                     "Оборудование, кроме оросителей, приборов и трубопроводов, окрашивается в красный цвет (п. 6.8.11).",
                     "Номера позиций — по спецификации насосной станции ПТ2.СО; фланцы и крепёж — по месту (ГОСТ 21.601, п. 9.4).",
                 ],
-                schemePositions),
+                schemePositions,
+                sections),
             SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
             project.Font));
         if (stationTakeoff.Items.Count > 0)

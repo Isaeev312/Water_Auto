@@ -175,7 +175,7 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
-    public void Specification_lists_control_unit_flushing_coating_and_groups_supports_by_kind()
+    public void Specification_lists_flushing_coating_and_station_spec_carries_control_units()
     {
         Drawing();
         var result = Run(Project());
@@ -184,11 +184,10 @@ public sealed class ProjectPipelineTests : IDisposable
         var rows = spec.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>()
             .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().ElementAtOrDefault(1)?.InnerText ?? "")
             .ToList();
-        rows.ShouldContain("Узел управления спринклерный водозаполненный DN125");
         rows.ShouldContain("Промывочные устройства");
         rows.ShouldContain(r => r.StartsWith("Кран шаровой DN", StringComparison.Ordinal));
         rows.ShouldContain(r => r.StartsWith("Покрытие антикоррозионное", StringComparison.Ordinal));
-        rows.IndexOf("Узел управления").ShouldBeLessThan(rows.IndexOf("Оросители"));
+        rows.ShouldNotContain(r => r.StartsWith("Узел управления спринклерный", StringComparison.Ordinal)); // в ПТ2.СО
 
         // Насосная — отдельной спецификацией ПТ2.СО со сквозными позициями и фасонными частями обвязки.
         rows.ShouldNotContain(r => r.StartsWith("Агрегат насосный", StringComparison.Ordinal));
@@ -196,6 +195,8 @@ public sealed class ProjectPipelineTests : IDisposable
         var pnsRows = pns.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>()
             .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().Select(c => c.InnerText).ToList()).Where(c => c.Count == 9).ToList();
         pnsRows.ShouldContain(c => c[1] == "Фасонные части обвязки");
+        pnsRows.ShouldContain(c => c[1] == "Узел управления спринклерный водозаполненный DN125" && c[6] == "1");
+        pnsRows.ShouldContain(c => c[1].StartsWith("Задвижка DN", StringComparison.Ordinal) && c[8].Contains("на вводе", StringComparison.Ordinal));
         pnsRows.ShouldContain(c => c[1].StartsWith("Тройник DN", StringComparison.Ordinal));
         var numbers = pnsRows.Select(c => c[0]).Where(s => int.TryParse(s, out _)).Select(int.Parse).ToList();
         numbers.ShouldBe(Enumerable.Range(1, numbers.Count).ToList()); // сквозная нумерация
