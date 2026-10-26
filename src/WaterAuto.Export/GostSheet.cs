@@ -15,7 +15,11 @@ public sealed record SheetFormat(string Name, double WidthMm, double HeightMm)
 }
 
 /// <summary>Лист в пространстве модели: формат, масштаб 1:<see cref="Scale"/> и положение левого нижнего угла листа в мм модели.</summary>
-public sealed record SheetPlacement(SheetFormat Format, double Scale, XY Origin);
+public sealed record SheetPlacement(SheetFormat Format, double Scale, XY Origin)
+{
+    /// <summary>Точка листа (мм бумаги от левого нижнего угла) в мм модели.</summary>
+    public XYZ At(double xMm, double yMm) => new(Origin.X + (xMm * Scale), Origin.Y + (yMm * Scale), 0);
+}
 
 /// <summary>
 /// Лист чертежа по ГОСТ Р 21.101 в пространстве модели DXF: рамка (20 мм слева, 5 мм с остальных сторон), основная надпись
