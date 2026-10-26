@@ -1,0 +1,26 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "title": "Скорости в трубопроводах (п. 6.7.1.37)",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, п. 6.7.1.37. Перенесено из ветки feat/specification-gost (data/norms/sp485/clauses_6_7_6_9.json) в базовую линию плана T1–T15; требуется сверка с официальным текстом владельцем.",
+  "verified": false,
+  "records": [
+    {
+      "id": "sp485.p6_7_1_37.velocity",
+      "clause": "6.7.1.37",
+      "values": {
+        "pressureMax": 10,
+        "suctionPositiveMax": 2.8,
+        "suctionNegativeMax": 1.5
+      },
+      "units": {
+        "pressureMax": "м/с",
+        "suctionPositiveMax": "м/с",
+        "suctionNegativeMax": "м/с"
+      },
+      "note": "Рекомендуемые скорости: напорные — до 10 м/с включительно; всасывающие — не более 2,8 м/с при положительном давлении на входе насоса и не более 1,5 м/с при уровне воды в резервуаре ниже оси насоса."
+    }
+  ]
+}
