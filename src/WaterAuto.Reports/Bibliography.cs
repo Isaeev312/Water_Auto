@@ -3,8 +3,19 @@ using System.Text.RegularExpressions;
 
 namespace WaterAuto.Reports;
 
-/// <summary>Строка реестра литературы `docs/literature_registry.csv`.</summary>
-public sealed record LiteratureEntry(string Id, string Title, string Authors, string Year, string Status);
+/// <summary>
+/// Строка реестра литературы `docs/literature_registry.csv`: библиографические данные для списка источников
+/// (ГОСТ Р 7.0.100): обозначение/название, авторы, год, место издания, издательство, объём.
+/// </summary>
+public sealed record LiteratureEntry(
+    string Id,
+    string Title,
+    string Authors,
+    string Year,
+    string Status,
+    string Place = "",
+    string Publisher = "",
+    string Volume = "");
 
 /// <summary>Чтение реестра литературы (CSV, первая строка — заголовок; кавычки по RFC 4180).</summary>
 public static class LiteratureRegistry
@@ -14,7 +25,9 @@ public static class LiteratureRegistry
         ArgumentNullException.ThrowIfNull(csv);
         var rows = Rows(csv.ReadToEnd()).Where(r => r.Count > 1).ToList();
         return rows.Skip(1)
-            .Select(r => new LiteratureEntry(Cell(r, 0), Cell(r, 1), Cell(r, 2), Cell(r, 3), Cell(r, 5)))
+            .Select(r => new LiteratureEntry(
+                Cell(r, 0), Cell(r, 1), Cell(r, 2), Cell(r, 3), Cell(r, 5),
+                Cell(r, 9), Cell(r, 10), Cell(r, 11)))
             .ToList();
     }
 
@@ -80,13 +93,12 @@ public static class LiteratureRegistry
 }
 
 /// <summary>
-/// Запись списка источников в духе ГОСТ Р 7.0.100 из того, что есть в реестре: обозначение и название, авторы, год.
-/// Места издания, издательства и объёма в реестре нет — они помечаются «[дополнить …]», а не выдумываются.
+/// Запись списка использованных источников по ГОСТ Р 7.0.100-2018: обозначение/авторы, название,
+/// место издания, издательство, год, объём. Чего нет в реестре — помечается в квадратных скобках
+/// и не выдумывается; правовые акты описываются датой, номером и названием (место издания к ним не применяется).
 /// </summary>
 public static partial class Bibliography
 {
-    private const string Missing = "[дополнить по ГОСТ Р 7.0.100: место издания, издательство, объём]";
-
     public static string Format(LiteratureEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -98,12 +110,34 @@ public static partial class Bibliography
             var rest = norm.Groups["rest"].Value.Trim();
             var kind = code.StartsWith("ГОСТ", StringComparison.Ordinal) ? "стандарт" : "свод правил";
             var edition = rest.Length > 0 ? $" : {rest}" : "";
-            return $"{code}. {name} : {kind}{edition}. — {Year(entry.Year)}. — {Missing}.";
+            return $"{code}. {name} : {kind}{edition}. — {Publication(entry)}.";
+        }
+
+        if (IsLegalAct(entry.Title))
+        {
+            // Правовой акт: дата, номер, название, год; место издания и издательство к нему не применяются,
+            // объёма у акта нет — список не должен показывать для него «[дополнить]».
+            return $"{entry.Title.TrimEnd('.')}. — {Year(entry.Year)}.";
         }
 
         var authors = entry.Authors is "" or "—" ? "" : $"{entry.Authors.TrimEnd('.')}. ";
-        return $"{authors}{entry.Title.TrimEnd('.')}. — {Year(entry.Year)}. — {Missing}.";
+        return $"{authors}{entry.Title.TrimEnd('.')}. — {Publication(entry)}.";
     }
+
+    // «Место : издательство, год. — объём с.»; отсутствующие части помечены, а не выдуманы.
+    private static string Publication(LiteratureEntry e)
+    {
+        var place = e.Place.Length > 0 ? e.Place : "[место издания]";
+        var publisher = e.Publisher.Length > 0 ? e.Publisher : "[издательство]";
+        var year = Year(e.Year);
+        var volume = e.Volume.Length > 0 ? $"{e.Volume} с." : "[объём]";
+        return $"{place} : {publisher}, {year}. — {volume}";
+    }
+
+    private static bool IsLegalAct(string title) =>
+        title.StartsWith("Федеральный закон", StringComparison.Ordinal)
+        || title.StartsWith("Постановление", StringComparison.Ordinal)
+        || title.StartsWith("Приказ", StringComparison.Ordinal);
 
     /// <summary>
     /// По юридической силе: федеральные законы, постановления правительства, своды правил и стандарты,
