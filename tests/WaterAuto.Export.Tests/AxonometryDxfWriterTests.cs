@@ -73,6 +73,8 @@ public class AxonometryDxfWriterTests
         On(doc, AxonometryDxfWriter.SprinklerLayer).OfType<Circle>().Count().ShouldBe(3);
         var labels = On(doc, AxonometryDxfWriter.LabelLayer).OfType<TextEntity>().Select(t => t.Value).ToList();
         labels.Count(t => t.StartsWith("DN", StringComparison.Ordinal)).ShouldBe(3); // P1 подводящий, P2 — смена DN, P4 питающий; P3 без подписи
+        labels.ShouldContain("DN32"); // рядок — только диаметр
+        labels.ShouldContain(t => t.StartsWith("DN50 L=", StringComparison.Ordinal));
         labels.ShouldContain(t => t.Contains("отм. −1,500", StringComparison.Ordinal));
     }
 

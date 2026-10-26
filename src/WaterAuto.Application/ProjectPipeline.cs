@@ -217,7 +217,7 @@ public static class ProjectPipeline
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
         Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, style: new PlanDxfStyle(Font: project.Font)));
         Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, style: new PlanDxfStyle(Font: project.Font)));
-        Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation), new AxonometryStyle(Font: project.Font)));
+        Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(p, routes, new Length(design.PipeElevation), new AxonometryStyle(Font: project.Font), SheetStamp(project, "Аксонометр", "Аксонометрическая схема трубопроводов")));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
         Write(outDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
 
@@ -272,6 +272,13 @@ public static class ProjectPipeline
             ? [.. t.Signatures.Select(s => new TitleSignature(s.Role, s.Name))]
             : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
         return new TitleBlock($"{t.Code}-{mark}", project.Name, t.Building, name, t.Stage, t.Organization, signatures);
+    }
+
+    // Основная надпись листа основного комплекта: номер и наименование — из ведомости чертежей (по началу наименования).
+    private static TitleBlock SheetStamp(ProjectFile project, string prefix, string fallbackName)
+    {
+        var sheet = project.Sheets.FirstOrDefault(s => s.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        return Stamp(project, "ПТ", sheet?.Name ?? fallbackName) with { Sheet = sheet?.Sheet };
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
