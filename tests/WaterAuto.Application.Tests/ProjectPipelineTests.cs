@@ -109,8 +109,15 @@ public sealed class ProjectPipelineTests : IDisposable
         var plain = Run(Project()).Design!;
         var result = Run(Project(hydrants: new ProjectHydrants
         {
-            FireResistance = "II", Category = "В", HazardClass = "С0", Volume = 40, BuildingHeight = 12, RoomHeight = 3.3,
-            AboveAxis = 1.35, PipeLength = 15, PipeDn = 65,
+            FireResistance = "II",
+            Category = "В",
+            HazardClass = "С0",
+            Volume = 40,
+            BuildingHeight = 12,
+            RoomHeight = 3.3,
+            AboveAxis = 1.35,
+            PipeLength = 15,
+            PipeDn = 65,
         }));
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Design!.Hydrants.ShouldNotBeNull();
@@ -196,7 +203,10 @@ public sealed class ProjectPipelineTests : IDisposable
             .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().Select(c => c.InnerText).ToList()).Where(c => c.Count == 9).ToList();
         pnsRows.ShouldContain(c => c[1] == "Фасонные части обвязки");
         pnsRows.ShouldContain(c => c[1] == "Узел управления спринклерный водозаполненный DN125" && c[6] == "1");
-        pnsRows.ShouldContain(c => c[1].StartsWith("Задвижка DN", StringComparison.Ordinal) && c[8].Contains("на каждом вводе", StringComparison.Ordinal) && c[6] == "2");
+        // В проекте нет помещения насосной и нет вводов на слое ПТ_НС_ВВОД: задвижки «на каждом вводе» не выдумываются,
+        // выпуск сопровождается предупреждением (аудит PS-6).
+        pnsRows.ShouldNotContain(c => c[1].StartsWith("Задвижка DN", StringComparison.Ordinal) && c[8].Contains("на каждом вводе", StringComparison.Ordinal));
+        result.Issues.ShouldContain(i => i.Code == "pumpRoom.missing");
         pnsRows.ShouldContain(c => c[1].StartsWith("Тройник DN", StringComparison.Ordinal));
         var numbers = pnsRows.Select(c => c[0]).Where(s => int.TryParse(s, out _)).Select(int.Parse).ToList();
         numbers.ShouldBe(Enumerable.Range(1, numbers.Count).ToList()); // сквозная нумерация

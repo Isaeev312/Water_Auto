@@ -239,6 +239,10 @@ public static class ExplanatoryNoteComposer
 
     private static string F(double v, string format = "0.###") => v.ToString(format, Ru);
 
+    // Обязательная запись норм: если её нет, выпуск останавливается с явной ошибкой, а не подставляет «?? 0».
+    private static NormRecord Need(INormsProvider norms, string id) =>
+        norms.Find(id) ?? throw new InvalidOperationException($"В данных норм нет записи {id}.");
+
     private static NoteSection Hydraulics(NoteInputs i, INormsProvider norms)
     {
         var d = i.Design;
@@ -406,7 +410,7 @@ public static class ExplanatoryNoteComposer
         var supplyDn = d.SupplyPipe?.Dn ?? s.SupplyDn;
         var kt = d.SupplyPipe?.Kt.Kt ?? 0;
         var m3h = d.PumpFlow.LitersPerSecond * 3.6;
-        var jockey = norms.Find("sp485.p6_9_4.jockeyTank");
+        var jockey = Need(norms, "sp485.p6_9_4.jockeyTank");
         return new NoteSection("6", "Насосная установка", [
             .. PumpHeadBlocks(i, supplyDn, kt, m3h, jockey),
             .. i.Station is { } st ? StationBlocks(st, norms) : [],
@@ -414,7 +418,7 @@ public static class ExplanatoryNoteComposer
         ]);
     }
 
-    private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord? jockey)
+    private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord jockey)
     {
         var d = i.Design;
         var s = i.DesignSettings;
@@ -448,7 +452,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Требования к насосной установке по СП 485:"),
             new NoteList([
                 "при любом количестве рабочих агрегатов предусматривается не менее одного резервного, обеспечивающего подачу и напор наиболее производительного рабочего; резервный включается автоматически (п. 6.10.3);",
-                $"автоматический водопитатель — жокей-насос с мембранной ёмкостью вместимостью не менее {F(jockey?.Values["minVolume"] ?? 0)} л, вода — от {F(jockey?.Values["waterShareMin"] ?? 0)} до {F(jockey?.Values["waterShareMax"] ?? 0)} % вместимости (п. 6.9.4); при включении пожарного насоса он отключается (п. 6.9.5);",
+                $"автоматический водопитатель — жокей-насос с мембранной ёмкостью вместимостью не менее {F(jockey.Values["minVolume"]!.Value)} л, вода — от {F(jockey.Values["waterShareMin"]!.Value)} до {F(jockey.Values["waterShareMax"]!.Value)} % вместимости (п. 6.9.4); при включении пожарного насоса он отключается (п. 6.9.5);",
                 "вспомогательный водопитатель — если выход пожарного насоса на режим занимает более 60 с (п. 6.9.8);",
                 "насосы относятся ко II категории по обеспеченности подачи воды и к I категории надёжности электроснабжения (п. 6.10.5);",
                 "насосная станция — на первом, цокольном или первом подземном этаже, отделена противопожарными стенами (перегородками) 1-го типа и перекрытиями 2-го типа (пп. 6.10.9, 6.10.11);",
@@ -530,7 +534,7 @@ public static class ExplanatoryNoteComposer
     {
         var d = i.Design;
         var s = i.DesignSettings;
-        var limit = norms.Find("sp485.p6_9_12.minNetworkPressure")?.Values["pressure"] ?? 0;
+        var limit = Need(norms, "sp485.p6_9_12.minNetworkPressure").Values["pressure"]!.Value;
         var needed = s.InletPressure.Mpa < limit;
         return new NoteSection("7", "Запас воды", [
             new NoteParagraph($"Продолжительность подачи воды для группы помещений {i.RoomGroup} — *t* = {F(d.Duration)} мин (таблица 6.1). Расчётный объём воды на пожаротушение:"),
