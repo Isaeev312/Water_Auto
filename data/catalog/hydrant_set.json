@@ -43,7 +43,7 @@
   ],
   "pressureReducer": {
     "name": "Диафрагма дроссельная DN{dn}",
-    "designation": "",
+    "designation": "по ТУ изготовителя",
     "unit": "шт.",
     "perHydrant": 1
   }

@@ -23,7 +23,8 @@
     {
       "name": "Хомут трубный DN{dn} с гайкой {thread}",
       "unit": "шт.",
-      "perSupport": 1
+      "perSupport": 1,
+      "designation": "по ТУ изготовителя"
     },
     {
       "name": "Шпилька резьбовая {thread}, L = {rod} мм",
@@ -34,7 +35,8 @@
     {
       "name": "Анкер клиновой {thread}",
       "unit": "шт.",
-      "perSupport": 1
+      "perSupport": 1,
+      "designation": "по ТУ изготовителя"
     },
     {
       "name": "Гайка {thread}",
