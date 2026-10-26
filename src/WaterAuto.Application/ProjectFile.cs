@@ -158,6 +158,25 @@ public sealed record ProjectDesign
 
     /// <summary>Помещение насосной станции: отметки и конструкция (слои ПТ_НС*).</summary>
     public ProjectPumpRoom PumpRoom { get; init; } = new();
+
+    /// <summary>Резервуар пожарного запаса пользователя (габариты и мёртвый слой); null — без сравнения с требуемым объёмом.</summary>
+    public ProjectTank? Tank { get; init; }
+}
+
+/// <summary>Резервуар пожарного запаса: габариты и мёртвый слой, м (ARCHITECTURE §5).</summary>
+public sealed class ProjectTank
+{
+    /// <summary>Длина в плане, м.</summary>
+    public double Length { get; init; }
+
+    /// <summary>Ширина в плане, м.</summary>
+    public double Width { get; init; }
+
+    /// <summary>Высота воды, м.</summary>
+    public double Height { get; init; }
+
+    /// <summary>Мёртвый слой, м — вода ниже него насосом не используется.</summary>
+    public double DeadLayer { get; init; }
 }
 
 /// <summary>

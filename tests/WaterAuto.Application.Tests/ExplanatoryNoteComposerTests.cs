@@ -11,7 +11,7 @@ public class ExplanatoryNoteComposerTests
 {
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
-    private static NoteDocument Compose(bool hydrants = false)
+    private static NoteDocument Compose(bool hydrants = false, UserTank? tank = null)
     {
         var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
         var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
@@ -36,7 +36,8 @@ public class ExplanatoryNoteComposerTests
             design,
             settings,
             LiteratureRegistry.Parse(registry),
-            ["SP485-izm"]);
+            ["SP485-izm"],
+            Tank: tank);
         return ExplanatoryNoteComposer.Compose(inputs, Norms);
     }
 
@@ -90,6 +91,16 @@ public class ExplanatoryNoteComposerTests
         var text = AllText(Compose().Sections.Single(s => s.Number == "8"));
         text.ShouldContain("СП 7.13130.2013, п. 6.24");
         text.ShouldContain("п. 7.3 «а»");
+    }
+
+    [Fact]
+    public void Reservoir_tank_is_reported_in_the_water_section()
+    {
+        var tank = new UserTank(new Length(4), new Length(3), new Length(2.5), new Length(0.5));
+        var text = AllText(Compose(tank: tank).Sections.Single(s => s.Number == "7"));
+        text.ShouldContain("Принят резервуар 4 × 3 × 2,5 м, мёртвый слой 0,5 м");
+        text.ShouldContain("полезный объём 24,0 м³");
+        text.ShouldContain("при заполнении 95 % — 22,8 м³");
     }
 
     [Fact]

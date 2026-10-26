@@ -33,7 +33,8 @@ public sealed record NoteInputs(
     PumpSetChoice? SetChoice = null,
     PumpRoomPlan? RoomPlan = null,
     PipingResult? Piping = null,
-    string? PipingSource = null);
+    string? PipingSource = null,
+    UserTank? Tank = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -536,11 +537,26 @@ public static class ExplanatoryNoteComposer
             new NoteFormula($"*W* = *Q*_{{нас}}·*t*·60 / 1000 = {F(d.PumpFlow.LitersPerSecond, "0.00")}·{F(d.Duration)}·60 / 1000 = **{F(d.WaterVolume, "0.0")} м³**.", "7.1", []),
             new NoteParagraph($"Заполнение пожарного резервуара — не более {F(d.TankMaxFill)} % вместимости (п. 6.9.13), поэтому вместимость резервуара:"),
             new NoteFormula($"*V* = *W* / {F(d.TankMaxFill / 100, "0.00")} = {F(d.WaterVolume, "0.0")} / {F(d.TankMaxFill / 100, "0.00")} = **{F(d.TankVolume, "0.0")} м³**.", "7.2", []),
+            .. TankParagraph(i.Tank, d) is { } tank ? new[] { tank } : [],
             new NoteParagraph(needed
                 ? $"Давление в наружной сети *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа меньше {F(limit, "0.00")} МПа, поэтому перед насосной установкой **предусматривается пожарный резервуар** (п. 6.9.12)."
                 : $"Давление в наружной сети *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа не меньше {F(limit, "0.00")} МПа: пожарный резервуар по п. 6.9.12 не обязателен; приведённый объём — для варианта с резервуаром или при требовании технических условий."),
             new NoteParagraph("В резервуарах предусматриваются устройства, не допускающие расход пожарного запаса воды на другие нужды (п. 6.9.11); учитывается расчётный полезный объём — объём, который способен перекачать насос (п. 6.9.13). Водоснабжение — по 1 категории надёжности (п. 6.9.2)."),
         ]);
+    }
+
+    // Резервуар пользователя: полезный объём × максимальное заполнение против требуемого запаса (п. 6.9.13).
+    private static NoteParagraph? TankParagraph(UserTank? tank, DesignResult d)
+    {
+        if (tank is null)
+        {
+            return null;
+        }
+
+        var available = tank.UsefulVolumeM3 * d.TankMaxFill / 100.0;
+        var enough = available + 1e-9 >= d.WaterVolume;
+        return new NoteParagraph(
+            $"Принят резервуар {F(tank.Length.Meters, "0.#")} × {F(tank.Width.Meters, "0.#")} × {F(tank.Height.Meters, "0.#")} м, мёртвый слой {F(tank.DeadLayer.Meters, "0.#")} м: полезный объём {F(tank.UsefulVolumeM3, "0.0")} м³, при заполнении {F(d.TankMaxFill)} % — {F(available, "0.0")} м³, что {(enough ? "не менее" : "меньше")} требуемого запаса {F(d.WaterVolume, "0.0")} м³{(enough ? "." : " — увеличить резервуар.")}");
     }
 
     // Требования смежных норм, которые касаются АУПТ (СП 7.13130.2013), — своими словами, со ссылками на пункты.

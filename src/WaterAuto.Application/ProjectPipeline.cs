@@ -168,6 +168,14 @@ public static class ProjectPipeline
 
         var worst = designs.MaxBy(d => d.PumpPressure.Mpa)!;
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
+        UserTank? userTank = design.Tank is { } tank
+            ? new UserTank(new Length(tank.Length), new Length(tank.Width), new Length(tank.Height), new Length(tank.DeadLayer))
+            : null;
+        if (ReservoirCheck.Check(userTank, worst.WaterVolume, worst.TankMaxFill) is { } reservoirIssue)
+        {
+            issues.Add(reservoirIssue);
+        }
+
         var routes = designs.Select(d => d.Route).ToList();
 
         // Номинальная температура срабатывания (п. 6.2.16, табл. 6.4) и цвет колбы (ГОСТ Р 51043, табл. 2).
@@ -823,7 +831,8 @@ public static class ProjectPipeline
                 setChoice,
                 roomPlan,
                 piping,
-                PumpCatalog.Piping(normsDir)?.Source),
+                PumpCatalog.Piping(normsDir)?.Source,
+                userTank),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
