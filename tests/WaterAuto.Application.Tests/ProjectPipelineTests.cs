@@ -182,7 +182,6 @@ public sealed class ProjectPipelineTests : IDisposable
         using var spec = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationDocxFile, StringComparison.Ordinal)), false);
         var rows = spec.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>()
             .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().ElementAtOrDefault(1)?.InnerText ?? "")
-            .Select(n => System.Text.RegularExpressions.Regex.Replace(n, @"^\d+ ", "")) // порядковый номер записи перед наименованием
             .ToList();
         rows.ShouldContain("Узел управления спринклерный водозаполненный DN125");
         rows.ShouldContain("Промывочные устройства");

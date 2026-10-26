@@ -41,18 +41,17 @@ public class SpecificationXlsxTests
         var names = rows.Select(r => r.Cell(2).GetString()).ToList();
         names.ShouldBe([
             "Оросители",
-            "1 Ороситель спринклерный водяной",
-            "2 Ороситель спринклерный водяной (запас)",
+            "Ороситель спринклерный водяной",
+            "Ороситель спринклерный водяной (запас)",
             "Трубопроводы",
-            "1 Трубы стальные водогазопроводные DN25, Ø33,5×2,8 мм",
+            "Трубы стальные водогазопроводные DN25, Ø33,5×2,8 мм",
             "Фасонные части",
-            "1 Отвод 90° DN100",
+            "Отвод 90° DN100",
         ]);
 
-        // ГОСТ 21.110, п. 4.7: порядковый номер — перед наименованием, заново в каждом разделе; графа «Позиция» — для
-        // позиционных обозначений с чертежей, которых нет.
-        rows.ShouldAllBe(r => r.Cell(1).GetString().Length == 0);
-        var pipe = rows.Single(r => r.Cell(2).GetString().StartsWith("1 Трубы", StringComparison.Ordinal));
+        // Позиции — в графе 1, заново в каждом разделе.
+        rows.Select(r => r.Cell(1).GetString()).Where(s => s.Length > 0).ShouldBe(["1", "2", "1", "1"]);
+        var pipe = rows.Single(r => r.Cell(2).GetString().StartsWith("Трубы", StringComparison.Ordinal));
         pipe.Cell(3).GetString().ShouldBe("ГОСТ 3262");
         pipe.Cell(6).GetString().ShouldBe("м");
         pipe.Cell(7).GetValue<double>().ShouldBe(119.12);
@@ -61,7 +60,7 @@ public class SpecificationXlsxTests
         // ГОСТ 21.110, п. 4.5: под заголовком раздела — пустая строка.
         var heading = rows.First(r => r.Cell(2).GetString() == "Оросители").RowNumber();
         ws.Row(heading + 1).Cell(2).GetString().ShouldBeEmpty();
-        ws.Row(heading + 2).Cell(2).GetString().ShouldBe("1 Ороситель спринклерный водяной");
+        ws.Row(heading + 2).Cell(2).GetString().ShouldBe("Ороситель спринклерный водяной");
     }
 
     [Fact]
