@@ -40,16 +40,32 @@ public static class AxonometryDxfWriter
         return new XY(p.XMm + (p.YMm * Math.Cos(a)), elevationMm + (p.YMm * Math.Sin(a)));
     }
 
-    public static void Write(string path, IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle? style = null)
+    public static void Write(string path, IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle? style = null, TitleBlock? stamp = null)
     {
         style ??= new AxonometryStyle();
-        DxfDrawing.Save(path, Build(routes, pipeElevation, style), style.Font);
+        DxfDrawing.Save(path, Build(routes, pipeElevation, style, stamp), style.Font);
     }
 
-    public static CadDocument Build(IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle style)
+    /// <summary>
+    /// Схема в мм модели. С основной надписью — лист по ГОСТ Р 21.101 (<see cref="GostSheet"/>): формат и масштаб подбираются
+    /// по габаритам схемы, высота подписей — 2,5 мм на листе, оросители — Ø2 мм, стояк ввода — 15 мм.
+    /// </summary>
+    public static CadDocument Build(IReadOnlyList<PipeRoute> routes, Length pipeElevation, AxonometryStyle style, TitleBlock? stamp = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(style);
+        SheetPlacement? sheet = null;
+        if (stamp is not null)
+        {
+            var points = routes.SelectMany(r => r.Nodes).Select(n => Project(n.Location, pipeElevation.Millimeters, style)).ToList();
+            if (points.Count > 0)
+            {
+                // Габарит с запасом на стояк ввода и подписи (в масштабе 1:100 — 15 и 5 мм листа).
+                sheet = GostSheet.Fit(points.Min(p => p.X) - 500, points.Min(p => p.Y) - 2000, points.Max(p => p.X) + 500, points.Max(p => p.Y) + 500);
+                style = style with { TextHeightMm = 2.5 * sheet.Scale, SprinklerRadiusMm = 1 * sheet.Scale, RiserLengthMm = 15 * sheet.Scale };
+            }
+        }
+
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4, LineWeightType.W40); // трубопроводы — 0,40 мм
@@ -88,6 +104,11 @@ public static class AxonometryDxfWriter
                 Height = style.TextHeightMm,
                 Layer = labels,
             });
+        }
+
+        if (sheet is not null)
+        {
+            GostSheet.Draw(doc, sheet, stamp!);
         }
 
         return doc;

@@ -351,10 +351,10 @@ public static class NoteDocx
     }
 
     // Длинная формула переносится на знаке равенства, знак повторяется в начале следующей строки (ГОСТ 2.105);
-    // номер — в последней строке. Длина строки — по числу видимых знаков (разметка не считается).
+    // номер — в последней строке. Длина строки — по ширине видимых знаков (разметка не считается).
     private static List<string> WrapFormula(string expression)
     {
-        const int maxChars = 58;
+        const double maxChars = 62;
         var parts = expression.Split(" = ");
         var lines = new List<string>();
         var current = parts[0];
@@ -375,7 +375,14 @@ public static class NoteDocx
         return lines;
     }
 
-    private static int Visible(string markup) => Regex.Replace(markup, @"\\\*|[*{}]|[_^](?=\{)", m => m.Value == "\\*" ? "*" : "").Length;
+    // Ширина в знаках основного кегля: индексы набраны мельче и считаются за 0,6 знака.
+    private static double Visible(string markup)
+    {
+        var indices = Regex.Matches(markup, @"[_^]\{([^}]*)\}").Sum(m => m.Groups[1].Value.Length);
+        var plain = Regex.Replace(markup, @"[_^]\{[^}]*\}", "");
+        plain = Regex.Replace(plain, @"\\\*|\*", m => m.Value == "\\*" ? "*" : "");
+        return plain.Length + (0.6 * indices);
+    }
 
     /// <summary>Разбор разметки: **полужирный**, *курсив*, _{нижний}, ^{верхний}, \n — перенос строки, \* — звёздочка.</summary>
     private static IEnumerable<Run> Runs(string text, bool highlight, string? size)
