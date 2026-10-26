@@ -20,6 +20,12 @@ public sealed record ResolvedCharacteristic(PipeCharacteristic Value, Characteri
 /// </summary>
 public static class PipeCharacteristics
 {
+    public static ResolvedCharacteristic? Resolve(INormsProvider norms, PipeGeometry geometry)
+    {
+        ArgumentNullException.ThrowIfNull(geometry);
+        return Resolve(norms, geometry.Standard, geometry.Dn, geometry.OuterDiameter, geometry.Wall);
+    }
+
     public static ResolvedCharacteristic? Resolve(INormsProvider norms, string standard, int dn, Length outerDiameter, Length wall)
     {
         ArgumentNullException.ThrowIfNull(norms);

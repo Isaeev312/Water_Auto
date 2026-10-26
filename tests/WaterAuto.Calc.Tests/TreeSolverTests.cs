@@ -267,4 +267,37 @@ public class TreeSolverTests
             "1", new Pressure(0.1));
         sourceWithK.Issues.ShouldContain(i => i.Code == "node.emitterUnexpected" && i.ElementId == "S");
     }
+
+    [Fact]
+    public void Velocity_is_reported_for_pipes_with_geometry()
+    {
+        // ВГП 42,3×2,8 (DN32): внутренний Ø 36,7 мм. v = Q / (π·d²/4), Q в м³/с.
+        var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, geometry), Pipe("2-1", "2", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.Issues.ShouldBeEmpty();
+        var q = result.PipeFlows["S-2"].LitersPerSecond / 1000.0;
+        var expected = q / (Math.PI * 0.0367 * 0.0367 / 4);
+        result.PipeVelocities["S-2"].MetersPerSecond.ShouldBe(expected, 1e-9);
+        result.PipeVelocities.ContainsKey("2-1").ShouldBeFalse();
+        geometry.InnerDiameter.Millimeters.ShouldBe(36.7, 1e-9);
+    }
+
+    [Fact]
+    public void Pipe_geometry_without_positive_inner_diameter_is_rejected()
+    {
+        foreach (var (od, wall) in new[] { (42.3, 22.0), (42.3, double.NaN), (0.0, 2.8), (-42.3, 2.8) })
+        {
+            var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(od), Length.FromMillimeters(wall));
+            var result = TreeSolver.SolveDesign(
+                new HydraulicNetwork([Source("S"), Sprinkler("1")], [new NetworkPipe("S-1", "S", "1", new Length(3), new PipeCharacteristic(16.5), 1.0, geometry)]),
+                "1", new Pressure(0.1));
+
+            result.Issues.ShouldContain(i => i.Code == "pipe.geometry" && i.ElementId == "S-1", $"{od}x{wall}");
+        }
+    }
 }

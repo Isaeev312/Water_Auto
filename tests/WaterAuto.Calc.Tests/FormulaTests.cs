@@ -85,4 +85,18 @@ public class FormulaTests
         PipeCharacteristics.Resolve(Norms, "ГОСТ 10704", 150, Length.FromMillimeters(159), Length.FromMillimeters(3.2))!.OutdoorOnly.ShouldBeFalse();
         PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!.OutdoorOnly.ShouldBeFalse();
     }
+
+    [Fact]
+    public void Kt_resolves_from_pipe_geometry()
+    {
+        var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
+        PipeCharacteristics.Resolve(Norms, geometry)!.Value.Kt.ShouldBe(16.5);
+    }
+
+    [Fact]
+    public void Velocity_formula_uses_cubic_metres_per_second()
+    {
+        // 10 л/с через Ø 100 мм: 0,01 / (π·0,01/4) = 1,2732 м/с.
+        Velocity.Of(new Flow(10), Length.FromMillimeters(100)).MetersPerSecond.ShouldBe(1.27324, 1e-5);
+    }
 }

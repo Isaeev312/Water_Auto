@@ -2,7 +2,7 @@ using WaterAuto.Core;
 
 namespace WaterAuto.Calc.Hydraulics;
 
-/// <summary>Результат расчёта тупиковой сети в проектном режиме (README §5.4).</summary>
+/// <summary>Результат расчёта тупиковой сети в проектном режиме (README §5.4). PipeVelocities — только для труб с Geometry.</summary>
 public sealed record TreeSolution(
     Pressure SourcePressure,
     Flow TotalFlow,
@@ -10,6 +10,7 @@ public sealed record TreeSolution(
     IReadOnlyDictionary<string, Flow> PipeFlows,
     IReadOnlyDictionary<string, Pressure> PipeLosses,
     IReadOnlyDictionary<string, Flow> EmitterFlows,
+    IReadOnlyDictionary<string, Velocity> PipeVelocities,
     IReadOnlyList<string> DictatingPath,
     IReadOnlyList<Issue> Issues)
 {
@@ -97,6 +98,11 @@ public static class TreeSolver
                 issues.Add(new Issue("pipe.characteristic", IssueLevel.Error, $"Труба {p.Id}: Kт и множитель потерь должны быть конечными и больше нуля.", p.Id));
             }
 
+            if (p.Geometry is { } g && (!double.IsFinite(g.InnerDiameter.Meters) || g.InnerDiameter.Meters <= 0))
+            {
+                issues.Add(new Issue("pipe.geometry", IssueLevel.Error, $"Труба {p.Id}: наружный диаметр и стенка должны давать внутренний диаметр больше нуля.", p.Id));
+            }
+
             if (!incoming.TryAdd(p.To, p))
             {
                 issues.Add(new Issue("topology.notTree", IssueLevel.Error, $"К узлу {p.To} подходит больше одной трубы: кольцевые сети — этап 4.", p.To));
@@ -180,6 +186,14 @@ public static class TreeSolver
         }
 
         var pressures = head.ToDictionary(kv => kv.Key, kv => new Pressure(kv.Value - (nodes[kv.Key].Elevation.Meters / 100.0)), StringComparer.Ordinal);
+        var velocities = new Dictionary<string, Velocity>(StringComparer.Ordinal);
+        foreach (var p in network.Pipes)
+        {
+            if (p.Geometry is { } g && pipeFlows.TryGetValue(p.Id, out var q))
+            {
+                velocities[p.Id] = Velocity.Of(q, g.InnerDiameter);
+            }
+        }
 
         // Диктующий ороситель — с наименьшим давлением среди работающих (Б.1.2.1). Если у другого эмиттера давление ниже,
         // он не даст нормативной интенсивности, а давление источника занижено: диктующий выбран неверно.
@@ -192,7 +206,7 @@ public static class TreeSolver
             }
         }
 
-        return new TreeSolution(pressures[source.Id], new Flow(flow), pressures, pipeFlows, losses, emitters, [.. pathPipes.Select(p => p.Id)], issues);
+        return new TreeSolution(pressures[source.Id], new Flow(flow), pressures, pipeFlows, losses, emitters, velocities, [.. pathPipes.Select(p => p.Id)], issues);
     }
 
     /// <summary>Допуск сравнения давлений, МПа: только округление double, не нормативное число.</summary>
@@ -329,5 +343,5 @@ public static class TreeSolver
 
     private static TreeSolution Failed(List<Issue> issues) =>
         new(Pressure.Zero, Flow.Zero, new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(),
-            new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), [], issues);
+            new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), new Dictionary<string, Velocity>(), [], issues);
 }

@@ -89,6 +89,7 @@ public class GoldenTests
                 "P" => solution.NodePressures[node!].Mpa,
                 "Q" => solution.PipeFlows[pipe!].LitersPerSecond,
                 "dP" => solution.PipeLosses[pipe!].Mpa,
+                "v" => solution.PipeVelocities[pipe!].MetersPerSecond,
                 "Kt" => network.Pipes.Single(x => x.Id == pipe).Characteristic.Kt,
                 "Qc" => solution.TotalFlow.LitersPerSecond,
                 "Psupply" => derived[$"Psupply:{pipe}"],
@@ -146,7 +147,7 @@ public class GoldenTests
 
             return new NetworkPipe(
                 p.GetProperty("id").GetString()!, p.GetProperty("from").GetString()!, p.GetProperty("to").GetString()!,
-                new Length(p.GetProperty("length").GetDouble()), Characteristic(p), multiplier);
+                new Length(p.GetProperty("length").GetDouble()), Characteristic(p), multiplier, Geometry(p));
         }).ToList();
 
         var network = new HydraulicNetwork(nodes, pipes);
@@ -158,12 +159,17 @@ public class GoldenTests
     private static PipeCharacteristic Characteristic(JsonElement pipe) =>
         pipe.TryGetProperty("A", out var a)
             ? PipeCharacteristic.FromResistivity(a.GetDouble())
-            : PipeCharacteristics.Resolve(
-                Norms,
-                pipe.GetProperty("standard").GetString()!,
+            : PipeCharacteristics.Resolve(Norms, Geometry(pipe)!)!.Value;
+
+    // Сортамент есть у стальных труб (standard, od, wall); книжные примеры через A его не задают.
+    private static PipeGeometry? Geometry(JsonElement pipe) =>
+        pipe.TryGetProperty("standard", out var standard)
+            ? new PipeGeometry(
+                standard.GetString()!,
                 pipe.GetProperty("dn").GetInt32(),
                 Length.FromMillimeters(pipe.GetProperty("od").GetDouble()),
-                Length.FromMillimeters(pipe.GetProperty("wall").GetDouble()))!.Value;
+                Length.FromMillimeters(pipe.GetProperty("wall").GetDouble()))
+            : null;
 
     // Величины после сети (узел управления, подводящие, насос) — по правилам compat источника.
     private static Dictionary<string, double> Derived(JsonElement project, TreeSolution solution, HydraulicNetwork network)

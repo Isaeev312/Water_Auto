@@ -37,6 +37,19 @@ public readonly record struct Length(double Meters)
     public override string ToString() => Meters.ToString("0.###", CultureInfo.InvariantCulture) + " м";
 }
 
+/// <summary>Скорость воды в трубе, м/с (проверка по 6.7.1.37 — на этапе «Проверки», предел — в данных норм).</summary>
+public readonly record struct Velocity(double MetersPerSecond)
+{
+    /// <summary>v = Q / (π·d²/4); Q переводится из л/с в м³/с (1 м³ = 1000 л), d — внутренний диаметр.</summary>
+    public static Velocity Of(Flow flow, Length innerDiameter)
+    {
+        var d = innerDiameter.Meters;
+        return new((flow.LitersPerSecond / 1000.0) / (Math.PI * d * d / 4.0));
+    }
+
+    public override string ToString() => MetersPerSecond.ToString("0.###", CultureInfo.InvariantCulture) + " м/с";
+}
+
 /// <summary>Коэффициент производительности оросителя K, л/(с·МПа^0,5): q = 10·K·√P.</summary>
 public readonly record struct KFactor(double Value)
 {
