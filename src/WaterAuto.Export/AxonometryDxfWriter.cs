@@ -55,6 +55,11 @@ public static class AxonometryDxfWriter
 
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
+    // Выноски: вынос по горизонтали, мм листа, и направления (наклон 45°, 60° и 30°).
+    private static readonly double[] LeaderReach = [6, 10, 14, 18, 24];
+    private static readonly (int Dx, int Dy, double Slope)[] LeaderDirections =
+        [(1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1), (1, 1, 1.7), (-1, 1, 1.7), (1, -1, 1.7), (-1, -1, 1.7), (1, 1, 0.58), (-1, 1, 0.58), (1, -1, 0.58), (-1, -1, 0.58)];
+
     // Расстояния номера расчётной точки от узла, мм листа.
     private static readonly double[] PointOffsets = [1.2, 2.5, 4.0];
 
@@ -670,8 +675,8 @@ public static class AxonometryDxfWriter
     }
 
     /// <summary>
-    /// Подпись на выноске с полкой (как на листах ВК): наклонная линия от трубы под 45° и горизонтальная полка с текстом над ней.
-    /// Перебираются четыре направления и пять длин выноски; проверяются текст с полкой и наклонная линия; если чистого места нет —
+    /// Подпись на выноске с полкой (как на листах ВК): наклонная линия от трубы и горизонтальная полка с текстом над ней.
+    /// Перебираются двенадцать направлений (наклон 45°, 60°, 30°) и пять длин выноски; проверяются текст с полкой и наклонная линия; если чистого места нет —
     /// ставится в положении с наименьшим числом наложений (подпись важнее: смена диаметра без подписи — ошибка чертежа).
     /// </summary>
     private static void PlaceLeader(CadDocument doc, Layer layer, List<Quad> placed, XY at, string text, double h)
@@ -679,16 +684,16 @@ public static class AxonometryDxfWriter
         var width = 0.8 * h * text.Length;
         var unit = h / 2.5;
         (XY Knee, int Dir, Quad Box, int Score)? best = null;
-        foreach (var reach in new[] { 6.0, 10.0, 14.0, 18.0, 24.0 })
+        foreach (var reach in LeaderReach)
         {
-            foreach (var (dx, dy) in new[] { (1, 1), (-1, 1), (1, -1), (-1, -1) })
+            foreach (var (dx, dy, slope) in LeaderDirections)
             {
-                var knee = new XY(at.X + (dx * reach * unit), at.Y + (dy * reach * unit));
+                var knee = new XY(at.X + (dx * reach * unit), at.Y + (dy * slope * reach * unit));
                 var box = new Quad(new XY(knee.X + (dx * ((width / 2) + unit)), knee.Y + (0.7 * h)), 1, 0, (width / 2) + unit, 0.8 * h);
 
                 // Наклонная линия проверяется от 1 мм листа после трубы, на которой начинается. Наложение текста хуже,
                 // чем пересечение линией выноски.
-                var from = new XY(at.X + (dx * unit / Math.Sqrt(2)), at.Y + (dy * unit / Math.Sqrt(2)));
+                var from = new XY(at.X + ((knee.X - at.X) * 0.1), at.Y + ((knee.Y - at.Y) * 0.1));
                 var leader = Quad.Line(from, knee, 0.05 * h);
                 var score = (3 * placed.Count(box.Hits)) + placed.Count(leader.Hits);
                 if (score == 0)
