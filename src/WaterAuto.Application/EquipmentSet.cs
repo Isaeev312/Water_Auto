@@ -12,6 +12,7 @@ public static class EquipmentSet
 {
     public const string ControlUnitFile = "control_unit.json";
     public const string FlushingFile = "flushing_set.json";
+    public const string PumpStationFile = "pump_station.json";
 
     public static string PathFor(string normsDir, string file) => Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, file);
 
@@ -39,6 +40,42 @@ public static class EquipmentSet
             }
         }
 
+        return Merge(items);
+    }
+
+    /// <summary>
+    /// Комплект одного места с подстановками в наименование (<paramref name="tokens"/>: «q» → «{q}») и множителями количества
+    /// по полю count шаблона (<paramref name="counts"/>: «pumps», «truckInlets»).
+    /// </summary>
+    public static IReadOnlyList<TakeoffItem> Items(string path, TakeoffGroup group, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(counts);
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var items = new List<TakeoffItem>();
+        foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
+        {
+            var name = tokens.Aggregate(t.GetProperty("name").GetString()!, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+            var times = t.TryGetProperty("count", out var c) ? counts.GetValueOrDefault(c.GetString()!) : 1;
+            if (times == 0)
+            {
+                continue;
+            }
+
+            items.Add(new TakeoffItem(
+                group,
+                name,
+                t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? designation : null,
+                t.GetProperty("per").GetDouble() * times,
+                t.GetProperty("unit").GetString()!,
+                t.TryGetProperty("note", out var n) ? n.GetString() : null));
+        }
+
+        return Merge(items);
+    }
+
+    private static List<TakeoffItem> Merge(List<TakeoffItem> items)
+    {
         // Одинаковые строки (шаблон без {dn}) складываются.
         return items
             .GroupBy(i => (i.Name, i.Designation, i.Unit, i.Note))

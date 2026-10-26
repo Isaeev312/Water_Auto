@@ -28,7 +28,8 @@ public sealed record NoteInputs(
     TemperatureChoice? Temperature = null,
     double? MaxAmbient = null,
     int HydrantCount = 0,
-    Length? HydrantReach = null);
+    Length? HydrantReach = null,
+    PumpStationResult? Station = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -402,6 +403,16 @@ public static class ExplanatoryNoteComposer
         var m3h = d.PumpFlow.LitersPerSecond * 3.6;
         var jockey = norms.Find("sp485.p6_9_4.jockeyTank");
         return new NoteSection("6", "Насосная установка", [
+            .. PumpHeadBlocks(i, supplyDn, kt, m3h, jockey),
+            .. i.Station is { } st ? StationBlocks(st, norms) : [],
+        ]);
+    }
+
+    private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord? jockey)
+    {
+        var d = i.Design;
+        var s = i.DesignSettings;
+        return [
             new NoteParagraph("Требуемое давление пожарного насоса определяется по формуле (Б.30):"),
             new NoteFormula("*P*_{н} = Δ*P*_{г} + Δ*P*_{в} + ΣΔ*P*_{м} + *P*_{уу} + *p*_{д} + *Z* − *P*_{вх},", "6.1", [
                 "где Δ*P*_{г}, Δ*P*_{в} — потери давления на горизонтальных и вертикальных участках трубопровода, МПа;",
@@ -437,7 +448,48 @@ public static class ExplanatoryNoteComposer
                 "насосная станция — на первом, цокольном или первом подземном этаже, отделена противопожарными стенами (перегородками) 1-го типа и перекрытиями 2-го типа (пп. 6.10.9, 6.10.11);",
                 "не менее двух выведенных наружу патрубков DN 80 с соединительными головками для передвижной пожарной техники (п. 6.10.17).",
             ]),
-        ]);
+        ];
+    }
+
+    // Насосная станция: состав агрегатов, обвязка по скорости (6.7.1.37), проходы (6.10.16), патрубки (6.10.17, 6.10.18), микроклимат (6.10.12).
+    private static List<NoteBlock> StationBlocks(PumpStationResult st, INormsProvider norms)
+    {
+        double V(StationPipe p) => (p.Pipe.OuterDiameterMm - (2 * p.Pipe.WallMm)) / 1000;
+        var q = st.PumpFlow.LitersPerSecond / 1000;
+        var blocks = new List<NoteBlock>
+        {
+            new NoteParagraph($"**Насосная станция.** Принято {st.WorkingPumps} рабочий и {st.StandbyPumps} резервный насосный агрегат одинаковой конструкции, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении."),
+            new NoteParagraph("Диаметры всасывающего и напорного трубопроводов агрегата подобраны по скорости воды *v* = 4·*Q* / (π·*d*^{2}) (п. 6.7.1.37):"),
+            new NoteFormula($"*v*_{{вс}} = 4·{F(q, "0.0000")} / (π·{F(V(st.Suction), "0.000")}^{{2}}) = **{F(st.Suction.Velocity, "0.00")} м/с** ≤ {F(st.SuctionLimit)} м/с — DN{st.Suction.Pipe.Dn} (Ø{F(st.Suction.Pipe.OuterDiameterMm, "0.#")}×{F(st.Suction.Pipe.WallMm, "0.#")} мм);", "6.6", []),
+            new NoteFormula($"*v*_{{нап}} = 4·{F(q, "0.0000")} / (π·{F(V(st.Discharge), "0.000")}^{{2}}) = **{F(st.Discharge.Velocity, "0.00")} м/с** ≤ {F(st.DischargeLimit)} м/с — DN{st.Discharge.Pipe.Dn} (Ø{F(st.Discharge.Pipe.OuterDiameterMm, "0.#")}×{F(st.Discharge.Pipe.WallMm, "0.#")} мм).", "6.7", [
+                "где *d* — внутренний диаметр трубы, м; предел скорости на всасывании — для работы с подпором на входе насоса.",
+            ]),
+            new NoteParagraph("На всасывающей линии каждого агрегата — затвор с датчиком положения, виброизолирующая вставка и мановакуумметр; на напорной — виброизолирующая вставка, обратный клапан, затвор с датчиком положения и манометр. Приборы ставятся через трёхходовые краны для снятия на поверку без отключения установки (п. 6.8.10)."),
+            new NoteParagraph($"Для подключения мобильной пожарной техники предусмотрено {st.TruckInlets} выведенных наружу патрубка с соединительными головками DN{st.TruckInletDn} и заглушками; в здании на линии от патрубка — обратный клапан и опломбированная открытая задвижка; линия присоединена к подводящему трубопроводу (п. 6.10.17)."),
+        };
+        if (norms.Find("sp485.p6_10_18.truckInletPlacement")?.Values is { } place)
+        {
+            blocks.Add(new NoteParagraph($"Патрубки размещаются на фасаде с нормативным подъездом, со световыми указателями и пиктограммами, на высоте ({F(place["height"]!.Value, "0.00")} ± {F(place["heightTolerance"]!.Value, "0.00")}) м от отмостки и не далее {F(place["maxToHydrant"]!.Value)} м от пожарных гидрантов (п. 6.10.18)."));
+        }
+
+        if (norms.Find("sp485.p6_10_16.passages")?.Values is { } pass)
+        {
+            blocks.Add(new NoteParagraph("Ширина проходов в насосной станции (п. 6.10.16):"));
+            blocks.Add(new NoteList([
+                $"между насосными агрегатами и стеной в заглублённом помещении — не менее {F(pass["pumpWallBuried"]!.Value, "0.0")} м, в прочих — не менее {F(pass["pumpWallOther"]!.Value, "0.0")} м; со стороны электродвигателя — достаточная для демонтажа ротора;",
+                $"между узлами управления и между ними и стеной — не менее {F(pass["controlUnits"]!.Value, "0.0")} м;",
+                $"между выступающими частями иного оборудования — не менее {F(pass["otherEquipment"]!.Value, "0.0")} м; перед распределительным электрическим щитом — не менее {F(pass["switchboard"]!.Value, "0.0")} м;",
+                $"при напорном патрубке до DN{F(pass["twinMaxDn"]!.Value)} включительно допускается установка агрегатов у стены или двух агрегатов на одном фундаменте с зазором не менее {F(pass["twinOnFoundationGap"]!.Value, "0.00")} м и проходами вокруг не менее {F(pass["twinAround"]!.Value, "0.0")} м.",
+            ]));
+        }
+
+        if (norms.Find("sp485.p6_10_12.climate")?.Values is { } climate)
+        {
+            blocks.Add(new NoteParagraph($"Температура воздуха в насосной станции — от {F(climate["tMin"]!.Value)} до {F(climate["tMax"]!.Value)} °С, относительная влажность — не более {F(climate["humidityMax"]!.Value)} % (п. 6.10.12). Насосная станция оборудуется телефонной связью с пожарным постом (п. 6.10.14), у входа — световое табло «Насосная станция пожаротушения» (п. 6.10.15)."));
+        }
+
+        blocks.Add(new NoteParagraph("Марка насосных агрегатов, жокей-насоса и шкафа управления принимается по каталогу производителя по требуемым подаче и напору; размеры помещения и расстановка оборудования — по габаритам принятых агрегатов с проходами по п. 6.10.16."));
+        return blocks;
     }
 
     private static NoteSection Water(NoteInputs i, INormsProvider norms)

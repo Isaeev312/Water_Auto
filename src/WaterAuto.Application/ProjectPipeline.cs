@@ -28,6 +28,7 @@ public static class ProjectPipeline
     public const string NoteFile = "note.docx";
     public const string GeneralDataFile = "general_data.docx";
     public const string SpecificationDocxFile = "specification.docx";
+    public const string PumpSchemeFile = "pump_scheme.dxf";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -178,6 +179,31 @@ public static class ProjectPipeline
             pipeSizes,
             materials.Coating);
 
+        // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
+        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), new Pressure(design.InletPressure));
+        issues.AddRange(station.Issues);
+        var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
+        if (File.Exists(stationSet))
+        {
+            var ruPs = CultureInfo.GetCultureInfo("ru-RU");
+            takeoff = takeoff with
+            {
+                Items = [.. EquipmentSet.Items(
+                    stationSet,
+                    TakeoffGroup.PumpStation,
+                    new Dictionary<string, string>
+                    {
+                        ["q"] = (worst.PumpFlow.LitersPerSecond * 3.6).ToString("0.0", ruPs),
+                        ["h"] = worst.PumpHead.Meters.ToString("0.0", ruPs),
+                        ["dnS"] = station.Suction.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
+                        ["dnD"] = station.Discharge.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
+                        ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
+                        ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
+                    },
+                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets }), .. takeoff.Items],
+            };
+        }
+
         // Узел управления — на каждую секцию (ввод), DN подводящего; промывочные устройства — п. 6.7.1.15.
         var controlUnit = EquipmentSet.PathFor(normsDir, EquipmentSet.ControlUnitFile);
         if (File.Exists(controlUnit))
@@ -243,6 +269,28 @@ public static class ProjectPipeline
             new AxonometryStyle(Font: project.Font, SprinklersUp: !design.SprinklerDeflector.Equals("down", StringComparison.OrdinalIgnoreCase), InletNote: design.InletReference),
             SheetStamp(project, "Аксонометр", "Аксонометрическая схема трубопроводов"),
             new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers)));
+        // Принципиальная схема насосной станции (лист основного комплекта).
+        var fromTank = design.InletPressure < (norms.Find("sp485.p6_9_12.minNetworkPressure")?.Values["pressure"] ?? 0);
+        Write(outDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
+            p,
+            new PumpSchemeData(
+                station.WorkingPumps + station.StandbyPumps,
+                station.Suction.Pipe.Dn,
+                station.Discharge.Pipe.Dn,
+                design.SupplyDn,
+                station.TruckInlets,
+                station.TruckInletDn,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1, Н2 — агрегаты пожарные: Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м (рабочий и резервный)"),
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"НЖ — жокей-насос, бак не менее {worst.JockeyTankMinLiters:0} л"),
+                fromTank ? "Из пожарного резервуара" : "Из наружной сети",
+                [
+                    "Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении (п. 6.10.3 СП 485).",
+                    "Марки агрегатов, жокей-насоса и шкафа управления — по каталогу производителя по требуемым Q и H; DN обвязки — по скорости воды (п. 6.7.1.37).",
+                    "Затворы на линиях агрегатов и перед узлом управления — с контролем положения; приборы — через трёхходовые краны (пп. 6.8.7, 6.8.10).",
+                    "Оборудование, кроме оросителей, приборов и трубопроводов, окрашивается в красный цвет (п. 6.8.11).",
+                ]),
+            SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
+            project.Font));
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
         Write(outDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
 
@@ -274,7 +322,8 @@ public static class ProjectPipeline
                 temperature.Choice,
                 design.MaxAmbientTemperature,
                 hydrantPoints.Count,
-                hydrantReach),
+                hydrantReach,
+                station),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 

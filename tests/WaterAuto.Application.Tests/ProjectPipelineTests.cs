@@ -88,7 +88,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Project());
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Files.Select(Path.GetFileName).ShouldBe([
-            ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile,
+            ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
             ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);

@@ -40,7 +40,7 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Шаблон: {dn} — DN места установки."
+            "description": "Шаблон: {dn} — DN места установки; для насосной — {q} (м³/ч), {h} (м), {dnS}, {dnD} (DN всасывающего и напорного), {tank} (л), {truckDn}."
           },
           "designation": {
             "type": "string"
@@ -55,6 +55,14 @@
           },
           "note": {
             "type": "string"
+          },
+          "count": {
+            "type": "string",
+            "enum": [
+              "pumps",
+              "truckInlets"
+            ],
+            "description": "Множитель количества: число агрегатов (рабочих и резервных) или патрубков для пожарной техники."
           }
         }
       }

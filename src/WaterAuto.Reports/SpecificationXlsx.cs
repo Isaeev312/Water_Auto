@@ -43,6 +43,7 @@ public static class SpecificationXlsx
 
     internal static readonly (TakeoffGroup Group, string Title)[] Sections =
     [
+        (TakeoffGroup.PumpStation, "Насосная установка"),
         (TakeoffGroup.ControlUnit, "Узел управления"),
         (TakeoffGroup.Sprinklers, "Оросители"),
         (TakeoffGroup.Pipes, "Трубопроводы"),

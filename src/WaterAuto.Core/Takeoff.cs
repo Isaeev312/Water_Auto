@@ -3,6 +3,7 @@ namespace WaterAuto.Core;
 /// <summary>Раздел спецификации.</summary>
 public enum TakeoffGroup
 {
+    PumpStation,
     ControlUnit,
     Sprinklers,
     Pipes,
