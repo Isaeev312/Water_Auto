@@ -14,7 +14,11 @@ public sealed record PumpRoomEquipment(string Label, double X0, double Y0, doubl
 }
 
 /// <summary>Трубопровод на плане насосной: ломаная, подпись (DN), уровень (0 — ближе к стене).</summary>
-public sealed record PumpRoomPipe(string Label, IReadOnlyList<PlanPoint> Path);
+public sealed record PumpRoomPipe(string Label, IReadOnlyList<PlanPoint> Path)
+{
+    /// <summary>Подъёмы и опуски (стояки): точка в плане, отметки верха и низа, м.</summary>
+    public IReadOnlyList<(PlanPoint At, double Top, double Bottom)> Risers { get; init; } = [];
+}
 
 /// <summary>Данные плана насосной: контур, дверь, оборудование, примечания (принятые проходы и допущения), обвязка, ввод и выпуски.</summary>
 public sealed record PumpRoomDrawing(Polygon Room, PlanPoint? Door, IReadOnlyList<PumpRoomEquipment> Equipment, IReadOnlyList<string> Notes)
@@ -322,6 +326,49 @@ public static class PumpRoomDxfWriter
         }
 
         // Отметки на стенах (ввод, выпуски, ГМ) — подпись снаружи помещения, за ближайшей стеной.
+        // Подъёмы и опуски: стояк — кружок в точке перехода, отметки верха и низа на выноске.
+        if (data.Piping)
+        {
+            var ru = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+            foreach (var (at, zTop, zBottom) in data.Pipes.SelectMany(p => p.Risers))
+            {
+                doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.45 * h, Layer = equipment });
+                doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm - (2.5 * h), at.YMm - (2.5 * h))) { Layer = text });
+                doc.Entities.Add(new Line(P(at.XMm - (2.5 * h), at.YMm - (2.5 * h)), P(at.XMm - (9.5 * h), at.YMm - (2.5 * h))) { Layer = text });
+                Text(at.XMm - (9.3 * h), at.YMm - (2.3 * h), string.Create(ru, $"отм. {zTop:+0.000;−0.000} / {zBottom:+0.000;−0.000}"), 0.6 * h);
+            }
+
+            // Привязки осей труб к стенам: у каждой стены — цепочка «стена — оси труб, идущих вдоль неё».
+            var style2 = new PlanDxfStyle(TextHeightMm: 0.7 * h);
+            var segments = data.Pipes.SelectMany(p => p.Path.Zip(p.Path.Skip(1))).ToList();
+            var near = 2500.0;
+            var left = segments.Where(s => Math.Abs(s.First.XMm - s.Second.XMm) < 1 && s.First.XMm - x0 < near).Select(s => s.First.XMm).Distinct().Order().ToList();
+            var right = segments.Where(s => Math.Abs(s.First.XMm - s.Second.XMm) < 1 && x1 - s.First.XMm < near).Select(s => s.First.XMm).Distinct().Order().ToList();
+            var bottomSide = segments.Where(s => Math.Abs(s.First.YMm - s.Second.YMm) < 1 && s.First.YMm - y0 < near).Select(s => s.First.YMm).Distinct().Order().ToList();
+            var topSide = segments.Where(s => Math.Abs(s.First.YMm - s.Second.YMm) < 1 && y1 - s.First.YMm < near).Select(s => s.First.YMm).Distinct().Order().ToList();
+            var midY = (y0 + y1) / 2;
+            var midX = (x0 + x1) / 2;
+            if (left.Count > 0)
+            {
+                PlanDxfWriter.AddChain(doc, new PlanDimensionChain([new PlanPoint(x0, y0 + (0.15 * (y1 - y0))), .. left.Select(x => new PlanPoint(x, y0 + (0.15 * (y1 - y0))))], 0), style2, dims);
+            }
+
+            if (right.Count > 0)
+            {
+                PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. right.Select(x => new PlanPoint(x, midY)), new PlanPoint(x1, midY)], 0), style2, dims);
+            }
+
+            if (bottomSide.Count > 0)
+            {
+                PlanDxfWriter.AddChain(doc, new PlanDimensionChain([new PlanPoint(midX, y0), .. bottomSide.Select(y => new PlanPoint(midX, y))], 0), style2, dims);
+            }
+
+            if (topSide.Count > 0)
+            {
+                PlanDxfWriter.AddChain(doc, new PlanDimensionChain([.. topSide.Select(y => new PlanPoint(x0 + (0.7 * (x1 - x0)), y)), new PlanPoint(x0 + (0.7 * (x1 - x0)), y1)], 0), style2, dims);
+            }
+        }
+
         foreach (var (at, label) in data.WallMarks)
         {
             doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.6 * h, Layer = pipes });
@@ -369,6 +416,22 @@ public static class PumpRoomDxfWriter
         var style = new PlanDxfStyle(TextHeightMm: h);
         if (!data.Piping)
         {
+            // Привязки каждой единицы оборудования к ближайшим стенам по X и по Y (короткие размеры у его угла).
+            var style3 = new PlanDxfStyle(TextHeightMm: 0.7 * h);
+            foreach (var e in data.Equipment.Skip(1))
+            {
+                var (toLeft, toRight) = (e.X0 - x0, x1 - e.X1);
+                var (toBottom, toTop) = (e.Y0 - y0, y1 - e.Y1);
+                var yAt = (e.Y0 + e.Y1) / 2;
+                var xAt = (e.X0 + e.X1) / 2;
+                PlanDxfWriter.AddChain(doc, toLeft <= toRight
+                    ? new PlanDimensionChain([new PlanPoint(x0, yAt), new PlanPoint(e.X0, yAt)], 0)
+                    : new PlanDimensionChain([new PlanPoint(e.X1, yAt), new PlanPoint(x1, yAt)], 0), style3, dims);
+                PlanDxfWriter.AddChain(doc, toBottom <= toTop
+                    ? new PlanDimensionChain([new PlanPoint(xAt, y0), new PlanPoint(xAt, e.Y0)], 0)
+                    : new PlanDimensionChain([new PlanPoint(xAt, e.Y1), new PlanPoint(xAt, y1)], 0), style3, dims);
+            }
+
             var main = data.Equipment.Take(1).ToList();
             var xs = main.SelectMany(e => new[] { e.X0, e.X1 }).Append(x0).Append(x1).Select(x => Math.Round(x)).Distinct().Order().ToList();
             var ys = main.SelectMany(e => new[] { e.Y0, e.Y1 }).Append(y0).Append(y1).Select(x => Math.Round(x)).Distinct().Order().ToList();

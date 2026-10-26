@@ -32,6 +32,7 @@ public static class ProjectPipeline
     public const string PumpStationSpecFile = "specification_pns.docx";
     public const string PumpRoomPlanFile = "pump_room_plan.dxf";
     public const string PumpRoomPipingFile = "pump_room_piping.dxf";
+    public const string PumpRoomSectionFile = "pump_room_section.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string IssuesFile = "issues.txt";
 
@@ -449,13 +450,15 @@ public static class ProjectPipeline
         Write(outDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
             p,
             new PumpSchemeData(
-                station.WorkingPumps + station.StandbyPumps,
+                setChoice?.Chosen is { } schemeSet ? schemeSet.MainPumps + schemeSet.StandbyPumps : station.WorkingPumps + station.StandbyPumps,
                 station.Suction.Pipe.Dn,
                 station.Discharge.Pipe.Dn,
                 design.SupplyDn,
                 station.TruckInlets,
                 station.TruckInletDn,
-                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1, Н2 — агрегаты пожарные: Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м (рабочий и резервный)"),
+                setChoice?.Chosen is { } ss
+                    ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1…Н{ss.MainPumps + ss.StandbyPumps} — {ss.Designation}: основные Н1…Н{ss.MainPumps}, резервный Н{ss.MainPumps + ss.StandbyPumps}; Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м")
+                    : string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1, Н2 — агрегаты пожарные: Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м (рабочий и резервный)"),
                 string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"НЖ — жокей-насос, бак не менее {worst.JockeyTankMinLiters:0} л"),
                 fromTank ? "Из пожарного резервуара" : "Из наружной сети",
                 [
@@ -559,11 +562,72 @@ public static class ProjectPipeline
                 {
                     Notes = pipingNotes,
                     Piping = true,
-                    Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{r.Dn} {r.RunHeightMm / 1000:+0.000}"), r.Path))],
+                    Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{r.Dn} {(r.RunHeightMm / 1000) + pr1.FloorElevation:+0.000}"), r.Path)
+                    {
+                        // Стояки — где отметка конца отличается от отметки прокладки (подъём к патрубку, опуск у стены).
+                        Risers = [
+                            .. Math.Abs(r.FromHeightMm - r.RunHeightMm) > 1 ? new[] { (r.Path[0], (Math.Max(r.FromHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation, (Math.Min(r.FromHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation) } : [],
+                            .. Math.Abs(r.ToHeightMm - r.RunHeightMm) > 1 ? new[] { (r.Path[^1], (Math.Max(r.ToHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation, (Math.Min(r.ToHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation) } : [],
+                        ],
+                    })],
                     Valves = valves,
                 },
                 SheetStamp(project, "План обвязки", "План обвязки насосной станции") with { Name = "План обвязки насосной станции" },
                 project.Font));
+            // Разрез 1-1 вдоль X: оборудование по высоте (установка — на фундаменте 150 мм), трубы на отметках с подъёмами и опусками.
+            const double foundationH = 0.15;
+            var rv = roomPlan.Room.Outline.Vertices;
+            var blocks = new List<SectionBlock>();
+            if (features.Foundation is { } fnd)
+            {
+                blocks.Add(new SectionBlock("фундамент", fnd.X0, fnd.X1, 0, foundationH));
+            }
+
+            foreach (var i in roomPlan.Items)
+            {
+                var (bottom, height, pumps, pos) = i.Kind switch
+                {
+                    StationItemKind.PumpSet => (foundationH, (setChoice?.Chosen?.Hydraulic.HeightMm ?? 1300) / 1000, setChoice?.Chosen is { } cs ? cs.MainPumps + cs.StandbyPumps : 0, PosOf("pumpSet")),
+                    StationItemKind.Cabinet => (0.0, (setChoice?.Chosen?.Cabinet.HeightMm ?? 1460) / 1000, 0, PosOf("pumpSet")),
+                    StationItemKind.ControlUnit => (0.0, (roomData?.ControlUnit.HeightMm ?? 1800) / 1000, 0, PosOf("cu")),
+                    _ => (0.0, (roomData?.Jockey.HeightMm ?? 900) / 1000, 0, PosOf("jockey")),
+                };
+                blocks.Add(new SectionBlock(i.Label, i.X0, i.X1, bottom, bottom + height, pumps, pos));
+            }
+
+            var sectionPipes = (piping?.Runs ?? []).Select(r =>
+            {
+                var xs = r.Path.Select(pt => pt.XMm).ToList();
+                var verticals = new List<(double, double, double)>();
+                if (Math.Abs(r.FromHeightMm - r.RunHeightMm) > 1)
+                {
+                    verticals.Add((r.Path[0].XMm, r.FromHeightMm / 1000, r.RunHeightMm / 1000));
+                }
+
+                if (Math.Abs(r.ToHeightMm - r.RunHeightMm) > 1)
+                {
+                    verticals.Add((r.Path[^1].XMm, r.RunHeightMm / 1000, r.ToHeightMm / 1000));
+                }
+
+                return new SectionPipe($"DN{r.Dn}", xs.Min(), xs.Max(), r.RunHeightMm / 1000, verticals);
+            }).ToList();
+            Write(outDir, PumpRoomSectionFile, files, p => PumpRoomSectionDxfWriter.Write(
+                p,
+                new PumpRoomSection(
+                    rv.Min(q => q.XMm), rv.Max(q => q.XMm), pr1.WallThickness * 1000, pr1.FloorElevation, pr1.Height, pr1.GroundElevation - pr1.FloorElevation,
+                    features.Pit is { } sp ? (sp.X0, sp.X1, pr1.PitDepth) : null,
+                    blocks,
+                    sectionPipes,
+                    [
+                        "Разрез — вид вдоль помещения насосной; все трубы спроецированы на плоскость разреза, отметки — оси труб.",
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод — на отметке {pr1.GroundElevation - pr1.InletDepth:+0.000} ({pr1.InletDepth:0.0} м от уровня земли {pr1.GroundElevation:+0.000}); трубопроводы АУП — на {design.PipeElevation:+0.000}."),
+                        "Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:200 (п. 6.10.29); переходы — эксцентрические.",
+                        "Электродвигатели насосов — не ниже 0,5 м от пола (п. 6.10.22); установка — на фундаменте по паспорту изготовителя (п. 6.10.26).",
+                        "Высоты узла управления и жокей-насоса — условные (data/catalog/pump_room.json).",
+                    ]),
+                SheetStamp(project, "Разрез", "Разрез 1-1 насосной станции") with { Name = "Разрез 1-1 насосной станции" },
+                project.Font));
+
             Write(outDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
                 p,
                 roomDrawing,

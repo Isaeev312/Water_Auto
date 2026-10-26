@@ -55,7 +55,9 @@ public static class PumpSchemeDxfWriter
 
         // Коллекторы: всасывающий снизу, напорный сверху; ветви агрегатов — вертикально между ними; торцы коллекторов — заглушки.
         const double yS = 100, yD = 190, x0 = 60;
-        var branches = Enumerable.Range(0, data.Pumps).Select(k => 105.0 + (k * 70)).ToList();
+        // Шаг ветвей агрегатов — по их числу: схема строится для любой подобранной установки (2, 3, 4… агрегата).
+        var spacing = data.Pumps > 1 ? Math.Min(70, 120.0 / (data.Pumps - 1)) : 70;
+        var branches = Enumerable.Range(0, data.Pumps).Select(k => 105.0 + (k * spacing)).ToList();
         var xJ = branches[^1] + 65;
         var xEnd = xJ + 40;
         void Pos(double x, double y, string role, int dir = 1)
