@@ -103,6 +103,11 @@ public static class TreeSolver
                 issues.Add(new Issue("pipe.geometry", IssueLevel.Error, $"Труба {p.Id}: наружный диаметр и стенка должны давать внутренний диаметр больше нуля.", p.Id));
             }
 
+            if (p.Geometry is null)
+            {
+                issues.Add(new Issue("pipe.noGeometry", IssueLevel.Warning, $"Труба {p.Id}: сортамент не задан — скорость не проверяется.", p.Id));
+            }
+
             if (!incoming.TryAdd(p.To, p))
             {
                 issues.Add(new Issue("topology.notTree", IssueLevel.Error, $"К узлу {p.To} подходит больше одной трубы: кольцевые сети — этап 4.", p.To));

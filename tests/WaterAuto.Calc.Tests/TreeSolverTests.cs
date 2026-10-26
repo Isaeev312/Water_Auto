@@ -11,8 +11,12 @@ public class TreeSolverTests
 
     private static NetworkNode Source(string id, double z = 0) => new(id, NodeKind.Source, new Length(z));
 
-    private static NetworkPipe Pipe(string id, string from, string to, double l = 3, double kt = 16.5) =>
-        new(id, from, to, new Length(l), new PipeCharacteristic(kt), 1.0);
+    private static NetworkPipe Pipe(string id, string from, string to, double l = 3, double kt = 16.5, PipeGeometry? geometry = null) =>
+        new(id, from, to, new Length(l), new PipeCharacteristic(kt), 1.0, geometry);
+
+    // ВГП 42,3×2,8 (DN32), ГОСТ 3262: внутренний Ø 36,7 мм.
+    private static PipeGeometry Geometry() =>
+        new("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
 
     [Fact]
     public void Chain_of_two_sprinklers_matches_hand_calculation()
@@ -20,7 +24,7 @@ public class TreeSolverTests
         // Б.9–Б.10: P2 = P1 + q1²·L/(100·Kт), q2 = 10·K·√P2.
         var net = new HydraulicNetwork(
             [Source("S"), Sprinkler("1"), Sprinkler("2")],
-            [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+            [Pipe("S-2", "S", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
 
         var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
 
@@ -53,8 +57,8 @@ public class TreeSolverTests
     {
         var net = new HydraulicNetwork(
             [Source("S", 0), Tee("a", 3), Tee("b", 3), Sprinkler("1", 3.6), Sprinkler("2", 3.6), Sprinkler("3", 3.5), Sprinkler("4", 3.5)],
-            [Pipe("S-b", "S", "b", 10, 1262), Pipe("b-a", "b", "a", 4, 517), Pipe("a-2", "a", "2"), Pipe("2-1", "2", "1"),
-             Pipe("b-4", "b", "4", 2), Pipe("4-3", "4", "3")]);
+            [Pipe("S-b", "S", "b", 10, 1262, Geometry()), Pipe("b-a", "b", "a", 4, 517, Geometry()), Pipe("a-2", "a", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry()),
+             Pipe("b-4", "b", "4", 2, geometry: Geometry()), Pipe("4-3", "4", "3", geometry: Geometry())]);
 
         var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.15));
 
@@ -177,7 +181,7 @@ public class TreeSolverTests
     {
         var net = new HydraulicNetwork(
             [Source("S"), Sprinkler("1"), Sprinkler("2"), Sprinkler("3")],
-            [Pipe("S-3", "S", "3"), Pipe("3-2", "3", "2"), Pipe("2-1", "2", "1")]);
+            [Pipe("S-3", "S", "3", geometry: Geometry()), Pipe("3-2", "3", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
 
         TreeSolver.SolveDesign(net, "1", new Pressure(0.1)).Issues.ShouldBeEmpty();
     }
@@ -279,12 +283,48 @@ public class TreeSolverTests
 
         var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
 
-        result.Issues.ShouldBeEmpty();
+        var warning = result.Issues.ShouldHaveSingleItem();
+        warning.Code.ShouldBe("pipe.noGeometry");
+        warning.ElementId.ShouldBe("2-1");
         var q = result.PipeFlows["S-2"].LitersPerSecond / 1000.0;
         var expected = q / (Math.PI * 0.0367 * 0.0367 / 4);
         result.PipeVelocities["S-2"].MetersPerSecond.ShouldBe(expected, 1e-9);
         result.PipeVelocities.ContainsKey("2-1").ShouldBeFalse();
         geometry.InnerDiameter.Millimeters.ShouldBe(36.7, 1e-9);
+    }
+
+    [Fact]
+    public void Pipe_without_geometry_is_a_warning_and_the_result_is_computed()
+    {
+        // Без сортамента скорость не проверить: расчёт идёт, величины заполнены, в замечаниях — предупреждение.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1")],
+            [Pipe("S-1", "S", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        var issue = result.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("pipe.noGeometry");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.ElementId.ShouldBe("S-1");
+        result.HasErrors.ShouldBeFalse();
+        var q = 10 * 0.47 * Math.Sqrt(0.1);
+        result.TotalFlow.LitersPerSecond.ShouldBe(q, 1e-12);
+        result.PipeFlows["S-1"].LitersPerSecond.ShouldBe(q, 1e-12);
+        result.PipeVelocities.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Pipe_with_geometry_has_no_noGeometry_warning()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1")],
+            [Pipe("S-1", "S", "1", geometry: Geometry())]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.Issues.ShouldBeEmpty();
+        result.PipeVelocities.ContainsKey("S-1").ShouldBeTrue();
     }
 
     [Fact]
