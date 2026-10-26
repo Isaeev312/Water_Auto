@@ -155,6 +155,39 @@ public sealed record ProjectDesign
 
     /// <summary>Внутренний противопожарный водопровод, совмещённый с АУП (СН КР 40-04:2025, ADR 0010); null — без ВПВ.</summary>
     public ProjectHydrants? Hydrants { get; init; }
+
+    /// <summary>Помещение насосной станции: отметки и конструкция (слои ПТ_НС*).</summary>
+    public ProjectPumpRoom PumpRoom { get; init; } = new();
+}
+
+/// <summary>
+/// Отметки и конструкция помещения насосной, м (относительно пола насосной). Значения по умолчанию — условные,
+/// для пробного проекта; задать по архитектурному разделу.
+/// </summary>
+public sealed class ProjectPumpRoom
+{
+    /// <summary>Отметка пола насосной.</summary>
+    public double FloorElevation { get; init; }
+
+    /// <summary>Отметка уровня земли (планировочная) — для выводов на фасад (патрубки ГМ, п. 6.10.18).</summary>
+    public double GroundElevation { get; init; } = 3.0;
+
+    /// <summary>Заглубление ввода от уровня земли.</summary>
+    public double InletDepth { get; init; } = 1.6;
+
+    /// <summary>Высота помещения (до низа перекрытия).</summary>
+    public double Height { get; init; } = 3.6;
+
+    /// <summary>Толщина стен.</summary>
+    public double WallThickness { get; init; } = 0.3;
+
+    /// <summary>Помещение подземное (п. 6.10.23: не менее двух дренажных насосов).</summary>
+    public bool Underground { get; init; } = true;
+
+    /// <summary>Приямок в плане и глубина.</summary>
+    public double PitSize { get; init; } = 0.8;
+
+    public double PitDepth { get; init; } = 0.6;
 }
 
 /// <summary>Исходные данные ВПВ: признаки здания для табл. Ж.2, ПК для табл. Ж.3, трубопровод до диктующего ПК.</summary>

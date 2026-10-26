@@ -271,29 +271,35 @@ public static class ProjectPipeline
             var suctionAt2 = Math.Abs(suctionAt.YMm - set.Y0) < 1 || Math.Abs(suctionAt.YMm - set.Y1) < 1 ? new PlanPoint(suctionAt.XMm - 300, suctionAt.YMm) : new PlanPoint(suctionAt.XMm, suctionAt.YMm - 300);
             var alongX = Math.Abs(suctionAt.YMm - set.Y0) < 1 || Math.Abs(suctionAt.YMm - set.Y1) < 1;
             var dischargeAt = alongX ? new PlanPoint(suctionAt.XMm + 300, suctionAt.YMm) : new PlanPoint(suctionAt.XMm, suctionAt.YMm + 300);
+            // Отметки от пола насосной, мм: ввод — заглубление от земли; напорные — на отметке трубопроводов АУП;
+            // всасывающие — у пола на оси коллектора установки (подъём к насосу, п. 6.10.29).
+            var pr0 = design.PumpRoom;
+            var inletElev = (pr0.GroundElevation - pr0.InletDepth - pr0.FloorElevation) * 1000;
+            var pipeElev = design.PipeElevation > 0 ? (design.PipeElevation - pr0.FloorElevation) * 1000 : pr.BracketHeight;
+            var truckElev = Math.Min((pr0.GroundElevation - pr0.FloorElevation + (norms.Find("sp485.p6_10_18.truckInletPlacement")?.Values["height"] ?? 1.2)) * 1000, (pr0.Height * 1000) - 200);
             var dnS = station.Suction.Pipe.Dn;
             var dnD = design.SupplyDn;
             var outerS = series.Pick(dnS)?.OuterDiameterMm ?? dnS;
             var outerD = series.Pick(dnD)?.OuterDiameterMm ?? dnD;
             var requests = new List<PipeRunRequest>
             {
-                new("Всасывающий 1", dnS, outerS, stationInlet, null, suctionAt, pipedSet.CollectorAxisMm, 0),
+                new("Всасывающий 1", dnS, outerS, stationInlet, null, suctionAt, pipedSet.CollectorAxisMm, 0) { RunHeightMm = pipedSet.CollectorAxisMm, FromWallHeightMm = inletElev },
             };
 
             // Второй и следующие вводы (п. 6.10.27) — каждый к всасывающему коллектору, рядом с первым.
             foreach (var (extra, k) in pumpRoom.Inlets.Skip(1).Select((p, k) => (p, k)))
             {
-                requests.Add(new($"Всасывающий {k + 2}", dnS, outerS, extra, null, suctionAt2, pipedSet.CollectorAxisMm, 0));
+                requests.Add(new($"Всасывающий {k + 2}", dnS, outerS, extra, null, suctionAt2, pipedSet.CollectorAxisMm, 0) { RunHeightMm = pipedSet.CollectorAxisMm, FromWallHeightMm = inletElev });
             }
             var outlets = pumpRoom.Outlets;
             for (var k = 0; k < units.Count; k++)
             {
                 var u = units[k];
                 var c = new PlanPoint((u.X0 + u.X1) / 2, (u.Y0 + u.Y1) / 2);
-                requests.Add(new($"Напорный к УУ {k + 1}", dnD, outerD, dischargeAt, pipedSet.Hydraulic.HeightMm, c, 1000, 1));
+                requests.Add(new($"Напорный к УУ {k + 1}", dnD, outerD, dischargeAt, pipedSet.Hydraulic.HeightMm, c, 1000, 1) { RunHeightMm = pipeElev });
                 if (k < outlets.Count)
                 {
-                    requests.Add(new($"Выпуск секции {k + 1}", dnD, outerD, c, 1500, outlets[k], null, 1));
+                    requests.Add(new($"Выпуск секции {k + 1}", dnD, outerD, c, 1500, outlets[k], null, 1) { RunHeightMm = pipeElev, ToWallHeightMm = pipeElev });
                 }
                 else
                 {
@@ -306,8 +312,8 @@ public static class ProjectPipeline
             {
                 var jc = new PlanPoint((jockey.X0 + jockey.X1) / 2, (jockey.Y0 + jockey.Y1) / 2);
                 var outerJ = series.Pick(pr.JockeyDn)?.OuterDiameterMm ?? pr.JockeyDn;
-                requests.Add(new("Жокей-насос, всасывающий", pr.JockeyDn, outerJ, suctionAt, pipedSet.CollectorAxisMm, jc, 300, 0));
-                requests.Add(new("Жокей-насос, напорный", pr.JockeyDn, outerJ, jc, 600, dischargeAt, pipedSet.Hydraulic.HeightMm, 1));
+                requests.Add(new("Жокей-насос, всасывающий", pr.JockeyDn, outerJ, suctionAt, pipedSet.CollectorAxisMm, jc, 300, 0) { RunHeightMm = pipedSet.CollectorAxisMm });
+                requests.Add(new("Жокей-насос, напорный", pr.JockeyDn, outerJ, jc, 600, dischargeAt, pipedSet.Hydraulic.HeightMm, 1) { RunHeightMm = 1500 });
             }
 
             // Патрубки ГМ для мобильной техники: точки слоя ПТ_НС_ГМ; нет — на стене ввода по обе стороны от него через 800 мм.
@@ -317,7 +323,7 @@ public static class ProjectPipeline
             var outerT = series.Pick(station.TruckInletDn)?.OuterDiameterMm ?? station.TruckInletDn;
             foreach (var (tp, k) in truckPoints.Select((p, k) => (p, k)))
             {
-                requests.Add(new($"Патрубок ГМ {k + 1}", station.TruckInletDn, outerT, tp, null, dischargeAt, pipedSet.Hydraulic.HeightMm, 2));
+                requests.Add(new($"Патрубок ГМ {k + 1}", station.TruckInletDn, outerT, tp, null, dischargeAt, pipedSet.Hydraulic.HeightMm, 2) { RunHeightMm = pipeElev, FromWallHeightMm = truckElev });
             }
 
             if (pumpRoom.TruckInlets.Count == 0)

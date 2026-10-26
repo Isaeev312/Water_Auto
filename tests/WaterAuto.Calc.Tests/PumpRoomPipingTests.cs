@@ -50,6 +50,17 @@ public class PumpRoomPipingTests
     }
 
     [Fact]
+    public void Own_run_height_and_wall_crossing_height_give_the_verticals()
+    {
+        // Ввод через стену на +1,400, прокладка у пола на +0,190 (ось коллектора), патрубок на той же высоте — опуск только у стены.
+        var r = PumpRoomPiping.Route(Room, [new PipeRunRequest("Всасывающий", 150, 159, new(0, 3000), null, new(5000, 4000), 190, Level: 0) { RunHeightMm = 190, FromWallHeightMm = 1400 }], Rules);
+        var run = r.Runs.ShouldHaveSingleItem();
+        run.VerticalMm.ShouldBe(1400 - 190, 1e-6);
+        run.Elbows.ShouldBe(3 + 2); // повороты в плане и опуск у стены
+        (run.RunHeightMm, run.FromHeightMm, run.ToHeightMm).ShouldBe((190.0, 1400.0, 190.0));
+    }
+
+    [Fact]
     public void Wall_point_far_from_walls_is_an_issue()
     {
         var r = PumpRoomPiping.Route(Room, [new PipeRunRequest("Ввод", 100, 108, new(4000, 3000), null, new(5000, 4000), 200, Level: 0)], Rules);

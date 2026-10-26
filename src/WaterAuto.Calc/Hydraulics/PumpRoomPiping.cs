@@ -12,10 +12,27 @@ public sealed record PipingRules(double WallOffsetMm, double BracketHeightMm, do
 /// Трубопровод для трассировки: From/To — точка на стене (высота null — вход через стену на высоте кронштейнов) или патрубок
 /// оборудования с высотой оси, мм; Level — ярус (0 — ближе к стене).
 /// </summary>
-public sealed record PipeRunRequest(string Name, int Dn, double OuterMm, PlanPoint From, double? FromHeightMm, PlanPoint To, double? ToHeightMm, int Level);
+public sealed record PipeRunRequest(string Name, int Dn, double OuterMm, PlanPoint From, double? FromHeightMm, PlanPoint To, double? ToHeightMm, int Level)
+{
+    /// <summary>Высота прокладки, мм; null — высота кронштейнов из правил.</summary>
+    public double? RunHeightMm { get; init; }
 
-/// <summary>Трасса: ломаная в плане, длины горизонтальных и вертикальных участков, мм, число отводов.</summary>
-public sealed record PipeRun(string Name, int Dn, IReadOnlyList<PlanPoint> Path, double HorizontalMm, double VerticalMm, int Elbows);
+    /// <summary>Высота прохода через стену в начале / в конце, мм (для точки на стене); null — на высоте прокладки.</summary>
+    public double? FromWallHeightMm { get; init; }
+
+    public double? ToWallHeightMm { get; init; }
+}
+
+/// <summary>Трасса: ломаная в плане, длины горизонтальных и вертикальных участков, мм, число отводов, высота прокладки, мм.</summary>
+public sealed record PipeRun(string Name, int Dn, IReadOnlyList<PlanPoint> Path, double HorizontalMm, double VerticalMm, int Elbows)
+{
+    public double RunHeightMm { get; init; }
+
+    /// <summary>Высоты концов, мм (патрубок или проход через стену).</summary>
+    public double FromHeightMm { get; init; }
+
+    public double ToHeightMm { get; init; }
+}
 
 public sealed record PipingResult(IReadOnlyList<PipeRun> Runs, IReadOnlyList<Issue> Issues);
 
@@ -111,10 +128,14 @@ public static class PumpRoomPiping
                 }
             }
 
+            // Вертикали на концах: до патрубка оборудования или до прохода через стену; каждая — два отвода.
+            var run = r.RunHeightMm ?? rules.BracketHeightMm;
+            var fromH = r.FromHeightMm ?? r.FromWallHeightMm ?? run;
+            var toH = r.ToHeightMm ?? r.ToWallHeightMm ?? run;
             var horizontal = clean.Zip(clean.Skip(1), Dist).Sum();
-            var vertical = (fromWall ? 0 : Math.Abs(rules.BracketHeightMm - r.FromHeightMm!.Value)) + (toWall ? 0 : Math.Abs(rules.BracketHeightMm - r.ToHeightMm!.Value));
-            var elbows = Math.Max(0, clean.Count - 2) + (fromWall ? 0 : 2) + (toWall ? 0 : 2);
-            runs.Add(new PipeRun(r.Name, r.Dn, clean, horizontal, vertical, elbows));
+            var (v1, v2) = (Math.Abs(run - fromH), Math.Abs(run - toH));
+            var elbows = Math.Max(0, clean.Count - 2) + (v1 > 1 ? 2 : 0) + (v2 > 1 ? 2 : 0);
+            runs.Add(new PipeRun(r.Name, r.Dn, clean, horizontal, v1 + v2, elbows) { RunHeightMm = run, FromHeightMm = fromH, ToHeightMm = toH });
         }
 
         return new PipingResult(runs, issues);
