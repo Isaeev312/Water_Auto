@@ -60,6 +60,9 @@ public static class AxonometryDxfWriter
     private static readonly (int Dx, int Dy, double Slope)[] LeaderDirections =
         [(1, 1, 1), (-1, 1, 1), (1, -1, 1), (-1, -1, 1), (1, 1, 1.7), (-1, 1, 1.7), (1, -1, 1.7), (-1, -1, 1.7), (1, 1, 0.58), (-1, 1, 0.58), (1, -1, 0.58), (-1, -1, 0.58)];
 
+    // Начало выноски — доля длины участка: середина, затем ближе к концам.
+    private static readonly double[] LeaderAnchors = [0.5, 0.3, 0.7, 0.15, 0.85];
+
     // Расстояния номера расчётной точки от узла, мм листа.
     private static readonly double[] PointOffsets = [1.2, 2.5, 4.0];
 
@@ -229,7 +232,7 @@ public static class AxonometryDxfWriter
                 var (a, b) = Straight(run, P) ? (P(run[0].From), P(run[^1].To)) : (P(run.MaxBy(s => s.Length.Meters)!.From), P(run.MaxBy(s => s.Length.Meters)!.To));
                 if (!PlaceLabel(doc, labels, placed, a, b, text, style.TextHeightMm, preferBelow: stub > 0))
                 {
-                    PlaceLeader(doc, labels, placed, Lerp(new Piece(a, b, 0, false, false), 0.5), text, style.TextHeightMm);
+                    PlaceLeader(doc, labels, placed, a, b, text, style.TextHeightMm);
                 }
             }
 
@@ -676,16 +679,17 @@ public static class AxonometryDxfWriter
 
     /// <summary>
     /// Подпись на выноске с полкой (как на листах ВК): наклонная линия от трубы и горизонтальная полка с текстом над ней.
-    /// Перебираются двенадцать направлений (наклон 45°, 60°, 30°) и пять длин выноски; проверяются текст с полкой и наклонная линия; если чистого места нет —
+    /// Перебираются пять точек начала на участке, двенадцать направлений (наклон 45°, 60°, 30°) и пять длин выноски; проверяются текст с полкой и наклонная линия; если чистого места нет —
     /// ставится в положении с наименьшим числом наложений (подпись важнее: смена диаметра без подписи — ошибка чертежа).
     /// </summary>
-    private static void PlaceLeader(CadDocument doc, Layer layer, List<Quad> placed, XY at, string text, double h)
+    private static void PlaceLeader(CadDocument doc, Layer layer, List<Quad> placed, XY a, XY b, string text, double h)
     {
         var width = 0.8 * h * text.Length;
         var unit = h / 2.5;
-        (XY Knee, int Dir, Quad Box, int Score)? best = null;
-        foreach (var reach in LeaderReach)
+        (XY At, XY Knee, int Dir, Quad Box, int Score)? best = null;
+        foreach (var (reach, along) in LeaderReach.SelectMany(r => LeaderAnchors.Select(t => (r, t))))
         {
+            var at = new XY(a.X + (along * (b.X - a.X)), a.Y + (along * (b.Y - a.Y)));
             foreach (var (dx, dy, slope) in LeaderDirections)
             {
                 var knee = new XY(at.X + (dx * reach * unit), at.Y + (dy * slope * reach * unit));
@@ -698,20 +702,20 @@ public static class AxonometryDxfWriter
                 var score = (3 * placed.Count(box.Hits)) + placed.Count(leader.Hits);
                 if (score == 0)
                 {
-                    Draw(knee, dx, box);
+                    Draw(at, knee, dx, box);
                     return;
                 }
 
                 if (best is null || score < best.Value.Score)
                 {
-                    best = (knee, dx, box, score);
+                    best = (at, knee, dx, box, score);
                 }
             }
         }
 
-        Draw(best!.Value.Knee, best.Value.Dir, best.Value.Box);
+        Draw(best!.Value.At, best.Value.Knee, best.Value.Dir, best.Value.Box);
 
-        void Draw(XY knee, int dir, Quad box)
+        void Draw(XY at, XY knee, int dir, Quad box)
         {
             placed.Add(box);
             placed.Add(Quad.Line(at, knee, 0.05 * h));
