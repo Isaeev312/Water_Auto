@@ -378,6 +378,7 @@ public static class ProjectPipeline
 
         // Трассы от вводов в здание (ПТ_ВВОД_ЗД) до вводов в насосную (ПТ_НС_ВВОД): по порядку, в обход колонн.
         var inletRoutes = new List<InletRoute>();
+        var (inletRouteZ, inletWallZ) = InletRouteLevels(design);
         if (plan.PumpRooms.Count > 0 && plan.BuildingInlets.Count > 0)
         {
             var pumpInlets = plan.PumpRooms[0].Inlets;
@@ -399,17 +400,47 @@ public static class ProjectPipeline
             if (inletRoutes.Count > 0)
             {
                 var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+
+                // Отметка трассы ввода без коллизий с сетью АУП: задана в проекте — проверяется; не задана — ниже сети на
+                // наибольшее нужное расхождение на пересечениях (полусумма наружных диаметров + 20 мм), с округлением вниз до 50 мм.
+                var zNet = design.PipeElevation - design.PumpRoom.FloorElevation;
+                var outerIn = seriesI.Pick(station.Suction.Pipe.Dn)?.OuterDiameterMm ?? station.Suction.Pipe.Dn;
+                List<PipeSegment3> Segs(double z) => [.. inletRoutes.SelectMany(r => r.Path.Zip(r.Path.Skip(1)).Select(s => new PipeSegment3(s.First, s.Second, z, outerIn)))];
+                var netSegs = routes.SelectMany(rt =>
+                {
+                    var nodes = rt.Nodes.ToDictionary(n => n.Id);
+                    return rt.Segments.Concat(rt.Loops).Select(s => new PipeSegment3(nodes[s.From].Location, nodes[s.To].Location, zNet, seriesI.Pick(s.Dn)?.OuterDiameterMm ?? s.Dn));
+                }).ToList();
+                var need = PipeCollisions.MaxRequiredGap(Segs(0), netSegs, 20);
+                var clear = Math.Floor((zNet - (need / 1000)) * 20) / 20;
+                if (design.PumpRoom.InletRouteElevation is null && need > 0)
+                {
+                    inletRouteZ = clear;
+                }
+
+                var collisions = PipeCollisions.Check(Segs(inletRouteZ), netSegs, 20, "трасса ввода пересекает трубопровод АУП");
+                issues.AddRange(collisions);
+                if (collisions.Count > 0)
+                {
+                    issues.Add(new Issue("inlet.elevation", IssueLevel.Warning, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса ввода на {inletRouteZ:+0.000} пересекает сеть АУП ({collisions.Count} мест): без коллизий — не выше {clear:+0.000} (pumpRoom.inletRouteElevation).")));
+                }
+
+
                 var dnI = station.Suction.Pipe.Dn;
                 var spI = seriesI.Pick(dnI);
                 var ruI = CultureInfo.GetCultureInfo("ru-RU");
-                var meters = inletRoutes.Sum(r => r.LengthMm) / 1000;
+                // Подъём у ввода в здание и опуск у насосной — вертикали и по два отвода на каждую.
+                var rise = Math.Abs(inletRouteZ - inletWallZ);
+                var meters = (inletRoutes.Sum(r => r.LengthMm) / 1000) + (inletRoutes.Count * 2 * rise);
+                var riserElbows = rise > 0.001 ? inletRoutes.Count * 4 : 0;
                 var outerI = spI?.OuterDiameterMm ?? dnI;
                 stationTakeoff = stationTakeoff with
                 {
                     Items = [
                         .. stationTakeoff.Items,
                         new TakeoffItem(TakeoffGroup.PumpStationPipes, spI is null ? $"Трубы стальные DN{dnI}" : string.Create(ruI, $"Трубы {spI.PipeType} DN{dnI}, Ø{spI.OuterDiameterMm:0.##}×{spI.WallMm:0.##} мм"), spI?.Standard, Math.Round(meters, 1), "м", "трасса от вводов в здание до насосной (план трассы ввода)", Role: "inletPipe"),
-                        new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{dnI}", design.FittingStandards.TryGetValue("Отвод", out var esI) ? esI : null, inletRoutes.Sum(r => r.Elbows), "шт.", "повороты трассы ввода", Role: "inletElbow"),
+                        new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{dnI}", design.FittingStandards.TryGetValue("Отвод", out var esI) ? esI : null, inletRoutes.Sum(r => r.Elbows) + riserElbows, "шт.", "повороты трассы ввода, подъёмы и опуски", Role: "inletElbow"),
+                        .. rise > 0.001 ? new[] { new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", inletRoutes.Count, "шт.", "в верхней точке трассы ввода перед опуском к насосной (п. 6.10.29); или аналог", Role: "inletVent") } : [],
                         new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruI, $"Гильза стальная для прохода трубы DN{dnI} через наружную стену: Ø не менее {outerI + PumpCatalog.PipingExtras(normsDir).SleeveExtra:0} мм"), "по месту", inletRoutes.Count, "шт.", "ввод в здание; заделка — по узлу прохода (сальник), Козицина, с. 26", Role: "inletSleeve"),
                     ],
                 };
@@ -713,17 +744,22 @@ public static class ProjectPipeline
         if (inletRoutes.Count > 0)
         {
             var prI = design.PumpRoom;
-            var elevI = prI.InletRouteElevation ?? (prI.GroundElevation - prI.InletDepth);
+            var (elevI, inletElevI) = (inletRouteZ, inletWallZ);
             Write(outDir, InletRouteFile, files, p => InletRouteDxfWriter.Write(
                 p,
                 new InletRouteDrawing(
                     [.. plan.Rooms.Select(r => r.Contour)],
                     [.. plan.Columns.Select(c => c.Outline)],
                     plan.PumpRooms[0].Outline,
-                    [.. inletRoutes.Select(r => new InletRouteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{station.Suction.Pipe.Dn}, {elevI:+0.000}"), r.Path, r.LengthMm))],
+                    [.. inletRoutes.Select(r => new InletRouteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{station.Suction.Pipe.Dn}, {elevI:+0.000}"), r.Path, r.LengthMm)
+                    {
+                        Risers = Math.Abs(elevI - inletElevI) > 0.001 ? [(r.Path[0], Math.Max(elevI, inletElevI), Math.Min(elevI, inletElevI)), (r.Path[^1], Math.Max(elevI, inletElevI), Math.Min(elevI, inletElevI))] : [],
+                        Vent = Math.Abs(elevI - inletElevI) > 0.001 && elevI > inletElevI ? r.Path[^2] : null,
+                    })],
                     [
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Вводов — {inletRoutes.Count}, каждый на полный расчётный расход (п. 6.10.27 СП 485); трубы DN{station.Suction.Pipe.Dn}, стальные на сварке."),
-                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Отметка прокладки {elevI:+0.000} от пола насосной{(prI.InletRouteElevation is null ? " (принята по отметке ввода в насосную; при прокладке по стоянке — уточнить, обычно под перекрытием)" : "")}; всасывающие трубопроводы — с подъёмом к насосной не менее 1:200 (п. 6.10.29)."),
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса по стоянке — под перекрытием на отметке {elevI:+0.000} (от пола насосной); у ввода в здание — подъём с {inletElevI:+0.000}, у насосной — опуск до {inletElevI:+0.000}."),
+                        "В верхней точке трассы перед опуском к насосной — автоматический воздухоотводчик (п. 6.10.29); горизонтальные участки — с уклоном не менее 1:200 в сторону подъёма к воздухоотводчику.",
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса — в обход колонн с отступом не менее {prI.InletRouteClearance:0.0} м; привязки поворотов — к ближайшим стенам."),
                         "Проход через наружную стену — в гильзе с сальниковым уплотнением; узел ввода и водомерный узел — по ТУ водоснабжающей организации.",
                         "Продолжение трасс в насосной — см. план обвязки насосной станции.",
@@ -807,6 +843,15 @@ public static class ProjectPipeline
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Отметки трассы ввода, м от пола насосной: прокладка (под перекрытием — на отметке трубопроводов АУП) и вход в стену.
+    private static (double Route, double Inlet) InletRouteLevels(ProjectDesign design)
+    {
+        var pr = design.PumpRoom;
+        var inlet = pr.GroundElevation - pr.InletDepth - pr.FloorElevation;
+        var route = pr.InletRouteElevation ?? (design.PipeElevation > 0 ? design.PipeElevation - pr.FloorElevation - 0.1 : pr.Height - 0.5);
+        return (route, inlet);
+    }
 
     // Точка на отрезке a–b (по осям, с допуском 1 мм).
     private static bool OnSegment(PlanPoint p, PlanPoint a, PlanPoint b) =>

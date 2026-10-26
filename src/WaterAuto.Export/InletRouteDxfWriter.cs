@@ -8,7 +8,14 @@ using WaterAuto.Core;
 namespace WaterAuto.Export;
 
 /// <summary>Трасса ввода на плане: ломаная, подпись (DN, отметка), длина, мм.</summary>
-public sealed record InletRouteLine(string Label, IReadOnlyList<PlanPoint> Path, double LengthMm);
+public sealed record InletRouteLine(string Label, IReadOnlyList<PlanPoint> Path, double LengthMm)
+{
+    /// <summary>Подъёмы и опуски: точка, отметки верха и низа, м.</summary>
+    public IReadOnlyList<(PlanPoint At, double Top, double Bottom)> Risers { get; init; } = [];
+
+    /// <summary>Воздухоотводчик в верхней точке; null — нет.</summary>
+    public PlanPoint? Vent { get; init; }
+}
 
 /// <summary>Данные плана трассы от ввода в здание до насосной: этаж (помещения, колонны), насосная, трассы, примечания.</summary>
 public sealed record InletRouteDrawing(
@@ -115,6 +122,21 @@ public static class InletRouteDxfWriter
             var vert = Math.Abs(sb.XMm - sa.XMm) < 1;
             Text(((sa.XMm + sb.XMm) / 2) + (vert ? -0.5 * h : 2 * h), ((sa.YMm + sb.YMm) / 2) + (vert ? 2 * h : 0.5 * h), string.Create(ru, $"{line.Label}, L = {line.LengthMm / 1000:0.0} м"), 0.8 * h, vert ? Math.PI / 2 : 0);
 
+            // Стояки (подъём у ввода, опуск у насосной) с отметками и воздухоотводчик в верхней точке.
+            foreach (var (at, top, bottom) in line.Risers)
+            {
+                doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.5 * h, Layer = route });
+                doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm + (3 * h), at.YMm - (3 * h))) { Layer = text });
+                doc.Entities.Add(new Line(P(at.XMm + (3 * h), at.YMm - (3 * h)), P(at.XMm + (12 * h), at.YMm - (3 * h))) { Layer = text });
+                Text(at.XMm + (3.2 * h), at.YMm - (2.8 * h), string.Create(ru, $"отм. {top:+0.000} / {bottom:+0.000}"), 0.7 * h);
+            }
+
+            if (line.Vent is { } vent)
+            {
+                doc.Entities.Add(new Circle { Center = P(vent.XMm, vent.YMm), Radius = 0.8 * h, Layer = route });
+                Text(vent.XMm - (0.3 * h), vent.YMm - (0.4 * h), "В", 0.7 * h);
+            }
+
             // Привязки поворотов: каждый угол трассы — к ближайшей стене помещения по X и по Y.
             var style = new PlanDxfStyle(TextHeightMm: 0.7 * h);
             foreach (var corner in line.Path.Skip(1).Take(line.Path.Count - 2))
@@ -145,8 +167,11 @@ public static class InletRouteDxfWriter
         Text(lx + (2.3 * h), ly - (0.35 * h), data.LineCode, 0.7 * h);
         Text(lx + (7 * h), ly - (0.35 * h), $"трубопровод противопожарного водопровода ({data.LineCode}), ГОСТ 21.205", 0.8 * h);
         doc.Entities.Add(new Circle { Center = P(lx + (3 * h), ly - (2.5 * h)), Radius = 0.8 * h, Layer = route });
-        Text(lx + (7 * h), ly - (2.85 * h), "ввод водопровода в здание", 0.8 * h);
-        var ny = ly - (5.5 * h);
+        Text(lx + (7 * h), ly - (2.85 * h), "ввод водопровода в здание; подъём (опуск) — с отметками верха / низа", 0.8 * h);
+        doc.Entities.Add(new Circle { Center = P(lx + (3 * h), ly - (5 * h)), Radius = 0.8 * h, Layer = route });
+        Text(lx + (2.7 * h), ly - (5.4 * h), "В", 0.7 * h);
+        Text(lx + (7 * h), ly - (5.35 * h), "воздухоотводчик автоматический", 0.8 * h);
+        var ny = ly - (8 * h);
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
         var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))

@@ -189,7 +189,10 @@ public sealed class ProjectPumpRoom
 
     public double PitDepth { get; init; } = 0.6;
 
-    /// <summary>Отметка прокладки трассы от ввода в здание до насосной, м; null — на отметке ввода в насосную.</summary>
+    /// <summary>
+    /// Отметка прокладки трассы от ввода в здание до насосной, м; null — под перекрытием на отметке трубопроводов АУП
+    /// (pipeElevation), без неё — на 0,5 м ниже высоты помещения насосной.
+    /// </summary>
     public double? InletRouteElevation { get; init; }
 
     /// <summary>Отступ трассы ввода от колонн, м.</summary>
