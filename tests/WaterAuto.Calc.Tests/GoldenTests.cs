@@ -14,6 +14,13 @@ public class GoldenTests
 {
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
+    // Предел скорости напорных труб — данные норм (6.7.1.37), числа в C# нет: эталоны проверяются тем же пределом.
+    private static readonly Velocity MaxVelocity = LoadMaxVelocity();
+
+    // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
+    // Ссылка узла на каталог — поле «sprinkler» (tests/Golden/README.md); без неё диапазон не подставляется.
+    private static readonly Dictionary<string, PressureRange> Catalog = LoadCatalog();
+
     public static TheoryData<string> ActiveCases() => Cases(status => status != "pending");
 
     [Theory]
@@ -73,7 +80,16 @@ public class GoldenTests
     private static List<string> Run(string name)
     {
         var (project, solution, network) = Solve(name);
-        solution.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty();
+
+        // При HasErrors словари величин пусты: без этой проверки эталон падал бы с KeyNotFoundException
+        // на первом же обращении к NodePressures/PipeLosses, скрывая настоящую причину.
+        if (solution.HasErrors)
+        {
+            Assert.Fail(
+                $"Эталон «{name}»: расчёт с ошибкой, величины для сверки не годятся.{Environment.NewLine}"
+                + string.Join(Environment.NewLine, solution.Issues.Select(i => $"{i.Code}: {i.Message}")));
+        }
+
         var derived = Derived(project, solution, network);
 
         using var expected = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Golden, name, "expected.json")));
@@ -89,6 +105,7 @@ public class GoldenTests
                 "P" => solution.NodePressures[node!].Mpa,
                 "Q" => solution.PipeFlows[pipe!].LitersPerSecond,
                 "dP" => solution.PipeLosses[pipe!].Mpa,
+                "v" => solution.PipeVelocities[pipe!].MetersPerSecond,
                 "Kt" => network.Pipes.Single(x => x.Id == pipe).Characteristic.Kt,
                 "Qc" => solution.TotalFlow.LitersPerSecond,
                 "Psupply" => derived[$"Psupply:{pipe}"],
@@ -128,7 +145,8 @@ public class GoldenTests
                 _ => NodeKind.Tee,
             },
             new Length(n.GetProperty("z").GetDouble()),
-            n.TryGetProperty("K", out var k) ? new KFactor(k.GetDouble()) : null)).ToList();
+            n.TryGetProperty("K", out var k) ? new KFactor(k.GetDouble()) : null,
+            CatalogRange(n))).ToList();
 
         var pipes = net.GetProperty("pipes").EnumerateArray().Select(p =>
         {
@@ -146,24 +164,66 @@ public class GoldenTests
 
             return new NetworkPipe(
                 p.GetProperty("id").GetString()!, p.GetProperty("from").GetString()!, p.GetProperty("to").GetString()!,
-                new Length(p.GetProperty("length").GetDouble()), Characteristic(p), multiplier);
+                new Length(p.GetProperty("length").GetDouble()), Characteristic(p), multiplier, Geometry(p));
         }).ToList();
 
         var network = new HydraulicNetwork(nodes, pipes);
         var dictating = project.GetProperty("dictating");
-        var solution = TreeSolver.SolveDesign(network, dictating.GetProperty("node").GetString()!, new Pressure(dictating.GetProperty("P").GetDouble()));
+        var solution = TreeSolver.SolveDesign(
+            network, dictating.GetProperty("node").GetString()!, new Pressure(dictating.GetProperty("P").GetDouble()), MaxVelocity);
         return (project, solution, network);
     }
 
-    private static PipeCharacteristic Characteristic(JsonElement pipe) =>
-        pipe.TryGetProperty("A", out var a)
-            ? PipeCharacteristic.FromResistivity(a.GetDouble())
-            : PipeCharacteristics.Resolve(
-                Norms,
-                pipe.GetProperty("standard").GetString()!,
+    private static Velocity LoadMaxVelocity()
+    {
+        var record = Norms.Find("sp485.p6_7_1_37.velocity")
+            ?? throw new InvalidOperationException("В data/norms нет записи «sp485.p6_7_1_37.velocity» (6.7.1.37).");
+        var value = record.Values["pressureMax"]
+            ?? throw new InvalidOperationException($"В записи {record.Id} нет значения pressureMax (6.7.1.37).");
+        return new Velocity(value);
+    }
+
+    private static PipeCharacteristic Characteristic(JsonElement pipe)
+    {
+        if (pipe.TryGetProperty("A", out var a))
+        {
+            return PipeCharacteristic.FromResistivity(a.GetDouble());
+        }
+
+        var resolved = PipeCharacteristics.Resolve(Norms, Geometry(pipe)!)!;
+        if (!resolved.DnMatches)
+        {
+            // Эталон сам ошибочен: Kт найден по D и стенке, но заявленный DN не тот, что в строке табл. Б.2.
+            throw new InvalidOperationException(
+                $"Эталон, труба «{pipe.GetProperty("id").GetString()}»: заявлен DN {resolved.RequestedDn}, "
+                + $"а строка {resolved.NormId} табл. Б.2 — DN {resolved.TableDn}. Сверка идёт по D и стенке, DN — проверяемое поле.");
+        }
+
+        return resolved.Value;
+    }
+
+    // Сортамент есть у стальных труб (standard, od, wall); книжные примеры через A его не задают.
+    private static PipeGeometry? Geometry(JsonElement pipe) =>
+        pipe.TryGetProperty("standard", out var standard)
+            ? new PipeGeometry(
+                standard.GetString()!,
                 pipe.GetProperty("dn").GetInt32(),
                 Length.FromMillimeters(pipe.GetProperty("od").GetDouble()),
-                Length.FromMillimeters(pipe.GetProperty("wall").GetDouble()))!.Value;
+                Length.FromMillimeters(pipe.GetProperty("wall").GetDouble()))
+            : null;
+
+    private static Dictionary<string, PressureRange> LoadCatalog()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, "data", "catalog", "sprinklers.json")));
+        return doc.RootElement.GetProperty("sprinklers").EnumerateArray().ToDictionary(
+            s => s.GetProperty("id").GetString()!,
+            s => new PressureRange(new Pressure(s.GetProperty("pMin").GetDouble()), new Pressure(s.GetProperty("pMax").GetDouble())),
+            StringComparer.Ordinal);
+    }
+
+    // Узел без поля «sprinkler» (или с неизвестным id) диапазона не получает — проверка не выполняется.
+    private static PressureRange? CatalogRange(JsonElement node) =>
+        node.TryGetProperty("sprinkler", out var id) && Catalog.TryGetValue(id.GetString()!, out var range) ? range : null;
 
     // Величины после сети (узел управления, подводящие, насос) — по правилам compat источника.
     private static Dictionary<string, double> Derived(JsonElement project, TreeSolution solution, HydraulicNetwork network)

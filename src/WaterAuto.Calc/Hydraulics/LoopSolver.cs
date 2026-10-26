@@ -68,11 +68,11 @@ public static class LoopSolver
         var losses = network.Pipes.ToDictionary(p => p.Id, p => new Pressure(state.Head[p.From] - state.Head[p.To]), StringComparer.Ordinal);
         var emitters = network.Nodes.Where(n => n.Emitter is not null).ToDictionary(n => n.Id, n => TreeSolver.EmitterFlow(n.Emitter!.Value, pressures[n.Id]), StringComparer.Ordinal);
         var total = network.Pipes.Where(p => p.From == source.Id).Sum(p => flows[p.Id].LitersPerSecond) - network.Pipes.Where(p => p.To == source.Id).Sum(p => flows[p.Id].LitersPerSecond);
-        return new TreeSolution(pressures[source.Id], new Flow(total), pressures, flows, losses, emitters, [], issues);
+        return new TreeSolution(pressures[source.Id], new Flow(total), pressures, flows, losses, emitters, new Dictionary<string, Velocity>(), [], issues);
     }
 
     private static TreeSolution Failed(Issue issue) =>
-        new(Pressure.Zero, new Flow(0), new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), [], [issue]);
+        new(Pressure.Zero, new Flow(0), new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), new Dictionary<string, Velocity>(), [], [issue]);
 
     private sealed class State(Dictionary<string, double> head, Dictionary<string, NetworkNode> nodes, bool converged)
     {

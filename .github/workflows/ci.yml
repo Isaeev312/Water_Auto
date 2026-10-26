@@ -26,6 +26,16 @@ jobs:
     needs: core
     steps:
       - uses: actions/checkout@v4
+        with: { lfs: true }
       - uses: actions/setup-dotnet@v4
-        with: { global-json-file: global.json }
+        with:
+          global-json-file: global.json
+          dotnet-version: 8.0.x
       - run: dotnet build WaterAuto.sln -c Release
+      # Тесты повторно на Windows под русской культурой: у пользователя разделитель «,», а Ubuntu-задание
+      # идёт в инвариантной культуре и не ловит double.Parse / ToString без InvariantCulture.
+      - name: set culture ru-RU
+        run: Set-Culture ru-RU
+      - run: dotnet test WaterAuto.sln -c Release --no-build --logger trx
+      - name: validate json
+        run: dotnet run --project tools/ValidateData -c Release --no-build -- data/

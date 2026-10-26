@@ -1,18 +1,47 @@
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Core;
+using WaterAuto.Norms;
 
 namespace WaterAuto.Calc.Tests;
 
 public class TreeSolverTests
 {
-    private static NetworkNode Sprinkler(string id, double z = 0, double k = 0.47) => new(id, NodeKind.Sprinkler, new Length(z), new KFactor(k));
+    private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
+
+    // Предел скорости напорных труб — данные норм (data/norms/sp485/clauses_6_7_6_9.json), не число в C#.
+    private static Velocity MaxVelocity()
+    {
+        var record = Norms.Find("sp485.p6_7_1_37.velocity")
+            ?? throw new InvalidOperationException("В data/norms нет записи «sp485.p6_7_1_37.velocity» (6.7.1.37).");
+        var value = record.Values["pressureMax"]
+            ?? throw new InvalidOperationException($"В записи {record.Id} нет значения pressureMax (6.7.1.37).");
+        return new Velocity(value);
+    }
+
+    // Узкая труба для проверки скорости: условный DN15, внутренний Ø 16 мм — скорость выше предела 6.7.1.37.
+    private static PipeGeometry NarrowGeometry() =>
+        new("ГОСТ 3262", 15, Length.FromMillimeters(20.0), Length.FromMillimeters(2.0));
+
+    private static NetworkNode Sprinkler(string id, double z = 0, double k = 0.47, PressureRange? range = null) =>
+        new(id, NodeKind.Sprinkler, new Length(z), new KFactor(k), range);
 
     private static NetworkNode Tee(string id, double z = 0) => new(id, NodeKind.Tee, new Length(z));
 
     private static NetworkNode Source(string id, double z = 0) => new(id, NodeKind.Source, new Length(z));
 
-    private static NetworkPipe Pipe(string id, string from, string to, double l = 3, double kt = 16.5) =>
-        new(id, from, to, new Length(l), new PipeCharacteristic(kt));
+    private static PressureRange Range(double min, double max) => new(new Pressure(min), new Pressure(max));
+
+    // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
+    private static HydraulicNetwork TwoSprinklers(PressureRange? range) => new(
+        [Source("S"), Sprinkler("1", range: range), Sprinkler("2")],
+        [Pipe("S-2", "S", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
+
+    private static NetworkPipe Pipe(string id, string from, string to, double l = 3, double kt = 16.5, PipeGeometry? geometry = null) =>
+        new(id, from, to, new Length(l), new PipeCharacteristic(kt), 1.0, geometry);
+
+    // ВГП 42,3×2,8 (DN32), ГОСТ 3262: внутренний Ø 36,7 мм.
+    private static PipeGeometry Geometry() =>
+        new("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
 
     [Fact]
     public void Chain_of_two_sprinklers_matches_hand_calculation()
@@ -20,7 +49,7 @@ public class TreeSolverTests
         // Б.9–Б.10: P2 = P1 + q1²·L/(100·Kт), q2 = 10·K·√P2.
         var net = new HydraulicNetwork(
             [Source("S"), Sprinkler("1"), Sprinkler("2")],
-            [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+            [Pipe("S-2", "S", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
 
         var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
 
@@ -53,8 +82,8 @@ public class TreeSolverTests
     {
         var net = new HydraulicNetwork(
             [Source("S", 0), Tee("a", 3), Tee("b", 3), Sprinkler("1", 3.6), Sprinkler("2", 3.6), Sprinkler("3", 3.5), Sprinkler("4", 3.5)],
-            [Pipe("S-b", "S", "b", 10, 1262), Pipe("b-a", "b", "a", 4, 517), Pipe("a-2", "a", "2"), Pipe("2-1", "2", "1"),
-             Pipe("b-4", "b", "4", 2), Pipe("4-3", "4", "3")]);
+            [Pipe("S-b", "S", "b", 10, 1262, Geometry()), Pipe("b-a", "b", "a", 4, 517, Geometry()), Pipe("a-2", "a", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry()),
+             Pipe("b-4", "b", "4", 2, geometry: Geometry()), Pipe("4-3", "4", "3", geometry: Geometry())]);
 
         var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.15));
 
@@ -113,11 +142,11 @@ public class TreeSolverTests
         var invalidPipes = new[]
         {
             Pipe("length-zero", "S", "1", 0),
-            new NetworkPipe("length-nan", "S", "1", new Length(double.NaN), new PipeCharacteristic(16.5)),
-            new NetworkPipe("length-infinite", "S", "1", new Length(double.PositiveInfinity), new PipeCharacteristic(16.5)),
+            new NetworkPipe("length-nan", "S", "1", new Length(double.NaN), new PipeCharacteristic(16.5), 1.0),
+            new NetworkPipe("length-infinite", "S", "1", new Length(double.PositiveInfinity), new PipeCharacteristic(16.5), 1.0),
             Pipe("kt-zero", "S", "1", 3, 0),
-            new NetworkPipe("kt-nan", "S", "1", new Length(3), new PipeCharacteristic(double.NaN)),
-            new NetworkPipe("kt-infinite", "S", "1", new Length(3), new PipeCharacteristic(double.PositiveInfinity)),
+            new NetworkPipe("kt-nan", "S", "1", new Length(3), new PipeCharacteristic(double.NaN), 1.0),
+            new NetworkPipe("kt-infinite", "S", "1", new Length(3), new PipeCharacteristic(double.PositiveInfinity), 1.0),
             new NetworkPipe("multiplier-zero", "S", "1", new Length(3), new PipeCharacteristic(16.5), 0),
             new NetworkPipe("multiplier-nan", "S", "1", new Length(3), new PipeCharacteristic(16.5), double.NaN),
             new NetworkPipe("multiplier-infinite", "S", "1", new Length(3), new PipeCharacteristic(16.5), double.PositiveInfinity),
@@ -153,5 +182,308 @@ public class TreeSolverTests
         var loose = TreeSolver.SolveDesign(
             new HydraulicNetwork([Source("S"), Sprinkler("1"), Sprinkler("x")], [Pipe("S-1", "S", "1")]), "1", new Pressure(0.1));
         loose.Issues.ShouldContain(i => i.Code == "topology.disconnected" && i.ElementId == "x");
+    }
+
+    [Fact]
+    public void Dictating_node_must_have_the_lowest_emitter_pressure()
+    {
+        // Диктующий — ороситель с наименьшим давлением (Б.1.2.1). Узел «2» выбран диктующим,
+        // но за ним стоит «1» с меньшим давлением: расчёт идёт, величины заполнены, но результат — ошибка.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2"), Sprinkler("3")],
+            [Pipe("S-3", "S", "3"), Pipe("3-2", "3", "2"), Pipe("2-1", "2", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "2", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "dictating.notMinimum" && i.ElementId == "1");
+        result.NodePressures["1"].Mpa.ShouldBeLessThan(0.1);
+        result.SourcePressure.Mpa.ShouldBeGreaterThan(0.1);
+    }
+
+    // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
+    [Fact]
+    public void Emitter_pressure_above_catalog_range_is_a_warning()
+    {
+        // Каталожный диапазон 0,05–1,0 МПа, давление диктующего 1,2 МПа — ороситель работает вне паспортного диапазона.
+        var result = TreeSolver.SolveDesign(TwoSprinklers(Range(0.05, 1.0)), "1", new Pressure(1.2));
+
+        var issue = result.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("node.pressureOutOfRange");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.ElementId.ShouldBe("1");
+        result.HasErrors.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Emitter_pressure_inside_catalog_range_has_no_issue()
+    {
+        // Тот же диапазон, давление 0,5 МПа внутри: замечания нет, величина посчитана.
+        var result = TreeSolver.SolveDesign(TwoSprinklers(Range(0.05, 1.0)), "1", new Pressure(0.5));
+
+        result.Issues.ShouldBeEmpty();
+        result.NodePressures["1"].Mpa.ShouldBe(0.5, 1e-12);
+    }
+
+    [Fact]
+    public void Emitter_without_catalog_range_has_no_pressure_issue()
+    {
+        // У узла нет ссылки на каталог — диапазона нет, замечания нет даже при давлении 1,2 МПа.
+        var result = TreeSolver.SolveDesign(TwoSprinklers(null), "1", new Pressure(1.2));
+
+        result.Issues.ShouldBeEmpty();
+        result.HasErrors.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Terminal_dictating_node_passes_the_minimum_pressure_check()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2"), Sprinkler("3")],
+            [Pipe("S-3", "S", "3", geometry: Geometry()), Pipe("3-2", "3", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
+
+        TreeSolver.SolveDesign(net, "1", new Pressure(0.1)).Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Side_branch_without_pressure_is_an_error_not_a_silent_zero()
+    {
+        // Ороситель «2» на 30 м выше: воды он не получит. Раньше — только предупреждение и q = 0.
+        var net = new HydraulicNetwork(
+            [Source("S"), Tee("a"), Sprinkler("1", 0), Sprinkler("2", 30)],
+            [Pipe("S-a", "S", "a"), Pipe("a-1", "a", "1"), Pipe("a-2", "a", "2")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "branch.noPressure");
+        result.Issues.ShouldContain(i => i.Code == "dictating.notMinimum" && i.ElementId == "2");
+    }
+
+    [Fact]
+    public void Non_finite_or_non_positive_emitter_K_is_rejected()
+    {
+        foreach (var k in new[] { double.NaN, double.PositiveInfinity, 0, -0.47 })
+        {
+            var net = new HydraulicNetwork(
+                [Source("S"), Sprinkler("1", 0, k), Sprinkler("2")],
+                [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+
+            var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+            result.HasErrors.ShouldBeTrue(k.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            result.Issues.ShouldContain(i => i.Code == "node.emitter" && i.ElementId == "1");
+            double.IsFinite(result.SourcePressure.Mpa).ShouldBeTrue();
+        }
+    }
+
+    [Fact]
+    public void Non_finite_elevation_is_rejected()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Tee("a", double.NaN), Sprinkler("1"), Sprinkler("2")],
+            [Pipe("S-a", "S", "a"), Pipe("a-1", "a", "1"), Pipe("a-2", "a", "2")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "node.elevation" && i.ElementId == "a");
+    }
+
+    [Fact]
+    public void Non_finite_or_non_positive_dictating_pressure_is_rejected()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+
+        foreach (var p in new[] { double.NaN, double.PositiveInfinity, 0, -0.1 })
+        {
+            var result = TreeSolver.SolveDesign(net, "1", new Pressure(p));
+
+            result.HasErrors.ShouldBeTrue(p.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            result.Issues.ShouldContain(i => i.Code == "dictating.pressure");
+        }
+    }
+
+    [Fact]
+    public void Node_kind_and_emitter_must_agree()
+    {
+        // Ороситель без K раньше молча считался тройником и выпадал из расхода установки.
+        var noK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([Source("S"), Sprinkler("1"), new NetworkNode("2", NodeKind.Sprinkler, new Length(0))], [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]),
+            "1", new Pressure(0.1));
+        noK.Issues.ShouldContain(i => i.Code == "node.emitterMissing" && i.ElementId == "2");
+
+        var hydrantNoK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([Source("S"), Sprinkler("1"), new NetworkNode("pk", NodeKind.Hydrant, new Length(0))], [Pipe("S-pk", "S", "pk"), Pipe("pk-1", "pk", "1")]),
+            "1", new Pressure(0.1));
+        hydrantNoK.Issues.ShouldContain(i => i.Code == "node.emitterMissing" && i.ElementId == "pk");
+
+        var teeWithK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([Source("S"), Sprinkler("1"), new NetworkNode("a", NodeKind.Tee, new Length(0), new KFactor(0.47))], [Pipe("S-a", "S", "a"), Pipe("a-1", "a", "1")]),
+            "1", new Pressure(0.1));
+        teeWithK.Issues.ShouldContain(i => i.Code == "node.emitterUnexpected" && i.ElementId == "a");
+
+        var sourceWithK = TreeSolver.SolveDesign(
+            new HydraulicNetwork([new NetworkNode("S", NodeKind.Source, new Length(0), new KFactor(0.47)), Sprinkler("1")], [Pipe("S-1", "S", "1")]),
+            "1", new Pressure(0.1));
+        sourceWithK.Issues.ShouldContain(i => i.Code == "node.emitterUnexpected" && i.ElementId == "S");
+    }
+
+    [Fact]
+    public void Failed_solution_has_empty_values_and_zero_pressure()
+    {
+        // Контракт неуспешного решения (T13): при ошибке входа величины не заполняются,
+        // чтобы потребитель не читал из недосчитанной сети правдоподобные числа.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), new NetworkNode("2", NodeKind.Sprinkler, new Length(0))],
+            [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "node.emitterMissing" && i.ElementId == "2");
+        result.NodePressures.ShouldBeEmpty();
+        result.PipeFlows.ShouldBeEmpty();
+        result.PipeLosses.ShouldBeEmpty();
+        result.EmitterFlows.ShouldBeEmpty();
+        result.PipeVelocities.ShouldBeEmpty();
+        result.DictatingPath.ShouldBeEmpty();
+        result.SourcePressure.ShouldBe(Pressure.Zero);
+        result.TotalFlow.ShouldBe(Flow.Zero);
+    }
+
+    [Fact]
+    public void Velocity_is_reported_for_pipes_with_geometry()
+    {
+        // ВГП 42,3×2,8 (DN32): внутренний Ø 36,7 мм. v = Q / (π·d²/4), Q в м³/с.
+        var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, geometry), Pipe("2-1", "2", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        var warning = result.Issues.ShouldHaveSingleItem();
+        warning.Code.ShouldBe("pipe.noGeometry");
+        warning.ElementId.ShouldBe("2-1");
+        var q = result.PipeFlows["S-2"].LitersPerSecond / 1000.0;
+        var expected = q / (Math.PI * 0.0367 * 0.0367 / 4);
+        result.PipeVelocities["S-2"].MetersPerSecond.ShouldBe(expected, 1e-9);
+        result.PipeVelocities.ContainsKey("2-1").ShouldBeFalse();
+        geometry.InnerDiameter.Millimeters.ShouldBe(36.7, 1e-9);
+    }
+
+    [Fact]
+    public void Pipe_without_geometry_is_a_warning_and_the_result_is_computed()
+    {
+        // Без сортамента скорость не проверить: расчёт идёт, величины заполнены, в замечаниях — предупреждение.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1")],
+            [Pipe("S-1", "S", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        var issue = result.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("pipe.noGeometry");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.ElementId.ShouldBe("S-1");
+        result.HasErrors.ShouldBeFalse();
+        var q = 10 * 0.47 * Math.Sqrt(0.1);
+        result.TotalFlow.LitersPerSecond.ShouldBe(q, 1e-12);
+        result.PipeFlows["S-1"].LitersPerSecond.ShouldBe(q, 1e-12);
+        result.PipeVelocities.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Pipe_with_geometry_has_no_noGeometry_warning()
+    {
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1")],
+            [Pipe("S-1", "S", "1", geometry: Geometry())]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.Issues.ShouldBeEmpty();
+        result.PipeVelocities.ContainsKey("S-1").ShouldBeTrue();
+    }
+
+    // Предел скорости — данные норм (6.7.1.37), поэтому тест читает его из data/norms через Norms.Find.
+    [Fact]
+    public void Velocity_above_norm_limit_is_a_warning()
+    {
+        var limit = MaxVelocity();
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, NarrowGeometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1), limit);
+
+        var velocity = result.PipeVelocities["S-2"];
+        velocity.MetersPerSecond.ShouldBeGreaterThan(limit.MetersPerSecond);
+        var issue = result.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("pipe.velocity");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.ElementId.ShouldBe("S-2");
+        issue.Message.ShouldContain(velocity.ToString());
+        issue.Message.ShouldContain(limit.ToString());
+        result.HasErrors.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Velocity_at_or_below_norm_limit_has_no_warning()
+    {
+        var limit = MaxVelocity();
+        var wide = new PipeGeometry("ГОСТ 3262", 100, Length.FromMillimeters(108.0), Length.FromMillimeters(4.0));
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, wide), Pipe("2-1", "2", "1", geometry: wide)]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1), limit);
+
+        result.PipeVelocities.Values.ShouldAllBe(v => v.MetersPerSecond <= limit.MetersPerSecond);
+        result.Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Velocity_check_is_skipped_when_limit_is_not_given()
+    {
+        // Необязательный предел (null по умолчанию): существующие вызовы SolveDesign проверку не запускают.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), Sprinkler("2")],
+            [new NetworkPipe("S-2", "S", "2", new Length(3), new PipeCharacteristic(16.5), 1.0, NarrowGeometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.Issues.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Pipes_without_geometry_are_not_checked_for_velocity()
+    {
+        // Скорость считается только для труб с Geometry: без сортамента проверять нечего (pipe.noGeometry).
+        var limit = MaxVelocity();
+        var net = new HydraulicNetwork([Source("S"), Sprinkler("1")], [Pipe("S-1", "S", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1), limit);
+
+        result.PipeVelocities.ShouldBeEmpty();
+        result.Issues.ShouldContain(i => i.Code == "pipe.noGeometry" && i.ElementId == "S-1");
+        result.Issues.ShouldNotContain(i => i.Code == "pipe.velocity");
+    }
+
+    [Fact]
+    public void Pipe_geometry_without_positive_inner_diameter_is_rejected()
+    {
+        foreach (var (od, wall) in new[] { (42.3, 22.0), (42.3, double.NaN), (0.0, 2.8), (-42.3, 2.8) })
+        {
+            var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(od), Length.FromMillimeters(wall));
+            var result = TreeSolver.SolveDesign(
+                new HydraulicNetwork([Source("S"), Sprinkler("1")], [new NetworkPipe("S-1", "S", "1", new Length(3), new PipeCharacteristic(16.5), 1.0, geometry)]),
+                "1", new Pressure(0.1));
+
+            result.Issues.ShouldContain(i => i.Code == "pipe.geometry" && i.ElementId == "S-1", $"{od}x{wall}");
+        }
     }
 }
