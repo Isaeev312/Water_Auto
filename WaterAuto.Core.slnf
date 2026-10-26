@@ -11,9 +11,13 @@
       "src\\WaterAuto.Import\\WaterAuto.Import.csproj",
       "src\\WaterAuto.Norms\\WaterAuto.Norms.csproj",
       "src\\WaterAuto.Reports\\WaterAuto.Reports.csproj",
+      "tests\\WaterAuto.Application.Tests\\WaterAuto.Application.Tests.csproj",
       "tests\\WaterAuto.Architecture.Tests\\WaterAuto.Architecture.Tests.csproj",
       "tests\\WaterAuto.Calc.Tests\\WaterAuto.Calc.Tests.csproj",
+      "tests\\WaterAuto.Export.Tests\\WaterAuto.Export.Tests.csproj",
       "tests\\WaterAuto.Import.Tests\\WaterAuto.Import.Tests.csproj",
+      "tests\\WaterAuto.Reports.Tests\\WaterAuto.Reports.Tests.csproj",
+      "tests\\WaterAuto.Norms.Tests\\WaterAuto.Norms.Tests.csproj",
       "tools\\ValidateData\\ValidateData.csproj"
     ]
   }

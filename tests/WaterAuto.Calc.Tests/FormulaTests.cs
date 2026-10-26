@@ -25,7 +25,7 @@ public class FormulaTests
     public void Pipe_loss_is_Q2_L_over_100_Kt()
     {
         // ГидРаВПТ R2 из файла .hvd (без множителя): ветвь 1, участок 1-2 — 0,008536 МПа.
-        var pipe = new NetworkPipe("1-2", "a", "b", new Length(2.31), new PipeCharacteristic(11.238334));
+        var pipe = new NetworkPipe("1-2", "a", "b", new Length(2.31), new PipeCharacteristic(11.238334), 1.0);
         var q = 2.0379;
         (TreeSolver.Resistance(pipe) * q * q).ShouldBe(0.008536, 1e-6);
     }
@@ -48,6 +48,39 @@ public class FormulaTests
     }
 
     [Fact]
+    public void Table_dn_is_reported_when_requested_dn_differs()
+    {
+        // ГОСТ 3262 42,3×2,8 — строка DN 32 табл. Б.2. При запрошенном DN 100 Kт берётся из найденной
+        // строки, но DN расходится: это видно по TableDn/DnMatches (замечание — на этапе «Граф сети»).
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 100, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
+        kt.Source.ShouldBe(CharacteristicSource.TableB2);
+        kt.RequestedDn.ShouldBe(100);
+        kt.TableDn.ShouldBe(32);
+        kt.DnMatches.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Table_dn_matches_requested_dn()
+    {
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
+        kt.RequestedDn.ShouldBe(32);
+        kt.TableDn.ShouldBe(32);
+        kt.DnMatches.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Formula_B8_has_no_table_dn()
+    {
+        // 42,3×4,0 в табл. Б.2 нет (там 42,3×2,8 — DN 32), Kт считается по формуле Б.8:
+        // строки для сверки DN нет, DnMatches = true.
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 100, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!;
+        kt.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        kt.RequestedDn.ShouldBe(100);
+        kt.TableDn.ShouldBeNull();
+        kt.DnMatches.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Kt_is_null_for_unknown_standard()
     {
         PipeCharacteristics.Resolve(Norms, "PPR", 32, Length.FromMillimeters(40), Length.FromMillimeters(3.7)).ShouldBeNull();
@@ -58,6 +91,43 @@ public class FormulaTests
     {
         // Табл. Б.3 — для DN 20–200; ВГП DN15 с нестандартной стенкой формулой не считается.
         PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 15, Length.FromMillimeters(21.3), Length.FromMillimeters(3.2)).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Formula_B7_row_is_marked_unusable_and_not_used()
+    {
+        // Сноска footnotes.B7: с напечатанными коэффициентами формула Б.7 не воспроизводит табл. Б.1,
+        // поэтому строка помечена usable=false и в расчёте не применяется.
+        var b7 = Norms.Find("sp485.tB_3.A.gost3262")!;
+        b7.Attributes.GetValueOrDefault(NormKeys.AttrUsable).ShouldBe("false");
+
+        // ГОСТ 3262, ВГП 42,3×4,0 — вне табл. Б.2: Resolve берёт коэффициенты Kt формулы Б.8 (quantity == "Kt"),
+        // а не коэффициенты A формулы Б.7.
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!;
+        kt.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        var used = Norms.Find(kt.NormId)!;
+        used.Attributes.GetValueOrDefault(NormKeys.AttrQuantity).ShouldBe(NormKeys.Kt);
+        used.Attributes.GetValueOrDefault(NormKeys.AttrUsable).ShouldNotBe("false");
+    }
+
+    [Fact]
+    public void Resolve_does_not_use_records_marked_usable_false()
+    {
+        // Записи — копии настоящих строк норм; добавлен только признак usable=false.
+        // Если подходящая по стандарту и DN строка помечена неприменимой, Resolve её не берёт:
+        // ни строку табл. Б.2, ни коэффициенты формулы Б.8.
+        var b2 = Norms.Find("sp485.tB_2.gost3262.dn32.42_3x2_8")!;
+        var b2Unusable = b2 with { Attributes = MarkUnusable(b2.Attributes) };
+        var kt = Norms.Find("sp485.tB_3.Kt.gost3262")!;
+
+        // Строка табл. Б.2 неприменима — остаётся формула Б.8.
+        var resolved = PipeCharacteristics.Resolve(new FixedNorms(b2Unusable, kt), "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
+        resolved.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        resolved.NormId.ShouldBe(kt.Id);
+
+        // Коэффициенты формулы Б.8 тоже неприменимы — считать нечем.
+        var ktUnusable = kt with { Attributes = MarkUnusable(kt.Attributes) };
+        PipeCharacteristics.Resolve(new FixedNorms(ktUnusable), "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8)).ShouldBeNull();
     }
 
     [Fact]
@@ -75,5 +145,62 @@ public class FormulaTests
     public void Norm_record_preserves_file_edition()
     {
         Norms.Find("sp485.tB_3.Kt.gost3262")!.Edition.ShouldBe("с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)");
+    }
+
+    [Fact]
+    public void Table_B2_rows_marked_for_outdoor_networks_are_flagged()
+    {
+        // 159×4 отмечена «*» — трубы наружного водоснабжения; 159×3,2 — нет.
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 10704", 150, Length.FromMillimeters(159), Length.FromMillimeters(4.0))!.OutdoorOnly.ShouldBeTrue();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 10704", 150, Length.FromMillimeters(159), Length.FromMillimeters(3.2))!.OutdoorOnly.ShouldBeFalse();
+        PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!.OutdoorOnly.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Table_B2_records_contain_all_keys_used_by_calc()
+    {
+        // Ключи NormKeys должны совпадать с таблицей требований tools/ValidateData (T4) и с data/norms:
+        // иначе Calc ищет в норме поле, которого там нет.
+        var rows = Norms.ByClause(NormKeys.ClauseTableB2).ToList();
+        rows.ShouldNotBeEmpty();
+        foreach (var row in rows)
+        {
+            foreach (var key in new[] { NormKeys.Dn, NormKeys.DOut, NormKeys.Wall, NormKeys.Kt })
+            {
+                row.Values.ContainsKey(key).ShouldBeTrue($"{row.Id}: нет ключа values.{key}");
+            }
+        }
+    }
+
+    [Fact]
+    public void Kt_resolves_from_pipe_geometry()
+    {
+        var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
+        PipeCharacteristics.Resolve(Norms, geometry)!.Value.Kt.ShouldBe(16.5);
+    }
+
+    [Fact]
+    public void Velocity_formula_uses_cubic_metres_per_second()
+    {
+        // 10 л/с через Ø 100 мм: 0,01 / (π·0,01/4) = 1,2732 м/с.
+        Velocity.Of(new Flow(10), Length.FromMillimeters(100)).MetersPerSecond.ShouldBe(1.27324, 1e-5);
+    }
+
+    private static Dictionary<string, string> MarkUnusable(IReadOnlyDictionary<string, string> attributes)
+    {
+        var copy = attributes.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
+        copy[NormKeys.AttrUsable] = "false";
+        return copy;
+    }
+
+    private sealed class FixedNorms : INormsProvider
+    {
+        private readonly NormRecord[] _records;
+
+        public FixedNorms(params NormRecord[] records) => _records = records;
+
+        public NormRecord? Find(string id) => Array.Find(_records, r => r.Id == id);
+
+        public IEnumerable<NormRecord> ByClause(string clause) => Array.FindAll(_records, r => r.Clause == clause);
     }
 }

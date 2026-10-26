@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/materials.schema.json",
+  "title": "Материалы для спецификации",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "steelDensity"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "steelDensity": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Плотность стали для теоретической массы труб, т/м³."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "analogNote": {
+      "type": "string",
+      "description": "Примечание к изделиям с маркой изготовителя (оросители)."
+    },
+    "coating": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "designation": {
+          "type": "string"
+        }
+      },
+      "description": "Антикоррозионное покрытие труб; количество — площадь наружной поверхности, м²."
+    }
+  }
+}

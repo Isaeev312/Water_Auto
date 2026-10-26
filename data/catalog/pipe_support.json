@@ -1,0 +1,54 @@
+{
+  "$schema": "../schemas/pipe_support.schema.json",
+  "schemaVersion": 1,
+  "notes": [
+    "Состав узла крепления и резьба по DN — практика монтажа (не норма); тип хомута и анкера уточнить по каталогу производителя и материалу перекрытия.",
+    "Держатели — из негорючих материалов (п. 6.7.1.9 СП 485), крепятся непосредственно к конструкциям здания (п. 6.7.1.13)."
+  ],
+  "threads": [
+    {
+      "dnMax": 50,
+      "thread": "М8"
+    },
+    {
+      "dnMax": 100,
+      "thread": "М10"
+    },
+    {
+      "dnMax": 200,
+      "thread": "М12"
+    }
+  ],
+  "items": [
+    {
+      "name": "Хомут трубный DN{dn} с гайкой {thread}",
+      "unit": "шт.",
+      "perSupport": 1,
+      "designation": "по ТУ изготовителя"
+    },
+    {
+      "name": "Шпилька резьбовая {thread}, L = {rod} мм",
+      "designation": "DIN 975",
+      "unit": "шт.",
+      "perSupport": 1
+    },
+    {
+      "name": "Анкер клиновой {thread}",
+      "unit": "шт.",
+      "perSupport": 1,
+      "designation": "по ТУ изготовителя"
+    },
+    {
+      "name": "Гайка {thread}",
+      "designation": "ГОСТ ISO 4032-2014",
+      "unit": "шт.",
+      "perSupport": 2
+    },
+    {
+      "name": "Шайба {thread}",
+      "designation": "ГОСТ 11371-78",
+      "unit": "шт.",
+      "perSupport": 2
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/pump_sets.schema.json",
+  "title": "Комплектные насосные установки пожаротушения: кривые и габариты",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "maker",
+    "series",
+    "verified",
+    "sets"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "maker": {
+      "type": "string"
+    },
+    "series": {
+      "type": "string"
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "designation",
+          "pump",
+          "mainPumps",
+          "standbyPumps",
+          "powerKw",
+          "pumpCurve",
+          "lengthMm",
+          "widthMm",
+          "heightMm",
+          "collectorAxisMm",
+          "collectorDn",
+          "cabinet",
+          "source"
+        ],
+        "properties": {
+          "designation": {
+            "type": "string"
+          },
+          "pump": {
+            "type": "string"
+          },
+          "mainPumps": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "standbyPumps": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "powerKw": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "pumpCurve": {
+            "type": "array",
+            "minItems": 3,
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "description": "[Q, м³/ч; H, м] одного насоса"
+          },
+          "lengthMm": {
+            "type": "number"
+          },
+          "widthMm": {
+            "type": "number"
+          },
+          "heightMm": {
+            "type": "number"
+          },
+          "collectorAxisMm": {
+            "type": "number",
+            "description": "Высота оси коллектора от пола, мм (графа H2)"
+          },
+          "collectorDn": {
+            "type": "integer"
+          },
+          "cabinet": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "heightMm",
+              "lengthMm",
+              "widthMm"
+            ],
+            "properties": {
+              "heightMm": {
+                "type": "number"
+              },
+              "lengthMm": {
+                "type": "number"
+              },
+              "widthMm": {
+                "type": "number"
+              }
+            }
+          },
+          "source": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

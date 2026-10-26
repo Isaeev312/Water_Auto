@@ -13,4 +13,5 @@ public enum IssueLevel
 /// <param name="Code">Постоянный код, например «topology.cycle».</param>
 /// <param name="ElementId">ID узла или трубы, к которому относится замечание.</param>
 /// <param name="Clause">Пункт нормы, если есть.</param>
-public sealed record Issue(string Code, IssueLevel Level, string Message, string? ElementId = null, string? Clause = null);
+/// <param name="Location">Место на плане, мм — для слоя ПТ_ЗАМЕЧАНИЯ и сообщений импорта.</param>
+public sealed record Issue(string Code, IssueLevel Level, string Message, string? ElementId = null, string? Clause = null, PlanPoint? Location = null);

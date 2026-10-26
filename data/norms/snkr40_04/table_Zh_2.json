@@ -1,0 +1,270 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СН КР 40-04:2025",
+  "edition": "2025 (Госагентство архитектуры, строительства и ЖКХ при Кабмине КР)",
+  "verified": false,
+  "clause": "табл. Ж.2",
+  "title": "Минимальный расход воды на внутреннее пожаротушение для производственных и складских зданий",
+  "source": "СН КР 40-04_2025 Внутр. водопровод и канализ.pdf, русская часть, прил. Ж, табл. Ж.2 (с. 138).",
+  "columns": {
+    "volumeMin": "объём здания «от», тыс. м³",
+    "volumeSplit": "граница столбцов «до 150 включ.» / «свыше 150», тыс. м³",
+    "heightMax": "высота здания до … включ., м",
+    "jets*": "число ПК для расчёта расхода",
+    "jetFlow*": "минимальный расход диктующего ПК, л/с"
+  },
+  "records": [
+    {
+      "id": "snkr4004.tZh_2.I_II",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 2,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 3,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "I и II",
+        "category": "А,Б,В",
+        "constructionClass": "С0,С1"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.III_ABV",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 2,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 3,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "III",
+        "category": "А,Б,В",
+        "constructionClass": "С0"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.III_GD",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": null,
+        "jetFlowUpTo150": null,
+        "jetsOver150": 2,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "III",
+        "category": "Г,Д",
+        "constructionClass": "С0,С1"
+      },
+      "refs": {
+        "jetsUpTo150": "«Не требуется»",
+        "jetFlowUpTo150": "«Не требуется»"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.IV_AB",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 2,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 3,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "IV",
+        "category": "А,Б",
+        "constructionClass": "С0"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.IV_V_C01",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 2,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 2,
+        "jetFlowOver150": 5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "IV",
+        "category": "В",
+        "constructionClass": "С0,С1"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.IV_V_C23",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 3,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 4,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "IV",
+        "category": "В",
+        "constructionClass": "С2,С3"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.IV_GD",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": null,
+        "jetFlowUpTo150": null,
+        "jetsOver150": 2,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "IV",
+        "category": "Г,Д",
+        "constructionClass": "С0,С1,С2,С3"
+      },
+      "refs": {
+        "jetsUpTo150": "«Не требуется»",
+        "jetFlowUpTo150": "«Не требуется»"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.V_V",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 2,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 2,
+        "jetFlowOver150": 5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "V",
+        "category": "В",
+        "constructionClass": "не нормируется"
+      }
+    },
+    {
+      "id": "snkr4004.tZh_2.V_GD",
+      "clause": "табл. Ж.2",
+      "values": {
+        "volumeMin": 0.5,
+        "volumeSplit": 150,
+        "heightMax": 50,
+        "jetsUpTo150": 1,
+        "jetFlowUpTo150": 2.5,
+        "jetsOver150": 2,
+        "jetFlowOver150": 2.5
+      },
+      "units": {
+        "volumeMin": "тыс. м³",
+        "volumeSplit": "тыс. м³",
+        "heightMax": "м",
+        "jetsUpTo150": "шт.",
+        "jetFlowUpTo150": "л/с",
+        "jetsOver150": "шт.",
+        "jetFlowOver150": "л/с"
+      },
+      "attrs": {
+        "fireResistance": "V",
+        "category": "Г,Д",
+        "constructionClass": "не нормируется"
+      }
+    }
+  ]
+}

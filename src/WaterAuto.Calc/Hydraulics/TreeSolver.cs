@@ -2,7 +2,11 @@ using WaterAuto.Core;
 
 namespace WaterAuto.Calc.Hydraulics;
 
-/// <summary>Результат расчёта тупиковой сети в проектном режиме (README §5.4).</summary>
+/// <summary>
+/// Результат расчёта тупиковой сети в проектном режиме (README §5.4). PipeVelocities — только для труб с Geometry.
+/// При HasErrors словари пусты; читать величины только после проверки HasErrors.
+/// Исключение — <c>dictating.notMinimum</c>: тогда величины заполнены для диагностики (README §5.7).
+/// </summary>
 public sealed record TreeSolution(
     Pressure SourcePressure,
     Flow TotalFlow,
@@ -10,9 +14,14 @@ public sealed record TreeSolution(
     IReadOnlyDictionary<string, Flow> PipeFlows,
     IReadOnlyDictionary<string, Pressure> PipeLosses,
     IReadOnlyDictionary<string, Flow> EmitterFlows,
+    IReadOnlyDictionary<string, Velocity> PipeVelocities,
     IReadOnlyList<string> DictatingPath,
     IReadOnlyList<Issue> Issues)
 {
+    /// <summary>
+    /// Есть ошибка — результат для записки и подбора насоса непригоден. При ошибках входных данных и топологии
+    /// величины пусты; при <c>dictating.notMinimum</c> (диктующий выбран неверно) они заполнены, чтобы было видно, где давление ниже.
+    /// </summary>
     public bool HasErrors => Issues.Any(i => i.Level == IssueLevel.Error);
 }
 
@@ -25,7 +34,7 @@ public sealed record TreeSolution(
 /// </summary>
 public static class TreeSolver
 {
-    public static TreeSolution SolveDesign(HydraulicNetwork network, string dictatingNodeId, Pressure dictatingPressure)
+    public static TreeSolution SolveDesign(HydraulicNetwork network, string dictatingNodeId, Pressure dictatingPressure, Velocity? maxVelocity = null)
     {
         ArgumentNullException.ThrowIfNull(network);
         var issues = new List<Issue>();
@@ -35,7 +44,34 @@ public static class TreeSolver
             if (!nodes.TryAdd(n.Id, n))
             {
                 issues.Add(new Issue("topology.duplicateNode", IssueLevel.Error, $"Узел {n.Id} задан дважды.", n.Id));
+                continue;
             }
+
+            if (!double.IsFinite(n.Elevation.Meters))
+            {
+                issues.Add(new Issue("node.elevation", IssueLevel.Error, $"Отметка узла {n.Id} должна быть конечным числом.", n.Id));
+            }
+
+            var emits = n.Kind is NodeKind.Sprinkler or NodeKind.Hydrant;
+            if (emits && n.Emitter is null)
+            {
+                issues.Add(new Issue("node.emitterMissing", IssueLevel.Error, $"Узел {n.Id} ({n.Kind}) без коэффициента K: его расход выпал бы из расчёта.", n.Id));
+            }
+
+            if (!emits && n.Emitter is not null)
+            {
+                issues.Add(new Issue("node.emitterUnexpected", IssueLevel.Error, $"Узел {n.Id} ({n.Kind}) не может иметь коэффициент K.", n.Id));
+            }
+
+            if (n.Emitter is { } k && (!double.IsFinite(k.Value) || k.Value <= 0))
+            {
+                issues.Add(new Issue("node.emitter", IssueLevel.Error, $"Узел {n.Id}: K должен быть конечным и больше нуля.", n.Id));
+            }
+        }
+
+        if (!double.IsFinite(dictatingPressure.Mpa) || dictatingPressure.Mpa <= 0)
+        {
+            issues.Add(new Issue("dictating.pressure", IssueLevel.Error, $"Давление диктующего оросителя должно быть конечным и больше нуля, задано {dictatingPressure}.", dictatingNodeId));
         }
 
         var incoming = new Dictionary<string, NetworkPipe>(StringComparer.Ordinal);
@@ -64,6 +100,16 @@ public static class TreeSolver
                 || !double.IsFinite(p.LossMultiplier) || p.LossMultiplier <= 0)
             {
                 issues.Add(new Issue("pipe.characteristic", IssueLevel.Error, $"Труба {p.Id}: Kт и множитель потерь должны быть конечными и больше нуля.", p.Id));
+            }
+
+            if (p.Geometry is { } g && (!double.IsFinite(g.InnerDiameter.Meters) || g.InnerDiameter.Meters <= 0))
+            {
+                issues.Add(new Issue("pipe.geometry", IssueLevel.Error, $"Труба {p.Id}: наружный диаметр и стенка должны давать внутренний диаметр больше нуля.", p.Id));
+            }
+
+            if (p.Geometry is null)
+            {
+                issues.Add(new Issue("pipe.noGeometry", IssueLevel.Warning, $"Труба {p.Id}: сортамент не задан — скорость не проверяется.", p.Id));
             }
 
             if (!incoming.TryAdd(p.To, p))
@@ -135,7 +181,7 @@ public static class TreeSolver
         var emitters = new Dictionary<string, Flow>(StringComparer.Ordinal);
 
         // h = P + z/100 — пьезометрическое давление (README §5.3).
-        head[dictating.Id] = dictatingPressure.Mpa + (dictating.Elevation.Meters / 100.0);
+        head[dictating.Id] = dictatingPressure.Mpa + Pressure.FromHeight(dictating.Elevation).Mpa;
         var flow = NodeOutflow(dictating, null, head[dictating.Id], children, nodes, characteristic, head, pipeFlows, losses, emitters, issues);
         for (var i = 0; i < pathPipes.Count; i++)
         {
@@ -148,9 +194,57 @@ public static class TreeSolver
             flow += NodeOutflow(upstream, p.Id, head[upstream.Id], children, nodes, characteristic, head, pipeFlows, losses, emitters, issues);
         }
 
-        var pressures = head.ToDictionary(kv => kv.Key, kv => new Pressure(kv.Value - (nodes[kv.Key].Elevation.Meters / 100.0)), StringComparer.Ordinal);
-        return new TreeSolution(pressures[source.Id], new Flow(flow), pressures, pipeFlows, losses, emitters, [.. pathPipes.Select(p => p.Id)], issues);
+        var pressures = head.ToDictionary(kv => kv.Key, kv => new Pressure(kv.Value - Pressure.FromHeight(nodes[kv.Key].Elevation).Mpa), StringComparer.Ordinal);
+        var velocities = new Dictionary<string, Velocity>(StringComparer.Ordinal);
+        foreach (var p in network.Pipes)
+        {
+            if (p.Geometry is { } g && pipeFlows.TryGetValue(p.Id, out var q))
+            {
+                velocities[p.Id] = Velocity.Of(q, g.InnerDiameter);
+            }
+        }
+
+        // Предел скорости — данные норм (6.7.1.37): Calc норм не знает, предел передаёт вызывающий. null — проверка не выполняется.
+        if (maxVelocity is { } velocityLimit)
+        {
+            foreach (var p in network.Pipes)
+            {
+                if (velocities.TryGetValue(p.Id, out var v) && v.MetersPerSecond > velocityLimit.MetersPerSecond)
+                {
+                    issues.Add(new Issue("pipe.velocity", IssueLevel.Warning,
+                        $"Скорость в трубе {p.Id} ({v}) выше предела {velocityLimit}.", p.Id));
+                }
+            }
+        }
+
+        // Диктующий ороситель — с наименьшим давлением среди работающих (Б.1.2.1). Если у другого эмиттера давление ниже,
+        // он не даст нормативной интенсивности, а давление источника занижено: диктующий выбран неверно.
+        foreach (var id in emitters.Keys.Order(StringComparer.Ordinal))
+        {
+            if (id != dictating.Id && pressures[id].Mpa < dictatingPressure.Mpa - PressureTolerance)
+            {
+                issues.Add(new Issue("dictating.notMinimum", IssueLevel.Error,
+                    $"Давление у {id} ({pressures[id]}) ниже давления диктующего {dictating.Id} ({dictatingPressure}): диктующий ороситель выбран неверно.", id));
+            }
+        }
+
+        // Рабочий диапазон pMin–pMax — данные производителя (каталог), не норма: вне диапазона паспортная карта орошения
+        // не гарантируется, поэтому расчёт идёт, а в замечаниях — предупреждение с давлением и диапазоном.
+        foreach (var node in network.Nodes)
+        {
+            if (node.OperatingRange is { } range && emitters.ContainsKey(node.Id)
+                && pressures.TryGetValue(node.Id, out var pressure) && !range.Contains(pressure))
+            {
+                issues.Add(new Issue("node.pressureOutOfRange", IssueLevel.Warning,
+                    $"Давление у {node.Id} ({pressure}) вне рабочего диапазона оросителя {range} по каталогу производителя.", node.Id));
+            }
+        }
+
+        return new TreeSolution(pressures[source.Id], new Flow(flow), pressures, pipeFlows, losses, emitters, velocities, [.. pathPipes.Select(p => p.Id)], issues);
     }
+
+    /// <summary>Допуск сравнения давлений, МПа: только округление double, не нормативное число.</summary>
+    private const double PressureTolerance = 1e-9;
 
     /// <summary>r в МПа/(л/с)²: ΔP = r·Q², r = L/(100·Kт)·множитель (Б.6, Б.31).</summary>
     internal static double Resistance(NetworkPipe pipe)
@@ -173,7 +267,7 @@ public static class TreeSolver
         var total = 0.0;
         if (node.Emitter is { } k)
         {
-            var q = EmitterFlow(k, new Pressure(h - (node.Elevation.Meters / 100.0)));
+            var q = EmitterFlow(k, new Pressure(h - Pressure.FromHeight(node.Elevation).Mpa));
             emitters[node.Id] = q;
             total += q.LitersPerSecond;
         }
@@ -237,7 +331,7 @@ public static class TreeSolver
         if (node.Emitter is { } k)
         {
             c += 10.0 * k.Value;
-            level = node.Elevation.Meters / 100.0;
+            level = Pressure.FromHeight(node.Elevation).Mpa;
         }
 
         foreach (var child in children.GetValueOrDefault(node.Id, []))
@@ -283,5 +377,5 @@ public static class TreeSolver
 
     private static TreeSolution Failed(List<Issue> issues) =>
         new(Pressure.Zero, Flow.Zero, new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(),
-            new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), [], issues);
+            new Dictionary<string, Pressure>(), new Dictionary<string, Flow>(), new Dictionary<string, Velocity>(), [], issues);
 }

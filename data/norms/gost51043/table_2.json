@@ -1,0 +1,288 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "ГОСТ Р 51043-2002",
+  "edition": "2002",
+  "clause": "табл. 2",
+  "title": "Номинальная температура срабатывания спринклерных оросителей, отклонение, время срабатывания, маркировочный цвет (п. 5.1.1.6)",
+  "source": "ГОСТ Р 51043-2002.pdf, с. 6, табл. 2 (по изображению страницы).",
+  "verified": false,
+  "footnotes": {
+    "1": "При 57–74 °С включительно дужки теплового замка не окрашивают.",
+    "2": "Цвет — жидкости в стеклянной термоколбе или дужек (плавкий и упругий термочувствительный элемент)."
+  },
+  "records": [
+    {
+      "id": "gost51043.t2.t57",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 57,
+        "tolerance": 3,
+        "responseTime": 300
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "оранжевый"
+      }
+    },
+    {
+      "id": "gost51043.t2.t68",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 68,
+        "tolerance": 3,
+        "responseTime": 300
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "красный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t72",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 72,
+        "tolerance": 3,
+        "responseTime": 330
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "красный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t74",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 74,
+        "tolerance": 3,
+        "responseTime": 330
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "красный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t79",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 79,
+        "tolerance": 3,
+        "responseTime": 330
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "жёлтый"
+      }
+    },
+    {
+      "id": "gost51043.t2.t93",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 93,
+        "tolerance": 3,
+        "responseTime": 380
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "зелёный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t100",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 100,
+        "tolerance": 3,
+        "responseTime": 380
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "зелёный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t121",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 121,
+        "tolerance": 5,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "голубой"
+      }
+    },
+    {
+      "id": "gost51043.t2.t141",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 141,
+        "tolerance": 5,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "голубой"
+      }
+    },
+    {
+      "id": "gost51043.t2.t163",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 163,
+        "tolerance": 5,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "фиолетовый"
+      }
+    },
+    {
+      "id": "gost51043.t2.t182",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 182,
+        "tolerance": 5,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "фиолетовый"
+      }
+    },
+    {
+      "id": "gost51043.t2.t204",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 204,
+        "tolerance": 7,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "чёрный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t227",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 227,
+        "tolerance": 7,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "чёрный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t240",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 240,
+        "tolerance": 7,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "чёрный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t260",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 260,
+        "tolerance": 7,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "чёрный"
+      }
+    },
+    {
+      "id": "gost51043.t2.t343",
+      "clause": "табл. 2",
+      "values": {
+        "nominal": 343,
+        "tolerance": 7,
+        "responseTime": 600
+      },
+      "units": {
+        "nominal": "°С",
+        "tolerance": "°С",
+        "responseTime": "с"
+      },
+      "attrs": {
+        "color": "чёрный"
+      }
+    }
+  ]
+}

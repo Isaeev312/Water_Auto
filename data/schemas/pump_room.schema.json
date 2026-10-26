@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/pump_room.schema.json",
+  "title": "Габариты оборудования насосной для расстановки",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "verified",
+    "controlUnit",
+    "jockey"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "controlUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lengthMm",
+        "widthMm",
+        "heightMm"
+      ],
+      "properties": {
+        "lengthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "widthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "heightMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "jockey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lengthMm",
+        "widthMm",
+        "heightMm"
+      ],
+      "properties": {
+        "lengthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "widthMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "heightMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "setNote": {
+      "type": "string",
+      "description": "Обозначение документа на установку (ТУ) для спецификации."
+    },
+    "piping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wallOffsetMm",
+        "flangeToWallMm",
+        "floorMm",
+        "bracketHeightMm",
+        "levelGapMm",
+        "source"
+      ],
+      "properties": {
+        "wallOffsetMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "flangeToWallMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "floorMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "bracketHeightMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "levelGapMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "source": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "jockeyDn": {
+          "type": "integer",
+          "minimum": 15
+        },
+        "sleeveExtraMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "foundationMarginMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,93 @@
+using System.Globalization;
+using System.Text.Json;
+using WaterAuto.Core;
+
+namespace WaterAuto.Application;
+
+/// <summary>
+/// Комплект изделий на одно место установки по шаблону каталога (data/catalog/control_unit.json — узел управления на секцию,
+/// flushing_set.json — промывочное устройство): строки спецификации, сложенные по DN мест.
+/// </summary>
+public static class EquipmentSet
+{
+    public const string ControlUnitFile = "control_unit.json";
+    public const string FlushingFile = "flushing_set.json";
+    public const string PumpStationFile = "pump_station.json";
+
+    public static string PathFor(string normsDir, string file) => Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, file);
+
+    /// <param name="places">DN каждого места установки.</param>
+    public static IReadOnlyList<TakeoffItem> Items(string path, TakeoffGroup group, IEnumerable<int> places)
+    {
+        ArgumentNullException.ThrowIfNull(places);
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var templates = doc.RootElement.GetProperty("items").EnumerateArray().ToList();
+        var items = new List<TakeoffItem>();
+
+        // Строки — по позициям шаблона, внутри — по возрастанию DN (ГОСТ 21.110, п. 4.5).
+        var byDn = places.GroupBy(dn => dn).OrderBy(g => g.Key).ToList();
+        foreach (var t in templates)
+        {
+            foreach (var g in byDn)
+            {
+                items.Add(new TakeoffItem(
+                    group,
+                    t.GetProperty("name").GetString()!.Replace("{dn}", g.Key.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal),
+                    t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? designation : null,
+                    t.GetProperty("per").GetDouble() * g.Count(),
+                    t.GetProperty("unit").GetString()!,
+                    t.TryGetProperty("note", out var n) ? n.GetString() : null));
+            }
+        }
+
+        return Merge(items);
+    }
+
+    /// <summary>
+    /// Комплект одного места с подстановками в наименование (<paramref name="tokens"/>: «q» → «{q}») и множителями количества
+    /// по полю count шаблона (<paramref name="counts"/>: «pumps», «truckInlets»).
+    /// </summary>
+    /// <remarks>Раздел строки — поле group шаблона (equipment, valves, fittings — разделы насосной), без него — <paramref name="group"/>.</remarks>
+    public static IReadOnlyList<TakeoffItem> Items(string path, TakeoffGroup group, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(counts);
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var items = new List<TakeoffItem>();
+        foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
+        {
+            var name = tokens.Aggregate(t.GetProperty("name").GetString()!, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+            var times = t.TryGetProperty("count", out var c) ? counts.GetValueOrDefault(c.GetString()!) : 1;
+            if (times == 0)
+            {
+                continue;
+            }
+
+            var section = t.TryGetProperty("group", out var g) ? g.GetString() switch
+            {
+                "valves" => TakeoffGroup.PumpStationValves,
+                "fittings" => TakeoffGroup.PumpStationFittings,
+                _ => group,
+            } : group;
+            items.Add(new TakeoffItem(
+                section,
+                name,
+                t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? designation : null,
+                t.GetProperty("per").GetDouble() * times,
+                t.GetProperty("unit").GetString()!,
+                t.TryGetProperty("note", out var n) ? n.GetString() : null,
+                Role: t.TryGetProperty("role", out var r) ? r.GetString() : null));
+        }
+
+        return Merge(items);
+    }
+
+    private static List<TakeoffItem> Merge(List<TakeoffItem> items)
+    {
+        // Одинаковые строки (шаблон без {dn}) складываются.
+        return items
+            .GroupBy(i => (i.Name, i.Designation, i.Unit, i.Note))
+            .Select(g => g.First() with { Quantity = g.Sum(i => i.Quantity) })
+            .ToList();
+    }
+}
