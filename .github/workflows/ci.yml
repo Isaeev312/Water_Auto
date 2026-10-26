@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { lfs: true }
       # SDK — из global.json; среда выполнения 8.0 нужна тестам (net8.0).
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
           dotnet-version: 8.0.x
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { lfs: true }
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
           dotnet-version: 8.0.x
