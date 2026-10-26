@@ -203,4 +203,28 @@ public class AxonometryDxfWriterTests
         texts.Count(t => t.StartsWith("DN65", StringComparison.Ordinal)).ShouldBe(1);
         texts.ShouldContain("DN65 L=9,00 м");
     }
+
+    [Fact]
+    public void Both_branches_of_a_split_main_of_one_diameter_are_labelled()
+    {
+        // Питающий DN65 от ввода до узла M, затем две ветви DN65 — влево и вправо.
+        var route = new PipeRoute(
+            "R",
+            "I1",
+            [
+                new RouteNode("I1", RouteNodeKind.Inlet, new(0, 0)),
+                new RouteNode("M", RouteNodeKind.Tee, new(0, 6000)),
+                new RouteNode("L", RouteNodeKind.Tee, new(-9000, 6000)),
+                new RouteNode("R", RouteNodeKind.Tee, new(9000, 6000)),
+            ],
+            [
+                new RouteSegment("P0", "I1", "M", RouteSegmentRole.Main, new Length(6), 2, 65),
+                new RouteSegment("PL", "M", "L", RouteSegmentRole.Main, new Length(9), 1, 65),
+                new RouteSegment("PR", "M", "R", RouteSegmentRole.Main, new Length(9), 1, 65),
+            ]);
+        var doc = AxonometryDxfWriter.Build([route], new Length(0), new AxonometryStyle());
+        var texts = On(doc, AxonometryDxfWriter.LabelLayer).OfType<TextEntity>().Select(t => t.Value).ToList();
+        texts.ShouldContain("DN65 L=6,00 м");
+        texts.Count(t => t == "DN65 L=9,00 м").ShouldBe(2);
+    }
 }

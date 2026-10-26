@@ -55,6 +55,9 @@ public static class AxonometryDxfWriter
 
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
+    // Расстояния номера расчётной точки от узла, мм листа.
+    private static readonly double[] PointOffsets = [1.2, 2.5, 4.0];
+
     public static XY Project(PlanPoint p, double elevationMm, AxonometryStyle style)
     {
         ArgumentNullException.ThrowIfNull(style);
@@ -149,7 +152,7 @@ public static class AxonometryDxfWriter
             }
         }
 
-        // Номера расчётных точек — у узлов направления, со стороны, противоположной подписям DN.
+        // Номера расчётных точек — у узлов направления, в свободном углу.
         if (calc is not null && routes.FirstOrDefault(r => r.RoomId == calc.RoomId && r.InletId == calc.InletId) is { } calcRoute)
         {
             var nodes = calcRoute.Nodes.ToDictionary(n => n.Id);
@@ -160,16 +163,39 @@ public static class AxonometryDxfWriter
                     continue;
                 }
 
+                // Четыре угла вокруг узла (у оросителя — вокруг головки) на трёх расстояниях: первый без наложений, иначе — с наименьшим числом.
                 var p = Project(n.Location, z, style);
                 var anchor = n.Kind == RouteNodeKind.Sprinkler ? new XY(p.X, p.Y + stub) : p;
-                var at = new XY(anchor.X - (1.2 * unit), anchor.Y + (Math.Sign(stub) * 1.2 * unit));
-                placed.Add(Quad.Text(at, label.Length, 2.5 * unit, rightAligned: true, above: stub > 0));
+                var h = 2.5 * unit;
+                var best = (At: default(XY), Right: false, Above: false, Score: int.MaxValue);
+                foreach (var (right, above, d) in PointOffsets.SelectMany(d => new[] { (false, stub > 0, d), (true, stub > 0, d), (false, stub < 0, d), (true, stub < 0, d) }))
+                {
+                    var at = new XY(anchor.X + ((right ? 1 : -1) * d * unit), anchor.Y + ((above ? 1 : -1) * d * unit));
+                    var score = placed.Count(Quad.Text(at, label.Length, h, rightAligned: !right, above: above).Hits);
+                    if (score < best.Score)
+                    {
+                        best = (at, right, above, score);
+                    }
+
+                    if (score == 0)
+                    {
+                        break;
+                    }
+                }
+
+                placed.Add(Quad.Text(best.At, label.Length, h, rightAligned: !best.Right, above: best.Above));
                 doc.Entities.Add(new MText
                 {
                     Value = label,
-                    InsertPoint = At(at),
-                    Height = 2.5 * unit,
-                    AttachmentPoint = stub > 0 ? AttachmentPointType.BottomRight : AttachmentPointType.TopRight,
+                    InsertPoint = At(best.At),
+                    Height = h,
+                    AttachmentPoint = (best.Right, best.Above) switch
+                    {
+                        (false, true) => AttachmentPointType.BottomRight,
+                        (true, true) => AttachmentPointType.BottomLeft,
+                        (false, false) => AttachmentPointType.TopRight,
+                        _ => AttachmentPointType.TopLeft,
+                    },
                     Layer = zone,
                 });
             }
@@ -207,6 +233,7 @@ public static class AxonometryDxfWriter
             doc.Entities.Add(new Line(At(inlet), new XYZ(inlet.X, inlet.Y - style.RiserLengthMm, 0)) { Layer = pipes });
             var supplyDn = route.Segments.FirstOrDefault(s => s.From == route.InletId)?.Dn;
             var inletText = (supplyDn is { } dn ? $"Ввод DN{dn}" : "Ввод") + (style.InletNote.Length > 0 ? $"\\P{style.InletNote}" : "");
+            placed.Add(new Quad(new XY(inlet.X + unit + (0.4 * style.TextHeightMm * 16), inlet.Y - style.RiserLengthMm + style.TextHeightMm), 1, 0, 0.4 * style.TextHeightMm * 16, style.TextHeightMm));
             doc.Entities.Add(new MText
             {
                 Value = inletText,
@@ -513,7 +540,8 @@ public static class AxonometryDxfWriter
         var children = route.Segments.ToLookup(s => s.From);
         bool Same(RouteSegment a, RouteSegment b) => a.Role == b.Role && a.Dn == b.Dn;
         var runs = new List<List<RouteSegment>>();
-        foreach (var start in route.Segments.Where(s => !byTo.TryGetValue(s.From, out var p) || !Same(p, s)))
+        // Начало отрезка — где диаметр или назначение меняется, а также на развилке, где продолжений того же диаметра несколько.
+        foreach (var start in route.Segments.Where(s => !byTo.TryGetValue(s.From, out var p) || !Same(p, s) || children[s.From].Count(c => Same(c, s)) > 1))
         {
             var run = new List<RouteSegment> { start };
             while (children[run[^1].To].Where(c => Same(c, start)).ToList() is [var next])
@@ -605,8 +633,8 @@ public static class AxonometryDxfWriter
         var sides = preferBelow ? new[] { -1.0, 1.0 } : [1.0, -1.0];
         foreach (var shift in new[] { 0.0, -0.15, 0.15, -0.3, 0.3, -0.4, 0.4 })
         {
-            // Подпись не выходит за свой участок: иначе её можно отнести к соседнему участку другого диаметра.
-            if (shift != 0 && (Math.Abs(shift) * length) + (width / 2) > length / 2)
+            // Подпись не выходит за свой отрезок: иначе её можно отнести к соседнему другого диаметра (тогда — выноска).
+            if ((Math.Abs(shift) * length) + (width / 2) > length / 2)
             {
                 continue;
             }
