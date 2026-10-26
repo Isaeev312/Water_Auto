@@ -35,4 +35,15 @@ public class PumpSchemeDxfWriterTests
         texts.ShouldContain("12");
         texts.ShouldNotContain("16");
     }
+
+    [Fact]
+    public void Scheme_scales_to_four_pumps_and_three_sections_within_the_sheet()
+    {
+        var doc = PumpSchemeDxfWriter.Build(Data with { Pumps = 4, Outlets = ["точка ввода 1", "точка ввода 2", "точка ввода 3"] }, Stamp);
+        var texts = doc.Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
+        texts.ShouldContain("Н4");
+        texts.Count(t => t.StartsWith("Секция", StringComparison.Ordinal)).ShouldBe(3);
+        // Всё — внутри рамки A3 (правый край рамки — 415 мм).
+        doc.Entities.OfType<Line>().Where(l => l.Layer.Name != GostSheet.Layer).ShouldAllBe(l => l.StartPoint.X <= 415 && l.EndPoint.X <= 415);
+    }
 }
