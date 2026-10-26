@@ -5,11 +5,19 @@ namespace WaterAuto.Calc.Tests;
 
 public class TreeSolverTests
 {
-    private static NetworkNode Sprinkler(string id, double z = 0, double k = 0.47) => new(id, NodeKind.Sprinkler, new Length(z), new KFactor(k));
+    private static NetworkNode Sprinkler(string id, double z = 0, double k = 0.47, PressureRange? range = null) =>
+        new(id, NodeKind.Sprinkler, new Length(z), new KFactor(k), range);
 
     private static NetworkNode Tee(string id, double z = 0) => new(id, NodeKind.Tee, new Length(z));
 
     private static NetworkNode Source(string id, double z = 0) => new(id, NodeKind.Source, new Length(z));
+
+    private static PressureRange Range(double min, double max) => new(new Pressure(min), new Pressure(max));
+
+    // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
+    private static HydraulicNetwork TwoSprinklers(PressureRange? range) => new(
+        [Source("S"), Sprinkler("1", range: range), Sprinkler("2")],
+        [Pipe("S-2", "S", "2", geometry: Geometry()), Pipe("2-1", "2", "1", geometry: Geometry())]);
 
     private static NetworkPipe Pipe(string id, string from, string to, double l = 3, double kt = 16.5, PipeGeometry? geometry = null) =>
         new(id, from, to, new Length(l), new PipeCharacteristic(kt), 1.0, geometry);
@@ -174,6 +182,40 @@ public class TreeSolverTests
         result.Issues.ShouldContain(i => i.Code == "dictating.notMinimum" && i.ElementId == "1");
         result.NodePressures["1"].Mpa.ShouldBeLessThan(0.1);
         result.SourcePressure.Mpa.ShouldBeGreaterThan(0.1);
+    }
+
+    // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
+    [Fact]
+    public void Emitter_pressure_above_catalog_range_is_a_warning()
+    {
+        // Каталожный диапазон 0,05–1,0 МПа, давление диктующего 1,2 МПа — ороситель работает вне паспортного диапазона.
+        var result = TreeSolver.SolveDesign(TwoSprinklers(Range(0.05, 1.0)), "1", new Pressure(1.2));
+
+        var issue = result.Issues.ShouldHaveSingleItem();
+        issue.Code.ShouldBe("node.pressureOutOfRange");
+        issue.Level.ShouldBe(IssueLevel.Warning);
+        issue.ElementId.ShouldBe("1");
+        result.HasErrors.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Emitter_pressure_inside_catalog_range_has_no_issue()
+    {
+        // Тот же диапазон, давление 0,5 МПа внутри: замечания нет, величина посчитана.
+        var result = TreeSolver.SolveDesign(TwoSprinklers(Range(0.05, 1.0)), "1", new Pressure(0.5));
+
+        result.Issues.ShouldBeEmpty();
+        result.NodePressures["1"].Mpa.ShouldBe(0.5, 1e-12);
+    }
+
+    [Fact]
+    public void Emitter_without_catalog_range_has_no_pressure_issue()
+    {
+        // У узла нет ссылки на каталог — диапазона нет, замечания нет даже при давлении 1,2 МПа.
+        var result = TreeSolver.SolveDesign(TwoSprinklers(null), "1", new Pressure(1.2));
+
+        result.Issues.ShouldBeEmpty();
+        result.HasErrors.ShouldBeFalse();
     }
 
     [Fact]

@@ -215,6 +215,18 @@ public static class TreeSolver
             }
         }
 
+        // Рабочий диапазон pMin–pMax — данные производителя (каталог), не норма: вне диапазона паспортная карта орошения
+        // не гарантируется, поэтому расчёт идёт, а в замечаниях — предупреждение с давлением и диапазоном.
+        foreach (var node in network.Nodes)
+        {
+            if (node.OperatingRange is { } range && emitters.ContainsKey(node.Id)
+                && pressures.TryGetValue(node.Id, out var pressure) && !range.Contains(pressure))
+            {
+                issues.Add(new Issue("node.pressureOutOfRange", IssueLevel.Warning,
+                    $"Давление у {node.Id} ({pressure}) вне рабочего диапазона оросителя {range} по каталогу производителя.", node.Id));
+            }
+        }
+
         return new TreeSolution(pressures[source.Id], new Flow(flow), pressures, pipeFlows, losses, emitters, velocities, [.. pathPipes.Select(p => p.Id)], issues);
     }
 

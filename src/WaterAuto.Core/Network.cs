@@ -8,8 +8,11 @@ public enum NodeKind
     Source,
 }
 
-/// <summary>Узел сети. Эмиттер (ороситель, пожарный кран) задан коэффициентом K.</summary>
-public sealed record NetworkNode(string Id, NodeKind Kind, Length Elevation, KFactor? Emitter = null);
+/// <summary>
+/// Узел сети. Эмиттер (ороситель, пожарный кран) задан коэффициентом K.
+/// OperatingRange — рабочий диапазон давления из каталога производителя; без него диапазон не проверяется.
+/// </summary>
+public sealed record NetworkNode(string Id, NodeKind Kind, Length Elevation, KFactor? Emitter = null, PressureRange? OperatingRange = null);
 
 /// <summary>
 /// Сортамент стальной трубы: стандарт (как в attrs табл. Б.2, напр. «ГОСТ 3262»), DN, наружный диаметр и стенка.

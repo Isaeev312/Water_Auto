@@ -14,6 +14,10 @@ public class GoldenTests
 {
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
+    // Рабочий диапазон оросителя pMin–pMax — данные производителя (data/catalog/sprinklers.json), не норма.
+    // Ссылка узла на каталог — поле «sprinkler» (tests/Golden/README.md); без неё диапазон не подставляется.
+    private static readonly Dictionary<string, PressureRange> Catalog = LoadCatalog();
+
     public static TheoryData<string> ActiveCases() => Cases(status => status != "pending");
 
     [Theory]
@@ -138,7 +142,8 @@ public class GoldenTests
                 _ => NodeKind.Tee,
             },
             new Length(n.GetProperty("z").GetDouble()),
-            n.TryGetProperty("K", out var k) ? new KFactor(k.GetDouble()) : null)).ToList();
+            n.TryGetProperty("K", out var k) ? new KFactor(k.GetDouble()) : null,
+            CatalogRange(n))).ToList();
 
         var pipes = net.GetProperty("pipes").EnumerateArray().Select(p =>
         {
@@ -193,6 +198,19 @@ public class GoldenTests
                 Length.FromMillimeters(pipe.GetProperty("od").GetDouble()),
                 Length.FromMillimeters(pipe.GetProperty("wall").GetDouble()))
             : null;
+
+    private static Dictionary<string, PressureRange> LoadCatalog()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, "data", "catalog", "sprinklers.json")));
+        return doc.RootElement.GetProperty("sprinklers").EnumerateArray().ToDictionary(
+            s => s.GetProperty("id").GetString()!,
+            s => new PressureRange(new Pressure(s.GetProperty("pMin").GetDouble()), new Pressure(s.GetProperty("pMax").GetDouble())),
+            StringComparer.Ordinal);
+    }
+
+    // Узел без поля «sprinkler» (или с неизвестным id) диапазона не получает — проверка не выполняется.
+    private static PressureRange? CatalogRange(JsonElement node) =>
+        node.TryGetProperty("sprinkler", out var id) && Catalog.TryGetValue(id.GetString()!, out var range) ? range : null;
 
     // Величины после сети (узел управления, подводящие, насос) — по правилам compat источника.
     private static Dictionary<string, double> Derived(JsonElement project, TreeSolution solution, HydraulicNetwork network)
