@@ -12,7 +12,7 @@ public class TreeSolverTests
     private static NetworkNode Source(string id, double z = 0) => new(id, NodeKind.Source, new Length(z));
 
     private static NetworkPipe Pipe(string id, string from, string to, double l = 3, double kt = 16.5) =>
-        new(id, from, to, new Length(l), new PipeCharacteristic(kt));
+        new(id, from, to, new Length(l), new PipeCharacteristic(kt), 1.0);
 
     [Fact]
     public void Chain_of_two_sprinklers_matches_hand_calculation()
@@ -113,11 +113,11 @@ public class TreeSolverTests
         var invalidPipes = new[]
         {
             Pipe("length-zero", "S", "1", 0),
-            new NetworkPipe("length-nan", "S", "1", new Length(double.NaN), new PipeCharacteristic(16.5)),
-            new NetworkPipe("length-infinite", "S", "1", new Length(double.PositiveInfinity), new PipeCharacteristic(16.5)),
+            new NetworkPipe("length-nan", "S", "1", new Length(double.NaN), new PipeCharacteristic(16.5), 1.0),
+            new NetworkPipe("length-infinite", "S", "1", new Length(double.PositiveInfinity), new PipeCharacteristic(16.5), 1.0),
             Pipe("kt-zero", "S", "1", 3, 0),
-            new NetworkPipe("kt-nan", "S", "1", new Length(3), new PipeCharacteristic(double.NaN)),
-            new NetworkPipe("kt-infinite", "S", "1", new Length(3), new PipeCharacteristic(double.PositiveInfinity)),
+            new NetworkPipe("kt-nan", "S", "1", new Length(3), new PipeCharacteristic(double.NaN), 1.0),
+            new NetworkPipe("kt-infinite", "S", "1", new Length(3), new PipeCharacteristic(double.PositiveInfinity), 1.0),
             new NetworkPipe("multiplier-zero", "S", "1", new Length(3), new PipeCharacteristic(16.5), 0),
             new NetworkPipe("multiplier-nan", "S", "1", new Length(3), new PipeCharacteristic(16.5), double.NaN),
             new NetworkPipe("multiplier-infinite", "S", "1", new Length(3), new PipeCharacteristic(16.5), double.PositiveInfinity),

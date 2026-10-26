@@ -25,7 +25,7 @@ public class FormulaTests
     public void Pipe_loss_is_Q2_L_over_100_Kt()
     {
         // ГидРаВПТ R2 из файла .hvd (без множителя): ветвь 1, участок 1-2 — 0,008536 МПа.
-        var pipe = new NetworkPipe("1-2", "a", "b", new Length(2.31), new PipeCharacteristic(11.238334));
+        var pipe = new NetworkPipe("1-2", "a", "b", new Length(2.31), new PipeCharacteristic(11.238334), 1.0);
         var q = 2.0379;
         (TreeSolver.Resistance(pipe) * q * q).ShouldBe(0.008536, 1e-6);
     }
