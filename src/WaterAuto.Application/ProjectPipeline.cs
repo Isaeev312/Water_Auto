@@ -34,6 +34,7 @@ public static class ProjectPipeline
     public const string PumpRoomPipingFile = "pump_room_piping.dxf";
     public const string PumpRoomSectionFile = "pump_room_section.dxf";
     public const string InletRouteFile = "inlet_route.dxf";
+    public const string PumpRoomAxonometryFile = "pump_room_axonometry.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string IssuesFile = "issues.txt";
 
@@ -654,6 +655,36 @@ public static class ProjectPipeline
 
                 return new SectionPipe($"DN{r.Dn}", xs.Min(), xs.Max(), r.RunHeightMm / 1000, verticals);
             }).ToList();
+            // Аксонометрия обвязки: трубы в пространстве (опуск у стены, прокладка, подъём к патрубку), оборудование, арматура.
+            var axoPipes = (piping?.Runs ?? []).Select(r => new AxonoPipe(
+                $"DN{r.Dn}",
+                [
+                    new Point3(r.Path[0].XMm, r.Path[0].YMm, r.FromHeightMm / 1000),
+                    .. r.Path.Select(q => new Point3(q.XMm, q.YMm, r.RunHeightMm / 1000)),
+                    new Point3(r.Path[^1].XMm, r.Path[^1].YMm, r.ToHeightMm / 1000),
+                ])).ToList();
+            var axoBlocks = roomPlan.Items.Zip(blocks.Where(b => b.Label != "фундамент"), (i, b) => new AxonoBlock(b.Position is { } bp ? $"{bp}. {b.Label}" : b.Label, i.X0, i.Y0, i.X1, i.Y1, b.Bottom, b.Top)).ToList();
+            var axoValves = new List<AxonoValve>();
+            foreach (var r in piping?.Runs ?? [])
+            {
+                var z = r.RunHeightMm / 1000;
+                foreach (var (pt, _, kind, pos) in valves.Where(v => r.Path.Zip(r.Path.Skip(1)).Any(s => OnSegment(v.Item1, s.First, s.Second))))
+                {
+                    axoValves.Add(new AxonoValve(new Point3(pt.XMm, pt.YMm, z), kind, pos));
+                }
+            }
+
+            Write(outDir, PumpRoomAxonometryFile, files, p => PumpRoomAxonometryDxfWriter.Write(
+                p,
+                new PumpRoomAxonometry(axoPipes, axoBlocks, axoValves, [
+                    "Фронтальная изометрия (ГОСТ 2.317): ось Y — под 45°, без сокращения; отметки — оси труб от пола насосной.",
+                    "Трубопроводы — стальные на сварке; обозначение — В2 (ГОСТ 21.205); номера позиций арматуры и оборудования — по ПТ2.СО.",
+                    "Всасывающие — с подъёмом к насосной установке не менее 1:200, в верхних точках напорных линий — воздухоотводчики (п. 6.10.29).",
+                    "Обвязка агрегатов внутри установки — по паспорту изготовителя (в комплекте установки).",
+                ], pr1.FloorElevation),
+                SheetStamp(project, "Аксонометрическая схема обвязки", "Аксонометрическая схема обвязки насосной станции") with { Name = "Аксонометрия обвязки насосной" },
+                project.Font));
+
             Write(outDir, PumpRoomSectionFile, files, p => PumpRoomSectionDxfWriter.Write(
                 p,
                 new PumpRoomSection(
@@ -776,6 +807,11 @@ public static class ProjectPipeline
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Точка на отрезке a–b (по осям, с допуском 1 мм).
+    private static bool OnSegment(PlanPoint p, PlanPoint a, PlanPoint b) =>
+        p.XMm >= Math.Min(a.XMm, b.XMm) - 1 && p.XMm <= Math.Max(a.XMm, b.XMm) + 1 && p.YMm >= Math.Min(a.YMm, b.YMm) - 1 && p.YMm <= Math.Max(a.YMm, b.YMm) + 1
+        && Math.Abs(((b.XMm - a.XMm) * (p.YMm - a.YMm)) - ((b.YMm - a.YMm) * (p.XMm - a.XMm))) < 1 * Math.Max(1, Math.Abs(b.XMm - a.XMm) + Math.Abs(b.YMm - a.YMm));
 
     // Точка на стене контура (не дальше 1 мм).
     private static bool IsWall(Polygon room, PlanPoint p) => room.DistanceTo(p) < 1;
