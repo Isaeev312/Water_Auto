@@ -454,7 +454,8 @@ public static class AxonometryDxfWriter
             Add(new Line(sheet.At(cx, y - 1), sheet.At(cx + 2, y + 1)) { Layer = l.Marks });
             Add(new Line(sheet.At(cx, y - 1), sheet.At(cx, y + 2)) { Layer = l.Marks });
             Add(new Line(sheet.At(cx, y + 2), sheet.At(cx + 9, y + 2)) { Layer = l.Marks });
-        }));
+        }
+        ));
         rows.Add(("Условный проход трубопровода, мм", (cx, y) => Add(new MText { Value = "DN25", InsertPoint = sheet.At(cx, y), Height = 2.5 * sheet.Scale, AttachmentPoint = AttachmentPointType.MiddleCenter, Layer = l.Labels })));
 
         var top = bottom + (rowH * (rows.Count + 1));

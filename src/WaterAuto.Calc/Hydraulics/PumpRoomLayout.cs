@@ -140,7 +140,7 @@ public static class PumpRoomLayout
                 if (p is null)
                 {
                     issues.Add(new Issue("pumpRoom.tooSmall", IssueLevel.Error,
-                        $"В помещении насосной {w / 1000:0.00} × {h / 1000:0.00} м не помещается «{label}» ({item.Size.LengthMm / 1000:0.00} × {item.Size.WidthMm / 1000:0.00} м) с проходами п. 6.10.16; нужно не менее {MinArea(items, moduleWall, other, board) :0.0} м² (оценка).",
+                        $"В помещении насосной {w / 1000:0.00} × {h / 1000:0.00} м не помещается «{label}» ({item.Size.LengthMm / 1000:0.00} × {item.Size.WidthMm / 1000:0.00} м) с проходами п. 6.10.16; нужно не менее {MinArea(items, moduleWall, other, board):0.0} м² (оценка).",
                         room.Id, "6.10.16"));
                     continue;
                 }
