@@ -8,7 +8,7 @@ jobs:
   core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { lfs: true }
       # SDK — из global.json; среда выполнения 8.0 нужна тестам (net8.0).
       - uses: actions/setup-dotnet@v4
@@ -27,7 +27,7 @@ jobs:
     runs-on: windows-latest
     needs: core
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { lfs: true }
       - uses: actions/setup-dotnet@v4
         with:
