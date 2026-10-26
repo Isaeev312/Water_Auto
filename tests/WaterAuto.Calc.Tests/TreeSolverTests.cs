@@ -273,6 +273,29 @@ public class TreeSolverTests
     }
 
     [Fact]
+    public void Failed_solution_has_empty_values_and_zero_pressure()
+    {
+        // Контракт неуспешного решения (T13): при ошибке входа величины не заполняются,
+        // чтобы потребитель не читал из недосчитанной сети правдоподобные числа.
+        var net = new HydraulicNetwork(
+            [Source("S"), Sprinkler("1"), new NetworkNode("2", NodeKind.Sprinkler, new Length(0))],
+            [Pipe("S-2", "S", "2"), Pipe("2-1", "2", "1")]);
+
+        var result = TreeSolver.SolveDesign(net, "1", new Pressure(0.1));
+
+        result.HasErrors.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "node.emitterMissing" && i.ElementId == "2");
+        result.NodePressures.ShouldBeEmpty();
+        result.PipeFlows.ShouldBeEmpty();
+        result.PipeLosses.ShouldBeEmpty();
+        result.EmitterFlows.ShouldBeEmpty();
+        result.PipeVelocities.ShouldBeEmpty();
+        result.DictatingPath.ShouldBeEmpty();
+        result.SourcePressure.ShouldBe(Pressure.Zero);
+        result.TotalFlow.ShouldBe(Flow.Zero);
+    }
+
+    [Fact]
     public void Velocity_is_reported_for_pipes_with_geometry()
     {
         // ВГП 42,3×2,8 (DN32): внутренний Ø 36,7 мм. v = Q / (π·d²/4), Q в м³/с.

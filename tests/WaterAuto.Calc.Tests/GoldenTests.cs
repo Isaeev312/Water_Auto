@@ -73,7 +73,16 @@ public class GoldenTests
     private static List<string> Run(string name)
     {
         var (project, solution, network) = Solve(name);
-        solution.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty();
+
+        // При HasErrors словари величин пусты: без этой проверки эталон падал бы с KeyNotFoundException
+        // на первом же обращении к NodePressures/PipeLosses, скрывая настоящую причину.
+        if (solution.HasErrors)
+        {
+            Assert.Fail(
+                $"Эталон «{name}»: расчёт с ошибкой, величины для сверки не годятся.{Environment.NewLine}"
+                + string.Join(Environment.NewLine, solution.Issues.Select(i => $"{i.Code}: {i.Message}")));
+        }
+
         var derived = Derived(project, solution, network);
 
         using var expected = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoPaths.Golden, name, "expected.json")));

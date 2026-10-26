@@ -2,7 +2,11 @@ using WaterAuto.Core;
 
 namespace WaterAuto.Calc.Hydraulics;
 
-/// <summary>Результат расчёта тупиковой сети в проектном режиме (README §5.4). PipeVelocities — только для труб с Geometry.</summary>
+/// <summary>
+/// Результат расчёта тупиковой сети в проектном режиме (README §5.4). PipeVelocities — только для труб с Geometry.
+/// При HasErrors словари пусты; читать величины только после проверки HasErrors.
+/// Исключение — <c>dictating.notMinimum</c>: тогда величины заполнены для диагностики (README §5.7).
+/// </summary>
 public sealed record TreeSolution(
     Pressure SourcePressure,
     Flow TotalFlow,
