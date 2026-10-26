@@ -111,7 +111,7 @@ public class AxonometryDxfWriterTests
     }
 
     [Fact]
-    public void Labels_do_not_overlap_each_other()
+    public void Every_diameter_change_is_labelled_without_overlaps()
     {
         // Рядок, где диаметр меняется на каждом участке длиной 0,4 м: подпись «DN25» (≈ 0,56 м) шире участка.
         int[] dns = [50, 40, 32, 25, 32, 40, 50, 40, 32, 25];
@@ -127,7 +127,7 @@ public class AxonometryDxfWriterTests
         var boxes = On(doc, AxonometryDxfWriter.LabelLayer).OfType<TextEntity>()
             .Select(t => (X0: t.InsertPoint.X, X1: t.InsertPoint.X + (0.7 * t.Height * t.Value.Length), Y0: t.InsertPoint.Y, Y1: t.InsertPoint.Y + t.Height))
             .ToList();
-        boxes.Count.ShouldBeGreaterThan(3);
+        boxes.Count.ShouldBe(dns.Length); // каждая смена диаметра подписана — у трубы или на выноске
         for (var a = 0; a < boxes.Count; a++)
         {
             for (var b = a + 1; b < boxes.Count; b++)

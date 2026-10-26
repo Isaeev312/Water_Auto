@@ -64,7 +64,7 @@ public class GostSheetTests
         texts.ShouldContain("5");
         texts.ShouldContain(t => t.StartsWith("Формат А3", StringComparison.Ordinal));
         sheet.OfType<Line>().Count().ShouldBeGreaterThan(30);
-        var labels = doc.Entities.Where(e => e.Layer.Name == AxonometryDxfWriter.LabelLayer).OfType<MText>().Select(t => t.Value).ToList();
+        var labels = sheet.OfType<MText>().Select(t => t.Value).ToList();
         labels.ShouldContain("Условные обозначения");
         labels.ShouldContain("Ороситель спринклерный, розеткой вверх");
         labels.ShouldContain(t => t.StartsWith("ПРИМЕЧАНИЯ", StringComparison.Ordinal));

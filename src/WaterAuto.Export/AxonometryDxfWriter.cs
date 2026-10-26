@@ -114,11 +114,19 @@ public static class AxonometryDxfWriter
             {
                 drawn.Add(new Piece(Project(nodes[seg.From].Location, z, style), Project(nodes[seg.To].Location, z, style), seg.Dn, seg.Role == RouteSegmentRole.Row, onPath && pathIds.Contains(seg.Id)));
             }
+
+            // Отводы к оросителям — тоже участки: на пересечении с трубой прерываются они (диаметр условно 0).
+            foreach (var n in route.Nodes.Where(n => n.Kind == RouteNodeKind.Sprinkler))
+            {
+                var p = Project(n.Location, z, style);
+                drawn.Add(new Piece(p, new XY(p.X, p.Y + stub - (Math.Sign(stub) * style.SprinklerRadiusMm)), 0, false, false, Stub: true));
+            }
         }
 
-        foreach (var (a, b, onPath) in Broken(drawn, 1.5 * unit))
+        foreach (var (a, b, src) in Broken(drawn, 1.5 * unit))
         {
-            doc.Entities.Add(new Line(At(a), At(b)) { Layer = onPath ? path : pipes });
+            doc.Entities.Add(new Line(At(a), At(b)) { Layer = src.Stub ? sprinklers : src.OnPath ? path : pipes });
+            placed.Add(Quad.Line(a, b, 0.05 * style.TextHeightMm));
         }
 
         foreach (var route in routes)
@@ -130,7 +138,6 @@ public static class AxonometryDxfWriter
             {
                 var p = Project(n.Location, z, style);
                 var head = new XY(p.X, p.Y + stub);
-                doc.Entities.Add(new Line(At(p), At(new XY(p.X, p.Y + stub - (Math.Sign(stub) * style.SprinklerRadiusMm)))) { Layer = sprinklers });
                 doc.Entities.Add(new Circle(At(head), style.SprinklerRadiusMm) { Layer = sprinklers });
                 if (zoneIds.Contains(n.SprinklerId ?? n.Id))
                 {
@@ -138,6 +145,7 @@ public static class AxonometryDxfWriter
                 }
 
                 placed.Add(Quad.Around(head, style.SprinklerRadiusMm));
+                placed.Add(Quad.Line(p, head, 0.05 * style.TextHeightMm));
             }
         }
 
@@ -173,27 +181,24 @@ public static class AxonometryDxfWriter
             var byTo = route.Segments.ToDictionary(s => s.To);
             var loops = route.Loops.Select(s => s.Id).ToHashSet();
 
-            // Питающие и подводящий — одна подпись «DN… L=…» на отрезок одного диаметра (длина — сумма участков), по самому
-            // длинному его участку, а если там нет места — на выноске с полкой. Ставятся первыми: им места важнее.
+            // Подписи — одна на отрезок одного диаметра и назначения: питающие и подводящий — «DN… L=…» (длина — сумма участков,
+            // ставятся первыми: им места важнее), рядки — «DN…»; нет места у трубы — на выноске с полкой.
             XY P(string id) => Project(nodes[id].Location, z, style);
-            foreach (var run in Runs(route))
-            {
-                var text = string.Create(Ru, $"DN{run[0].Dn} L={run.Sum(s => s.Length.Meters):0.00} м");
-                var longest = run.MaxBy(s => s.Length.Meters)!;
-                if (!PlaceLabel(doc, labels, placed, P(longest.From), P(longest.To), text, style.TextHeightMm, preferBelow: stub > 0))
-                {
-                    var mid = Lerp(new Piece(P(longest.From), P(longest.To), 0, false, false), 0.5);
-                    PlaceLeader(doc, labels, placed, mid, text, style.TextHeightMm);
-                }
-            }
 
-            // Рядки — только DN, где он меняется (длины — в таблице расчёта), чтобы подписи коротких участков между
-            // оросителями не наползали друг на друга.
-            foreach (var seg in route.Segments.Concat(route.Loops).Where(s => s.Role == RouteSegmentRole.Row))
+            // Рядки — только DN (длины — в таблице расчёта), одна подпись на отрезок одного диаметра.
+            var runs = Runs(route).OrderBy(r => r[0].Role == RouteSegmentRole.Row).ToList();
+            runs.AddRange(route.Loops.Select(s => new List<RouteSegment> { s }));
+            foreach (var run in runs)
             {
-                if (loops.Contains(seg.Id) || !byTo.TryGetValue(seg.From, out var parent) || parent.Dn != seg.Dn)
+                var text = run[0].Role == RouteSegmentRole.Row
+                    ? $"DN{run[0].Dn}"
+                    : string.Create(Ru, $"DN{run[0].Dn} L={run.Sum(s => s.Length.Meters):0.00} м");
+
+                // Прямой отрезок — подпись в любом месте по его длине; с поворотами — на самом длинном участке.
+                var (a, b) = Straight(run, P) ? (P(run[0].From), P(run[^1].To)) : (P(run.MaxBy(s => s.Length.Meters)!.From), P(run.MaxBy(s => s.Length.Meters)!.To));
+                if (!PlaceLabel(doc, labels, placed, a, b, text, style.TextHeightMm, preferBelow: stub > 0))
                 {
-                    PlaceLabel(doc, labels, placed, P(seg.From), P(seg.To), $"DN{seg.Dn}", style.TextHeightMm, preferBelow: stub > 0);
+                    PlaceLeader(doc, labels, placed, Lerp(new Piece(a, b, 0, false, false), 0.5), text, style.TextHeightMm);
                 }
             }
 
@@ -210,40 +215,41 @@ public static class AxonometryDxfWriter
                 AttachmentPoint = AttachmentPointType.BottomLeft,
                 Layer = labels,
             });
-            Mark(doc, marks, inlet, $"отм. {Elevation(pipeElevation)}", unit, left: true);
+            TryMark(doc, marks, placed, inlet, $"отм. {Elevation(pipeElevation)}", unit, force: true, preferLeft: true);
 
-            // Вторая отметка — в конце питающего трубопровода, дальнего на схеме (верхнего): у остальных концов отметка та же,
-            // а знаки рядом с подписями DN загромождают схему.
+            // Отметки в концах питающих трубопроводов — где знак помещается без наложений (иначе пропускается: отметка та же,
+            // что у ввода). Дальний (верхний) конец — обязательно.
             var mainFrom = route.Segments.Where(s => s.Role == RouteSegmentRole.Main).Select(s => s.From).ToHashSet();
             var ends = route.Segments.Where(s => s.Role == RouteSegmentRole.Main && !mainFrom.Contains(s.To))
-                .Select(s => Project(nodes[s.To].Location, z, style)).ToList();
-            if (ends.Count > 0)
+                .Select(s => Project(nodes[s.To].Location, z, style)).OrderByDescending(p => p.Y).ToList();
+            for (var k = 0; k < ends.Count; k++)
             {
-                var far = ends.MaxBy(p => p.Y);
-                Mark(doc, marks, new XY(far.X, far.Y + (Math.Max(stub, 0) + (2 * unit))), Elevation(pipeElevation), unit);
+                TryMark(doc, marks, placed, ends[k], Elevation(pipeElevation), unit, force: k == 0);
             }
         }
 
         if (sheet is not null)
         {
             GostSheet.Draw(doc, sheet, stamp!);
-            Title(doc, sheet, stamp!.Name, labels);
-            Legend(doc, sheet, new LegendLayers(pipes, path, sprinklers, zone, marks, labels), calc is not null, style.SprinklersUp);
-            Notes(doc, sheet, labels, calc is not null);
+            // Заголовок, условные обозначения и примечания — на слое листа; образцы линий и знаков — на своих слоях.
+            var format = DxfDrawing.AddLayer(doc, GostSheet.Layer, 7);
+            Title(doc, sheet, stamp!.Name, format);
+            Legend(doc, sheet, new LegendLayers(pipes, path, sprinklers, zone, marks, format), calc is not null, style.SprinklersUp);
+            Notes(doc, sheet, format, calc is not null);
         }
 
         return doc;
     }
 
     // Участок в проекции: диаметр и признак рядка — кто уступает на пересечении; признак расчётного направления — для слоя.
-    private sealed record Piece(XY A, XY B, int Dn, bool Row, bool OnPath);
+    private sealed record Piece(XY A, XY B, int Dn, bool Row, bool OnPath, bool Stub = false);
 
     /// <summary>
     /// Отрезки для черчения. Трубы на одной отметке пересекаются на схеме только там, где пересекаются на плане, — одна
     /// из них проходит в обход другой; условно прерывается труба меньшего диаметра (при равных — рядок, затем более поздний участок)
     /// на <paramref name="gap"/> в каждую сторону от точки пересечения.
     /// </summary>
-    private static List<(XY A, XY B, bool OnPath)> Broken(List<Piece> pieces, double gap)
+    private static List<(XY A, XY B, Piece Source)> Broken(List<Piece> pieces, double gap)
     {
         var cuts = pieces.Select(_ => new List<(double From, double To)>()).ToList();
         for (var i = 0; i < pieces.Count; i++)
@@ -262,7 +268,7 @@ public static class AxonometryDxfWriter
             }
         }
 
-        var result = new List<(XY, XY, bool)>();
+        var result = new List<(XY, XY, Piece)>();
         for (var i = 0; i < pieces.Count; i++)
         {
             var p = pieces[i];
@@ -271,7 +277,7 @@ public static class AxonometryDxfWriter
             {
                 if (from > start)
                 {
-                    result.Add((Lerp(p, start), Lerp(p, from), p.OnPath));
+                    result.Add((Lerp(p, start), Lerp(p, from), p));
                 }
 
                 start = Math.Max(start, to);
@@ -279,7 +285,7 @@ public static class AxonometryDxfWriter
 
             if (start < 1)
             {
-                result.Add((Lerp(p, start), p.B, p.OnPath));
+                result.Add((Lerp(p, start), p.B, p));
             }
         }
 
@@ -313,26 +319,60 @@ public static class AxonometryDxfWriter
     private static XY Lerp(Piece p, double t) => new(p.A.X + (t * (p.B.X - p.A.X)), p.A.Y + (t * (p.B.Y - p.A.Y)));
 
     /// <summary>
-    /// Знак отметки: стрелка с углом 90° острием к оси трубопровода, выносная линия вверх и полка с отметкой над ней.
-    /// Размеры — в мм листа, <paramref name="unit"/> — мм модели на 1 мм листа.
+    /// Знак отметки: стрелка с углом 90° острием к оси трубопровода, выносная линия и полка с отметкой над ней.
+    /// Выносная линия — вверх или вниз, полка — вправо или влево: первое положение без наложений; если такого нет —
+    /// при <paramref name="force"/> ставится в первом, иначе пропускается. Размеры — в мм листа, <paramref name="unit"/> — мм модели на 1 мм листа.
     /// </summary>
-    private static void Mark(CadDocument doc, Layer layer, XY tip, string text, double unit, bool left = false)
+    private static bool TryMark(CadDocument doc, Layer layer, List<Quad> placed, XY tip, string text, double unit, bool force, bool preferLeft = false)
     {
-        var dir = left ? -1 : 1;
-        var top = tip.Y + (8 * unit);
-        var shelf = (2.5 * 0.7 * text.Length * unit) + (2 * unit);
+        var shelf = (2.5 * 0.8 * text.Length * unit) + (2 * unit);
+        var options = new List<(int Up, int Dir)>();
+        foreach (var up in new[] { 1, -1 })
+        {
+            options.AddRange(preferLeft ? [(up, -1), (up, 1)] : [(up, 1), (up, -1)]);
+        }
+
+        List<Quad> Shapes((int Up, int Dir) o)
+        {
+            var top = tip.Y + (o.Up * 8 * unit);
+            var x1 = tip.X + (o.Dir * shelf);
+            return
+            [
+                Quad.Line(new XY(tip.X, tip.Y + (o.Up * 1.5 * unit)), new XY(tip.X, top), 0.3 * unit),
+                Quad.Line(new XY(tip.X, top), new XY(x1, top), 0.3 * unit),
+                new Quad(new XY((tip.X + x1) / 2, top + (2 * unit)), 1, 0, shelf / 2, 1.7 * unit),
+            ];
+        }
+
+        var choice = options.FirstOrDefault(o => !Shapes(o).Any(s => placed.Any(s.Hits)));
+        if (choice == default)
+        {
+            if (!force)
+            {
+                return false;
+            }
+
+            choice = options[0];
+        }
+
+        placed.AddRange(Shapes(choice));
+        var (dirUp, dir) = choice;
+        var topY = tip.Y + (dirUp * 8 * unit);
         XYZ P(double x, double y) => new(x, y, 0);
-        doc.Entities.Add(new Line(P(tip.X - (2 * unit), tip.Y + (2 * unit)), P(tip.X, tip.Y)) { Layer = layer });
-        doc.Entities.Add(new Line(P(tip.X, tip.Y), P(tip.X + (2 * unit), tip.Y + (2 * unit))) { Layer = layer });
-        doc.Entities.Add(new Line(P(tip.X, tip.Y), P(tip.X, top)) { Layer = layer });
-        doc.Entities.Add(new Line(P(tip.X, top), P(tip.X + (dir * shelf), top)) { Layer = layer });
+
+        // Стрелка всегда острием к оси трубы: при выносной линии вниз — перевёрнута.
+        doc.Entities.Add(new Line(P(tip.X - (2 * unit), tip.Y + (dirUp * 2 * unit)), P(tip.X, tip.Y)) { Layer = layer });
+        doc.Entities.Add(new Line(P(tip.X, tip.Y), P(tip.X + (2 * unit), tip.Y + (dirUp * 2 * unit))) { Layer = layer });
+        doc.Entities.Add(new Line(P(tip.X, tip.Y), P(tip.X, topY)) { Layer = layer });
+        doc.Entities.Add(new Line(P(tip.X, topY), P(tip.X + (dir * shelf), topY)) { Layer = layer });
         doc.Entities.Add(new TextEntity
         {
             Value = text,
-            InsertPoint = P(left ? tip.X - shelf + unit : tip.X + unit, top + (0.8 * unit)),
+            InsertPoint = P(dir < 0 ? tip.X - shelf + unit : tip.X + unit, topY + (0.8 * unit)),
             Height = 2.5 * unit,
             Layer = layer,
         });
+        return true;
     }
 
     // Заголовок схемы над изображением, по центру поля листа.
@@ -464,8 +504,8 @@ public static class AxonometryDxfWriter
     { IsClosed = true, ConstantWidth = r, Layer = layer };
 
     /// <summary>
-    /// Отрезки питающих и подводящего одного диаметра: от участка, где диаметр или назначение меняется, по цепочке
-    /// продолжений той же роли и диаметра (в дереве — пока продолжение одно).
+    /// Отрезки одного диаметра и назначения (рядок, питающий, подводящий): от участка, где диаметр или назначение меняется,
+    /// по цепочке продолжений той же роли и диаметра (в дереве — пока продолжение одно).
     /// </summary>
     private static List<List<RouteSegment>> Runs(PipeRoute route)
     {
@@ -473,7 +513,7 @@ public static class AxonometryDxfWriter
         var children = route.Segments.ToLookup(s => s.From);
         bool Same(RouteSegment a, RouteSegment b) => a.Role == b.Role && a.Dn == b.Dn;
         var runs = new List<List<RouteSegment>>();
-        foreach (var start in route.Segments.Where(s => s.Role != RouteSegmentRole.Row && (!byTo.TryGetValue(s.From, out var p) || !Same(p, s))))
+        foreach (var start in route.Segments.Where(s => !byTo.TryGetValue(s.From, out var p) || !Same(p, s)))
         {
             var run = new List<RouteSegment> { start };
             while (children[run[^1].To].Where(c => Same(c, start)).ToList() is [var next])
@@ -487,10 +527,30 @@ public static class AxonometryDxfWriter
         return runs;
     }
 
+    // Все участки отрезка — на одной прямой (в проекции).
+    private static bool Straight(List<RouteSegment> run, Func<string, XY> at)
+    {
+        var a = at(run[0].From);
+        var b = at(run[^1].To);
+        var length = Math.Max(Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2)), 1e-9);
+        return run.All(s =>
+        {
+            var p = at(s.To);
+            return Math.Abs(((b.X - a.X) * (p.Y - a.Y)) - ((b.Y - a.Y) * (p.X - a.X))) / length < 1;
+        });
+    }
+
     /// <summary>Занятое место на схеме (мм модели) — повёрнутый прямоугольник: центр, направление, полуширина и полувысота.</summary>
     private readonly record struct Quad(XY C, double Ux, double Uy, double Hw, double Hh)
     {
         public static Quad Around(XY c, double r) => new(c, 1, 0, r, r);
+
+        // Отрезок линии как тонкий прямоугольник полутолщиной w.
+        public static Quad Line(XY a, XY b, double w)
+        {
+            var length = Math.Max(Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2)), 1e-9);
+            return new(new XY((a.X + b.X) / 2, (a.Y + b.Y) / 2), (b.X - a.X) / length, (b.Y - a.Y) / length, length / 2, w);
+        }
 
         // Текст высотой h и длиной n знаков (ширина знака ≈ 0,8 h) у точки привязки, горизонтальный.
         public static Quad Text(XY at, int n, double h, bool rightAligned, bool above)
@@ -545,6 +605,12 @@ public static class AxonometryDxfWriter
         var sides = preferBelow ? new[] { -1.0, 1.0 } : [1.0, -1.0];
         foreach (var shift in new[] { 0.0, -0.15, 0.15, -0.3, 0.3, -0.4, 0.4 })
         {
+            // Подпись не выходит за свой участок: иначе её можно отнести к соседнему участку другого диаметра.
+            if (shift != 0 && (Math.Abs(shift) * length) + (width / 2) > length / 2)
+            {
+                continue;
+            }
+
             foreach (var side in sides)
             {
                 var mx = ((a.X + b.X) / 2) + (shift * length * ux);
@@ -553,7 +619,7 @@ public static class AxonometryDxfWriter
                 // Центр текста — на 0,8 h от оси трубы; начало строки — на половину ширины назад вдоль трубы.
                 var cx = mx + (side * nx * 0.8 * h);
                 var cy = my + (side * ny * 0.8 * h);
-                var box = new Quad(new XY(cx, cy), ux, uy, (width / 2) + pad, (h / 2) + pad);
+                var box = new Quad(new XY(cx, cy), ux, uy, (width / 2) + pad, (h / 2) + (0.2 * h));
                 if (placed.Any(box.Hits))
                 {
                     continue;
@@ -577,33 +643,45 @@ public static class AxonometryDxfWriter
 
     /// <summary>
     /// Подпись на выноске с полкой (как на листах ВК): наклонная линия от трубы под 45° и горизонтальная полка с текстом над ней.
-    /// Перебираются четыре направления и две длины выноски; если места нет нигде — ставится в первом положении.
+    /// Перебираются четыре направления и пять длин выноски; проверяются текст с полкой и наклонная линия; если чистого места нет —
+    /// ставится в положении с наименьшим числом наложений (подпись важнее: смена диаметра без подписи — ошибка чертежа).
     /// </summary>
     private static void PlaceLeader(CadDocument doc, Layer layer, List<Quad> placed, XY at, string text, double h)
     {
         var width = 0.8 * h * text.Length;
         var unit = h / 2.5;
-        (XY Knee, int Dir, Quad Box)? first = null;
-        foreach (var reach in new[] { 6.0, 10.0, 14.0 })
+        (XY Knee, int Dir, Quad Box, int Score)? best = null;
+        foreach (var reach in new[] { 6.0, 10.0, 14.0, 18.0, 24.0 })
         {
             foreach (var (dx, dy) in new[] { (1, 1), (-1, 1), (1, -1), (-1, -1) })
             {
                 var knee = new XY(at.X + (dx * reach * unit), at.Y + (dy * reach * unit));
                 var box = new Quad(new XY(knee.X + (dx * ((width / 2) + unit)), knee.Y + (0.7 * h)), 1, 0, (width / 2) + unit, 0.8 * h);
-                first ??= (knee, dx, box);
-                if (!placed.Any(box.Hits))
+
+                // Наклонная линия проверяется от 1 мм листа после трубы, на которой начинается. Наложение текста хуже,
+                // чем пересечение линией выноски.
+                var from = new XY(at.X + (dx * unit / Math.Sqrt(2)), at.Y + (dy * unit / Math.Sqrt(2)));
+                var leader = Quad.Line(from, knee, 0.05 * h);
+                var score = (3 * placed.Count(box.Hits)) + placed.Count(leader.Hits);
+                if (score == 0)
                 {
                     Draw(knee, dx, box);
                     return;
                 }
+
+                if (best is null || score < best.Value.Score)
+                {
+                    best = (knee, dx, box, score);
+                }
             }
         }
 
-        Draw(first!.Value.Knee, first.Value.Dir, first.Value.Box);
+        Draw(best!.Value.Knee, best.Value.Dir, best.Value.Box);
 
         void Draw(XY knee, int dir, Quad box)
         {
             placed.Add(box);
+            placed.Add(Quad.Line(at, knee, 0.05 * h));
             var end = knee.X + (dir * (width + (2 * unit)));
             doc.Entities.Add(new Line(new XYZ(at.X, at.Y, 0), new XYZ(knee.X, knee.Y, 0)) { Layer = layer });
             doc.Entities.Add(new Line(new XYZ(knee.X, knee.Y, 0), new XYZ(end, knee.Y, 0)) { Layer = layer });
