@@ -213,7 +213,7 @@ public static class ProjectPipeline
                         ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                         ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
                     },
-                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1 })],
+                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = Math.Max(plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0, (int)(norms.Find("sp485.p6_10_27.suctionLines")?.Values["minCount"] ?? 1)) })],
             };
         }
 
@@ -268,6 +268,7 @@ public static class ProjectPipeline
             // Патрубки установки — середина стороны, ближайшей к вводу; напорный — на 300 мм в сторону.
             var sides = new[] { new PlanPoint(set.X0, (set.Y0 + set.Y1) / 2), new PlanPoint(set.X1, (set.Y0 + set.Y1) / 2), new PlanPoint((set.X0 + set.X1) / 2, set.Y0), new PlanPoint((set.X0 + set.X1) / 2, set.Y1) };
             var suctionAt = sides.MinBy(s => Math.Abs(s.XMm - stationInlet.XMm) + Math.Abs(s.YMm - stationInlet.YMm))!;
+            var suctionAt2 = Math.Abs(suctionAt.YMm - set.Y0) < 1 || Math.Abs(suctionAt.YMm - set.Y1) < 1 ? new PlanPoint(suctionAt.XMm - 300, suctionAt.YMm) : new PlanPoint(suctionAt.XMm, suctionAt.YMm - 300);
             var alongX = Math.Abs(suctionAt.YMm - set.Y0) < 1 || Math.Abs(suctionAt.YMm - set.Y1) < 1;
             var dischargeAt = alongX ? new PlanPoint(suctionAt.XMm + 300, suctionAt.YMm) : new PlanPoint(suctionAt.XMm, suctionAt.YMm + 300);
             var dnS = station.Suction.Pipe.Dn;
@@ -276,8 +277,14 @@ public static class ProjectPipeline
             var outerD = series.Pick(dnD)?.OuterDiameterMm ?? dnD;
             var requests = new List<PipeRunRequest>
             {
-                new("Всасывающий", dnS, outerS, stationInlet, null, suctionAt, pipedSet.CollectorAxisMm, 0),
+                new("Всасывающий 1", dnS, outerS, stationInlet, null, suctionAt, pipedSet.CollectorAxisMm, 0),
             };
+
+            // Второй и следующие вводы (п. 6.10.27) — каждый к всасывающему коллектору, рядом с первым.
+            foreach (var (extra, k) in pumpRoom.Inlets.Skip(1).Select((p, k) => (p, k)))
+            {
+                requests.Add(new($"Всасывающий {k + 2}", dnS, outerS, extra, null, suctionAt2, pipedSet.CollectorAxisMm, 0));
+            }
             var outlets = pumpRoom.Outlets;
             for (var k = 0; k < units.Count; k++)
             {
@@ -363,6 +370,12 @@ public static class ProjectPipeline
                 hydrantPoints.AddRange(placed.Points);
                 issues.AddRange(placed.Issues);
             }
+        }
+
+        // Число трубопроводов насосной (пп. 6.10.27, 6.10.28, 6.7.1.43) — по разметке помещения насосной.
+        if (plan.PumpRooms.Count > 0 && plan.PumpRooms[0] is var checkedRoom)
+        {
+            issues.AddRange(StationLines.Check(norms, checkedRoom.Inlets.Count, checkedRoom.Outlets.Count, sections.Count, hydrantPoints.Count).Issues);
         }
 
         var hydrantSet = HydrantEquipment.PathFor(normsDir);
@@ -455,7 +468,7 @@ public static class ProjectPipeline
                 {
                     Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe($"DN{r.Dn}", r.Path))],
                     WallMarks = [
-                        .. plan.PumpRooms[0].Inlet is { } wi ? new[] { (wi, $"Ввод DN{station.Suction.Pipe.Dn}") } : [],
+                        .. plan.PumpRooms[0].Inlets.Select((wi, k) => (wi, $"Ввод {k + 1} DN{station.Suction.Pipe.Dn}")),
                         .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, $"Выпуск в сеть, секция {k + 1}")),
                         .. (piping?.Runs ?? []).Where(r => r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal)).Select(r => (r.Path[0], $"ГМ-{station.TruckInletDn}")),
                     ],

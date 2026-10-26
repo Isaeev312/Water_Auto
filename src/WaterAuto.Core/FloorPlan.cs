@@ -23,7 +23,10 @@ public sealed record Inlet(string Id, PlanPoint Location, string? Name);
 /// </summary>
 public sealed record PumpRoom(string Id, Polygon Outline, PlanPoint? Door = null)
 {
-    public PlanPoint? Inlet { get; init; }
+    /// <summary>Вводы (входные всасывающие трубопроводы) — не менее двух по п. 6.10.27.</summary>
+    public IReadOnlyList<PlanPoint> Inlets { get; init; } = [];
+
+    public PlanPoint? Inlet => Inlets.Count > 0 ? Inlets[0] : null;
 
     public IReadOnlyList<PlanPoint> Outlets { get; init; } = [];
 

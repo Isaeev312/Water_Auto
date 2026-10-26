@@ -272,7 +272,7 @@ public static class FloorPlanImporter
             // Ввод и выпуски — точки слоёв ПТ_НС_ВВОД и ПТ_НС_ВЫПУСК на стене насосной (не дальше 0,5 м).
             PumpRooms = [.. pumpRooms.Select(r => new PumpRoom(r.Id, r.Outline, doors.Where(d => r.Outline.DistanceTo(d) <= 500).Select(d => (PlanPoint?)d).FirstOrDefault())
             {
-                Inlet = stationInlets.Where(p => r.Outline.DistanceTo(p) <= 500).Select(p => (PlanPoint?)p).FirstOrDefault(),
+                Inlets = [.. stationInlets.Where(p => r.Outline.DistanceTo(p) <= 500)],
                 Outlets = [.. stationOutlets.Where(p => r.Outline.DistanceTo(p) <= 500)],
                 TruckInlets = [.. truckInlets.Where(p => r.Outline.DistanceTo(p) <= 500)],
             })],

@@ -357,7 +357,7 @@ public class FloorPlanImporterTests
         b.Point(FloorPlanImporter.PumpOutletLayer, 20000, 2000); // далеко от насосной — не её
 
         var room = ImportDxf(b).Plan!.PumpRooms.ShouldHaveSingleItem();
-        room.Inlet.ShouldBe(new PlanPoint(1000, 3000));
+        room.Inlets.ShouldBe([new PlanPoint(1000, 3000)]);
         room.Outlets.ShouldBe([new PlanPoint(7000, 2000)]);
     }
 
