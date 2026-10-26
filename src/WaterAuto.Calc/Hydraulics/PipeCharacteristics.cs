@@ -26,8 +26,8 @@ public sealed record ResolvedCharacteristic(
 }
 
 /// <summary>
-/// Kт стальной трубы: строка табл. Б.2 по стандарту, наружному диаметру и стенке; если строки нет —
-/// формула Б.8 Kт = 10⁻⁸·ψ·Ø^θ по внутреннему диаметру с коэффициентами табл. Б.3 — только в её диапазоне DN.
+/// Kт стальной трубы: строка таблицы Б.2 по стандарту, наружному диаметру и стенке; если строки нет —
+/// формула Б.8 Kт = 10⁻⁸·ψ·Ø^θ по внутреннему диаметру с коэффициентами таблицы Б.3 — только в её диапазоне DN.
 /// Вне таблицы и вне диапазона формулы — null: Kт задаётся вручную или по данным производителя.
 /// Правило выбора — ARCHITECTURE §9.2, подтверждение — open_questions.md В-04.
 /// </summary>
@@ -50,26 +50,26 @@ public static class PipeCharacteristics
             return null;
         }
 
-        foreach (var r in norms.ByClause("табл. Б.2"))
+        foreach (var r in norms.ByClause(NormKeys.ClauseTableB2).Where(IsUsable))
         {
-            if (r.Attributes.GetValueOrDefault("standard") == standard
-                && Math.Abs(r.Values["D_out"]!.Value - outerDiameterMm) < 1e-9
-                && Math.Abs(r.Values["wall"]!.Value - wallMm) < 1e-9)
+            if (r.Attributes.GetValueOrDefault(NormKeys.AttrStandard) == standard
+                && Math.Abs(r.Values[NormKeys.DOut]!.Value - outerDiameterMm) < 1e-9
+                && Math.Abs(r.Values[NormKeys.Wall]!.Value - wallMm) < 1e-9)
             {
-                var outdoorOnly = string.Equals(r.Attributes.GetValueOrDefault("outdoorOnly"), "true", StringComparison.OrdinalIgnoreCase);
+                var outdoorOnly = string.Equals(r.Attributes.GetValueOrDefault(NormKeys.AttrOutdoorOnly), "true", StringComparison.OrdinalIgnoreCase);
                 return new ResolvedCharacteristic(
-                    new PipeCharacteristic(r.Values["Kt"]!.Value),
+                    new PipeCharacteristic(r.Values[NormKeys.Kt]!.Value),
                     CharacteristicSource.TableB2,
                     r.Id,
                     dn,
-                    (int)r.Values["dn"]!.Value,
+                    (int)r.Values[NormKeys.Dn]!.Value,
                     outdoorOnly);
             }
         }
 
-        var coefficients = norms.ByClause("табл. Б.3").FirstOrDefault(r =>
-            r.Attributes.GetValueOrDefault("standard") == standard && r.Attributes.GetValueOrDefault("quantity") == "Kt");
-        if (coefficients?.Values.GetValueOrDefault("dnMin") is not { } dnMin || coefficients.Values.GetValueOrDefault("dnMax") is not { } dnMax
+        var coefficients = norms.ByClause(NormKeys.ClauseTableB3).FirstOrDefault(r =>
+            IsUsable(r) && r.Attributes.GetValueOrDefault(NormKeys.AttrStandard) == standard && r.Attributes.GetValueOrDefault(NormKeys.AttrQuantity) == NormKeys.Kt);
+        if (coefficients?.Values.GetValueOrDefault(NormKeys.DnMin) is not { } dnMin || coefficients.Values.GetValueOrDefault(NormKeys.DnMax) is not { } dnMax
             || dn < dnMin || dn > dnMax)
         {
             // Нет коэффициентов или не задан диапазон DN формулы — считать нельзя (раньше null в dnMin/dnMax молча пропускал проверку).
@@ -77,7 +77,7 @@ public static class PipeCharacteristics
         }
 
         var inner = outerDiameterMm - (2 * wallMm);
-        var kt = 1e-8 * coefficients.Values["psi"]!.Value * Math.Pow(inner, coefficients.Values["theta"]!.Value);
+        var kt = 1e-8 * coefficients.Values[NormKeys.Psi]!.Value * Math.Pow(inner, coefficients.Values[NormKeys.Theta]!.Value);
         if (!double.IsFinite(kt) || kt <= 0)
         {
             return null;
@@ -85,4 +85,8 @@ public static class PipeCharacteristics
 
         return new ResolvedCharacteristic(new PipeCharacteristic(kt), CharacteristicSource.FormulaB8, coefficients.Id, dn);
     }
+
+    // attrs.usable == "false" — строка неприменима: Б.7 не воспроизводит табл. Б.1 (сноска в table_B_3.json).
+    private static bool IsUsable(NormRecord record) =>
+        !string.Equals(record.Attributes.GetValueOrDefault(NormKeys.AttrUsable), "false", StringComparison.OrdinalIgnoreCase);
 }

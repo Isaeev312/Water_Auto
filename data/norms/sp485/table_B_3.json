@@ -30,7 +30,8 @@
       "attrs": {
         "standard": "ГОСТ 3262",
         "formula": "Б.7",
-        "quantity": "A"
+        "quantity": "A",
+        "usable": "false"
       },
       "note": "Как напечатано; см. footnotes.B7."
     },
