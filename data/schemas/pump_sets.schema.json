@@ -49,6 +49,7 @@
           "lengthMm",
           "widthMm",
           "heightMm",
+          "collectorAxisMm",
           "collectorDn",
           "cabinet",
           "source"
@@ -93,6 +94,10 @@
           },
           "heightMm": {
             "type": "number"
+          },
+          "collectorAxisMm": {
+            "type": "number",
+            "description": "Высота оси коллектора от пола, мм (графа H2)"
           },
           "collectorDn": {
             "type": "integer"

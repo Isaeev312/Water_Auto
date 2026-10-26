@@ -106,6 +106,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 657.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -209,6 +210,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 701.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -312,6 +314,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 751.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -415,6 +418,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1162.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -518,6 +522,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 751.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -621,6 +626,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 836.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -724,6 +730,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 900.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -827,6 +834,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 982.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -930,6 +938,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1027.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1033,6 +1042,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1168.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1136,6 +1146,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1246.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1239,6 +1250,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1471.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1338,6 +1350,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 836.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1437,6 +1450,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 937.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1540,6 +1554,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1156.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1643,6 +1658,7 @@
    "lengthMm": 950.0,
    "widthMm": 1116.0,
    "heightMm": 1471.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1746,6 +1762,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 926.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1849,6 +1866,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 886.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -1952,6 +1970,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1047.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2055,6 +2074,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1010.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2158,6 +2178,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1136.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2261,6 +2282,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1194.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2364,6 +2386,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1477.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2467,6 +2490,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1547.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2570,6 +2594,7 @@
    "lengthMm": 944.0,
    "widthMm": 1160.0,
    "heightMm": 1617.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2669,6 +2694,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1031.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2768,6 +2794,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1118.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2871,6 +2898,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1130.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -2974,6 +3002,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1411.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3077,6 +3106,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1411.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3180,6 +3210,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1491.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3283,6 +3314,7 @@
    "lengthMm": 938.0,
    "widthMm": 1350.0,
    "heightMm": 1615.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3386,6 +3418,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1052.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3489,6 +3522,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1336.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3592,6 +3626,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1462.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3695,6 +3730,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1418.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3798,6 +3834,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1571.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -3901,6 +3938,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1545.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4004,6 +4042,7 @@
    "lengthMm": 934.0,
    "widthMm": 1465.0,
    "heightMm": 1712.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4107,6 +4146,7 @@
    "lengthMm": 1000.0,
    "widthMm": 1480.0,
    "heightMm": 1168.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4210,6 +4250,7 @@
    "lengthMm": 1000.0,
    "widthMm": 1480.0,
    "heightMm": 1377.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4313,6 +4354,7 @@
    "lengthMm": 1000.0,
    "widthMm": 1480.0,
    "heightMm": 1377.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4416,6 +4458,7 @@
    "lengthMm": 1000.0,
    "widthMm": 1480.0,
    "heightMm": 1552.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4519,6 +4562,7 @@
    "lengthMm": 1000.0,
    "widthMm": 1480.0,
    "heightMm": 1526.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4622,6 +4666,7 @@
    "lengthMm": 1000.0,
    "widthMm": 1480.0,
    "heightMm": 1720.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4725,6 +4770,7 @@
    "lengthMm": 1234.0,
    "widthMm": 1785.0,
    "heightMm": 1370.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4828,6 +4874,7 @@
    "lengthMm": 1234.0,
    "widthMm": 1785.0,
    "heightMm": 1536.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -4931,6 +4978,7 @@
    "lengthMm": 1234.0,
    "widthMm": 1785.0,
    "heightMm": 1492.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5034,6 +5082,7 @@
    "lengthMm": 1234.0,
    "widthMm": 1785.0,
    "heightMm": 1745.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5137,6 +5186,7 @@
    "lengthMm": 1234.0,
    "widthMm": 1785.0,
    "heightMm": 1987.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -5240,6 +5290,7 @@
    "lengthMm": 1234.0,
    "widthMm": 1785.0,
    "heightMm": 1892.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -5343,6 +5394,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 657.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5446,6 +5498,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 701.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5549,6 +5602,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 751.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5652,6 +5706,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 1162.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5755,6 +5810,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 751.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5858,6 +5914,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 836.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -5961,6 +6018,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 900.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6064,6 +6122,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 982.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6167,6 +6226,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 1027.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6270,6 +6330,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 1168.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6373,6 +6434,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 1246.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6476,6 +6538,7 @@
    "lengthMm": 1450.0,
    "widthMm": 1116.0,
    "heightMm": 1471.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 80,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6575,6 +6638,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1136.0,
    "heightMm": 836.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6674,6 +6738,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1136.0,
    "heightMm": 937.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6777,6 +6842,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1136.0,
    "heightMm": 1156.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6880,6 +6946,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1136.0,
    "heightMm": 1471.0,
+   "collectorAxisMm": 190.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -6983,6 +7050,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 926.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7086,6 +7154,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 886.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7189,6 +7258,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1047.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7292,6 +7362,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1010.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7395,6 +7466,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1136.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7498,6 +7570,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1194.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7601,6 +7674,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1477.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7704,6 +7778,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1547.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7807,6 +7882,7 @@
    "lengthMm": 1444.0,
    "widthMm": 1160.0,
    "heightMm": 1617.0,
+   "collectorAxisMm": 205.0,
    "collectorDn": 100,
    "cabinet": {
     "heightMm": 1460.0,
@@ -7906,6 +7982,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1031.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8005,6 +8082,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1118.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8108,6 +8186,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1130.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8211,6 +8290,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1411.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8314,6 +8394,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1411.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8417,6 +8498,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1491.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8520,6 +8602,7 @@
    "lengthMm": 1438.0,
    "widthMm": 1350.0,
    "heightMm": 1615.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 150,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8623,6 +8706,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1052.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8726,6 +8810,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1336.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8829,6 +8914,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1462.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -8932,6 +9018,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1418.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -9035,6 +9122,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1571.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -9138,6 +9226,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1545.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -9241,6 +9330,7 @@
    "lengthMm": 1434.0,
    "widthMm": 1465.0,
    "heightMm": 1712.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -9344,6 +9434,7 @@
    "lengthMm": 1500.0,
    "widthMm": 1480.0,
    "heightMm": 1168.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -9447,6 +9538,7 @@
    "lengthMm": 1500.0,
    "widthMm": 1480.0,
    "heightMm": 1377.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -9550,6 +9642,7 @@
    "lengthMm": 1500.0,
    "widthMm": 1480.0,
    "heightMm": 1377.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -9653,6 +9746,7 @@
    "lengthMm": 1500.0,
    "widthMm": 1480.0,
    "heightMm": 1552.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -9756,6 +9850,7 @@
    "lengthMm": 1500.0,
    "widthMm": 1480.0,
    "heightMm": 1526.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -9859,6 +9954,7 @@
    "lengthMm": 1500.0,
    "widthMm": 1480.0,
    "heightMm": 1720.0,
+   "collectorAxisMm": 240.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -9962,6 +10058,7 @@
    "lengthMm": 2120.0,
    "widthMm": 1785.0,
    "heightMm": 1370.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -10065,6 +10162,7 @@
    "lengthMm": 2120.0,
    "widthMm": 1785.0,
    "heightMm": 1536.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -10168,6 +10266,7 @@
    "lengthMm": 2120.0,
    "widthMm": 1785.0,
    "heightMm": 1492.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1460.0,
@@ -10271,6 +10370,7 @@
    "lengthMm": 2120.0,
    "widthMm": 1785.0,
    "heightMm": 1745.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -10374,6 +10474,7 @@
    "lengthMm": 2120.0,
    "widthMm": 1785.0,
    "heightMm": 1987.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,
@@ -10477,6 +10578,7 @@
    "lengthMm": 2120.0,
    "widthMm": 1785.0,
    "heightMm": 1892.0,
+   "collectorAxisMm": 285.0,
    "collectorDn": 200,
    "cabinet": {
     "heightMm": 1900.0,

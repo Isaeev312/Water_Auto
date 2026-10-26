@@ -45,6 +45,7 @@ public static class SpecificationXlsx
     [
         (TakeoffGroup.PumpStation, "Оборудование"),
         (TakeoffGroup.PumpStationValves, "Арматура и приборы"),
+        (TakeoffGroup.PumpStationPipes, "Трубопроводы обвязки"),
         (TakeoffGroup.PumpStationFittings, "Фасонные части обвязки"),
         (TakeoffGroup.ControlUnit, "Узел управления"),
         (TakeoffGroup.Sprinklers, "Оросители"),

@@ -31,7 +31,9 @@ public sealed record NoteInputs(
     Length? HydrantReach = null,
     PumpStationResult? Station = null,
     PumpSetChoice? SetChoice = null,
-    PumpRoomPlan? RoomPlan = null);
+    PumpRoomPlan? RoomPlan = null,
+    PipingResult? Piping = null,
+    string? PipingSource = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -472,6 +474,11 @@ public static class ExplanatoryNoteComposer
                 ? $"**Помещение насосной** {F(w, "0.00")} × {F(h, "0.00")} м: оборудование с проходами п. 6.10.16 *не размещается* — см. замечания; помещение следует увеличить."
                 : $"**Помещение насосной** {F(w, "0.00")} × {F(h, "0.00")} м. Оборудование расставлено с проходами (п. 6.10.16):"));
             blocks.Add(new NoteList([.. rp.Rules.Select(r => r + ";")]));
+        }
+
+        if (i.Piping is { Runs.Count: > 0 } pp)
+        {
+            blocks.Add(new NoteParagraph($"**Обвязка.** Трубопроводы от ввода до коллекторов установки и от установки через узлы управления до выпусков в сеть трассированы по стенам на кронштейнах с опусками к оборудованию; между единицами оборудования — над проходами. Отступы от стен и высота прокладки приняты по рекомендациям: {i.PipingSource}. Общая длина — {F(pp.Runs.Sum(r => r.HorizontalMm + r.VerticalMm) / 1000, "0.0")} м, отводов — {pp.Runs.Sum(r => r.Elbows)} шт. (спецификация ПТ2.СО)."));
         }
 
         return blocks;

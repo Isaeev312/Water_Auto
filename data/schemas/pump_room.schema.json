@@ -75,6 +75,46 @@
     "setNote": {
       "type": "string",
       "description": "Обозначение документа на установку (ТУ) для спецификации."
+    },
+    "piping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wallOffsetMm",
+        "flangeToWallMm",
+        "floorMm",
+        "bracketHeightMm",
+        "levelGapMm",
+        "source"
+      ],
+      "properties": {
+        "wallOffsetMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "flangeToWallMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "floorMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "bracketHeightMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "levelGapMm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "source": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
     }
   }
 }

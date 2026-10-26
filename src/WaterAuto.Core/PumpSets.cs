@@ -18,4 +18,8 @@ public sealed record PumpSet(
     Footprint Cabinet,
     int CollectorDn,
     string Maker,
-    string Source);
+    string Source)
+{
+    /// <summary>Высота оси коллекторов установки от пола, мм.</summary>
+    public double CollectorAxisMm { get; init; } = 200;
+}

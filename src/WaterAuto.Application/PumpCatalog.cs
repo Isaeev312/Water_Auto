@@ -32,11 +32,32 @@ public static class PumpCatalog
                     new Footprint(cab.GetProperty("lengthMm").GetDouble(), cab.GetProperty("widthMm").GetDouble(), cab.GetProperty("heightMm").GetDouble()),
                     s.GetProperty("collectorDn").GetInt32(),
                     maker,
-                    s.GetProperty("source").GetString()!));
+                    s.GetProperty("source").GetString()!)
+                {
+                    CollectorAxisMm = s.TryGetProperty("collectorAxisMm", out var axis) ? axis.GetDouble() : 200,
+                });
             }
         }
 
         return sets;
+    }
+
+    /// <summary>Правила прокладки обвязки из data/catalog/pump_room.json (рекомендации литературы); null — нет данных.</summary>
+    public static (double WallOffset, double BracketHeight, double LevelGap, string Source)? Piping(string normsDir)
+    {
+        var path = Path.Combine(Dir(normsDir), "pump_room.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        if (!doc.RootElement.TryGetProperty("piping", out var p))
+        {
+            return null;
+        }
+
+        return (p.GetProperty("wallOffsetMm").GetDouble(), p.GetProperty("bracketHeightMm").GetDouble(), p.GetProperty("levelGapMm").GetDouble(), p.GetProperty("source").GetString()!);
     }
 
     /// <summary>Условные габариты узла управления и жокей-насоса; обозначение ТУ установки (если задано).</summary>

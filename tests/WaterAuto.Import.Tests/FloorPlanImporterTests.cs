@@ -348,6 +348,20 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
+    public void Pump_room_inlet_and_outlets_are_points_on_its_walls()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Rect(FloorPlanImporter.PumpRoomLayer, 1000, 1000, 7000, 5000);
+        b.Point(FloorPlanImporter.PumpInletLayer, 1000, 3000);
+        b.Point(FloorPlanImporter.PumpOutletLayer, 7000, 2000);
+        b.Point(FloorPlanImporter.PumpOutletLayer, 20000, 2000); // далеко от насосной — не её
+
+        var room = ImportDxf(b).Plan!.PumpRooms.ShouldHaveSingleItem();
+        room.Inlet.ShouldBe(new PlanPoint(1000, 3000));
+        room.Outlets.ShouldBe([new PlanPoint(7000, 2000)]);
+    }
+
+    [Fact]
     public void No_sprinkler_zone_labelled_PNS_is_taken_as_the_pump_room()
     {
         var b = DrawingBuilder.ValidFloor();

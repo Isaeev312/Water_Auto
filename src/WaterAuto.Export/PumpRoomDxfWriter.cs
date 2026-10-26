@@ -9,8 +9,17 @@ namespace WaterAuto.Export;
 /// <summary>Оборудование на плане насосной: прямоугольник, мм чертежа; Position — номер позиции спецификации; Front — сторона обслуживания.</summary>
 public sealed record PumpRoomEquipment(string Label, double X0, double Y0, double X1, double Y1, int? Position = null, (int X, int Y)? Front = null, double FrontDepth = 0);
 
-/// <summary>Данные плана насосной: контур, дверь, оборудование, примечания (принятые проходы и допущения).</summary>
-public sealed record PumpRoomDrawing(Polygon Room, PlanPoint? Door, IReadOnlyList<PumpRoomEquipment> Equipment, IReadOnlyList<string> Notes);
+/// <summary>Трубопровод на плане насосной: ломаная, подпись (DN), уровень (0 — ближе к стене).</summary>
+public sealed record PumpRoomPipe(string Label, IReadOnlyList<PlanPoint> Path);
+
+/// <summary>Данные плана насосной: контур, дверь, оборудование, примечания (принятые проходы и допущения), обвязка, ввод и выпуски.</summary>
+public sealed record PumpRoomDrawing(Polygon Room, PlanPoint? Door, IReadOnlyList<PumpRoomEquipment> Equipment, IReadOnlyList<string> Notes)
+{
+    public IReadOnlyList<PumpRoomPipe> Pipes { get; init; } = [];
+
+    /// <summary>Точки на стенах с подписями (ввод, выпуски).</summary>
+    public IReadOnlyList<(PlanPoint At, string Text)> WallMarks { get; init; } = [];
+}
 
 /// <summary>
 /// План насосной станции на листе с рамкой и основной надписью по форме 3 (формат и масштаб — по габаритам, <see cref="GostSheet.Fit"/>):
@@ -22,6 +31,7 @@ public static class PumpRoomDxfWriter
     public const string RoomLayer = "ПТ_НС_КОНТУР";
     public const string EquipmentLayer = "ПТ_НС_ОБОРУД";
     public const string TextLayer = "ПТ_НС_ТЕКСТ";
+    public const string PipeLayer = "ПТ_НС_ТРУБЫ";
 
     public static void Write(string path, PumpRoomDrawing data, TitleBlock stamp, string font = DocumentStyle.DefaultFont) =>
         DxfDrawing.Save(path, Build(data, stamp), font);
@@ -109,6 +119,29 @@ public static class PumpRoomDxfWriter
                 Rect(a0, b0, a1, b1, dims);
                 Text(a0 + (0.3 * h), b1 - (1.2 * h), "2,0 м — обслуж.", 0.6 * h);
             }
+        }
+
+        // Обвязка: трубы — толстые линии, подпись DN над самым длинным участком.
+        var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 5, LineWeightType.W50);
+        foreach (var pipe in data.Pipes.Where(p => p.Path.Count >= 2))
+        {
+            doc.Entities.Add(new LwPolyline([.. pipe.Path.Select(p => new XY(p.XMm, p.YMm))]) { Layer = pipes });
+            var (a, b) = pipe.Path.Zip(pipe.Path.Skip(1)).MaxBy(s => Math.Abs(s.Second.XMm - s.First.XMm) + Math.Abs(s.Second.YMm - s.First.YMm));
+            var vertical = Math.Abs(b.XMm - a.XMm) < Math.Abs(b.YMm - a.YMm);
+            doc.Entities.Add(new TextEntity
+            {
+                Value = pipe.Label,
+                InsertPoint = P(((a.XMm + b.XMm) / 2) + (vertical ? -0.4 * h : 0), ((a.YMm + b.YMm) / 2) + (vertical ? 0 : 0.4 * h)),
+                Height = 0.8 * h,
+                Rotation = vertical ? Math.PI / 2 : 0,
+                Layer = text,
+            });
+        }
+
+        foreach (var (at, label) in data.WallMarks)
+        {
+            doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.6 * h, Layer = pipes });
+            Text(at.XMm + h, at.YMm - (2 * h), label, 0.8 * h);
         }
 
         // Цепочки размеров: по X — у нижней стены, по Y — у левой; точки — стены и грани первого (основного) оборудования

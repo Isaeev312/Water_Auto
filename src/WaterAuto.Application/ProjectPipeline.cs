@@ -256,6 +256,63 @@ public static class ProjectPipeline
             issues.AddRange(roomPlan.Issues);
         }
 
+        // Обвязка насосной: ввод → коллектор установки; установка → узлы управления → выпуски. Трубы — по стенам на кронштейнах
+        // (рекомендации литературы из data/catalog/pump_room.json), длины и отводы — в спецификацию ПТ2.СО.
+        PipingResult? piping = null;
+        if (roomPlan is { Items.Count: > 0 } && plan.PumpRooms[0] is { Inlet: { } stationInlet } pumpRoom && PumpCatalog.Piping(normsDir) is { } pr && setChoice?.Chosen is { } pipedSet)
+        {
+            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+            var set = roomPlan.Items.First(i => i.Kind == StationItemKind.PumpSet);
+            var units = roomPlan.Items.Where(i => i.Kind == StationItemKind.ControlUnit).ToList();
+
+            // Патрубки установки — середина стороны, ближайшей к вводу; напорный — на 300 мм в сторону.
+            var sides = new[] { new PlanPoint(set.X0, (set.Y0 + set.Y1) / 2), new PlanPoint(set.X1, (set.Y0 + set.Y1) / 2), new PlanPoint((set.X0 + set.X1) / 2, set.Y0), new PlanPoint((set.X0 + set.X1) / 2, set.Y1) };
+            var suctionAt = sides.MinBy(s => Math.Abs(s.XMm - stationInlet.XMm) + Math.Abs(s.YMm - stationInlet.YMm))!;
+            var alongX = Math.Abs(suctionAt.YMm - set.Y0) < 1 || Math.Abs(suctionAt.YMm - set.Y1) < 1;
+            var dischargeAt = alongX ? new PlanPoint(suctionAt.XMm + 300, suctionAt.YMm) : new PlanPoint(suctionAt.XMm, suctionAt.YMm + 300);
+            var dnS = station.Suction.Pipe.Dn;
+            var dnD = design.SupplyDn;
+            var outerS = series.Pick(dnS)?.OuterDiameterMm ?? dnS;
+            var outerD = series.Pick(dnD)?.OuterDiameterMm ?? dnD;
+            var requests = new List<PipeRunRequest>
+            {
+                new("Всасывающий", dnS, outerS, stationInlet, null, suctionAt, pipedSet.CollectorAxisMm, 0),
+            };
+            var outlets = pumpRoom.Outlets;
+            for (var k = 0; k < units.Count; k++)
+            {
+                var u = units[k];
+                var c = new PlanPoint((u.X0 + u.X1) / 2, (u.Y0 + u.Y1) / 2);
+                requests.Add(new($"Напорный к УУ {k + 1}", dnD, outerD, dischargeAt, pipedSet.Hydraulic.HeightMm, c, 1000, 1));
+                if (k < outlets.Count)
+                {
+                    requests.Add(new($"Выпуск секции {k + 1}", dnD, outerD, c, 1500, outlets[k], null, 1));
+                }
+                else
+                {
+                    issues.Add(new Issue("pumpRoom.noOutlet", IssueLevel.Warning, $"Для секции {k + 1} нет точки выпуска на слое ПТ_НС_ВЫПУСК — выпуск не трассирован.", pumpRoom.Id));
+                }
+            }
+
+            piping = PumpRoomPiping.Route(pumpRoom.Outline, requests, new PipingRules(pr.WallOffset, pr.BracketHeight, pr.LevelGap));
+            issues.AddRange(piping.Issues);
+            var ruP = CultureInfo.GetCultureInfo("ru-RU");
+            var elbowStandard = design.FittingStandards.TryGetValue("Отвод", out var es) ? es : null;
+            var pipeRows = piping.Runs.GroupBy(r => r.Dn).OrderBy(g => g.Key).SelectMany(g =>
+            {
+                var sp = series.Pick(g.Key);
+                var meters = g.Sum(r => r.HorizontalMm + r.VerticalMm) / 1000;
+                return new[]
+                {
+                    new TakeoffItem(TakeoffGroup.PumpStationPipes,
+                        sp is null ? $"Трубы стальные DN{g.Key}" : string.Create(ruP, $"Трубы {sp.PipeType} DN{g.Key}, Ø{sp.OuterDiameterMm:0.##}×{sp.WallMm:0.##} мм"),
+                        sp?.Standard, Math.Round(meters, 1), "м", "по трассе на плане насосной, с опусками"),
+                    new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "повороты трассы и опуски к оборудованию"),
+                };
+            });
+            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items, .. pipeRows] };
+        }
+
         // Номера позиций спецификации насосной — на схеме, по роли элемента (сквозная нумерация).
         var schemePositions = SpecificationXlsx.Positions(stationTakeoff, continuous: true)
             .Where(p => p.Item.Role is not null)
@@ -368,7 +425,15 @@ public static class ProjectPipeline
                     "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно (data/catalog/pump_room.json), уточнить по выбранному оборудованию.",
                     "Свободная зона у двери 1 × 1 м — правило программы.",
                     "Номера позиций — по спецификации ПТ2.СО.",
-                ]),
+                    .. piping is null ? Array.Empty<string>() : [$"Трубопроводы — на кронштейнах у стен на высоте {PumpCatalog.Piping(normsDir)!.Value.BracketHeight / 1000:0.0} м, отступ от стены и ярусы — по рекомендациям: {PumpCatalog.Piping(normsDir)!.Value.Source}"],
+                ])
+                {
+                    Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe($"DN{r.Dn}", r.Path))],
+                    WallMarks = [
+                        .. plan.PumpRooms[0].Inlet is { } wi ? new[] { (wi, $"Ввод DN{station.Suction.Pipe.Dn}") } : [],
+                        .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, $"Выпуск в сеть, секция {k + 1}")),
+                    ],
+                },
                 SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
                 project.Font));
         }
@@ -413,7 +478,9 @@ public static class ProjectPipeline
                 hydrantReach,
                 station,
                 setChoice,
-                roomPlan),
+                roomPlan,
+                piping,
+                PumpCatalog.Piping(normsDir)?.Source),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 

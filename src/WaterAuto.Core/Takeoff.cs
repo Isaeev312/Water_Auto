@@ -6,6 +6,7 @@ public enum TakeoffGroup
     PumpStation,
     PumpStationValves,
     PumpStationFittings,
+    PumpStationPipes,
     ControlUnit,
     Sprinklers,
     Pipes,
