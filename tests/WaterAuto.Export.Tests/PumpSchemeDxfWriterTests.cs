@@ -21,7 +21,18 @@ public class PumpSchemeDxfWriterTests
         texts.ShouldContain("DN100");
         texts.ShouldContain(t => t.Contains("ГМ-80", StringComparison.Ordinal));
         texts.ShouldContain("Условные обозначения");
-        doc.Entities.OfType<Arc>().Count(a => a.Layer.Name == PumpSchemeDxfWriter.EquipmentLayer).ShouldBe(2 + 1); // 2 головки + обозначение в таблице
+        doc.Entities.OfType<Arc>().Count(a => a.Layer.Name == PumpSchemeDxfWriter.EquipmentLayer).ShouldBe(2 + 1 + 2); // 2 головки, обозначение в таблице, 2 заглушки
         doc.Entities.ShouldContain(e => e.Layer.Name == GostSheet.Layer);
+    }
+
+    [Fact]
+    public void Positions_of_the_station_specification_are_marked_on_the_scheme()
+    {
+        var doc = PumpSchemeDxfWriter.Build(Data with { Positions = new Dictionary<string, int> { ["pump"] = 1, ["teeS"] = 15, ["head"] = 12 } }, Stamp);
+        var texts = doc.Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
+        texts.ShouldContain("1");
+        texts.ShouldContain("15");
+        texts.ShouldContain("12");
+        texts.ShouldNotContain("16");
     }
 }

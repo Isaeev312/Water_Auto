@@ -29,6 +29,8 @@ public static class ProjectPipeline
     public const string GeneralDataFile = "general_data.docx";
     public const string SpecificationDocxFile = "specification.docx";
     public const string PumpSchemeFile = "pump_scheme.dxf";
+    public const string PumpStationSpecFile = "specification_pns.docx";
+    public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -183,10 +185,12 @@ public static class ProjectPipeline
         var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), new Pressure(design.InletPressure));
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
+        var stationTakeoff = new MaterialTakeoff([], []);
         if (File.Exists(stationSet))
         {
+            // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
             var ruPs = CultureInfo.GetCultureInfo("ru-RU");
-            takeoff = takeoff with
+            stationTakeoff = stationTakeoff with
             {
                 Items = [.. EquipmentSet.Items(
                     stationSet,
@@ -197,12 +201,18 @@ public static class ProjectPipeline
                         ["h"] = worst.PumpHead.Meters.ToString("0.0", ruPs),
                         ["dnS"] = station.Suction.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
                         ["dnD"] = station.Discharge.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
+                        ["dnC"] = design.SupplyDn.ToString(CultureInfo.InvariantCulture),
                         ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                         ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
                     },
-                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets }), .. takeoff.Items],
+                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets })],
             };
         }
+
+        // Номера позиций спецификации насосной — на схеме, по роли элемента (сквозная нумерация).
+        var schemePositions = SpecificationXlsx.Positions(stationTakeoff, continuous: true)
+            .Where(p => p.Item.Role is not null)
+            .ToDictionary(p => p.Item.Role!, p => p.Position);
 
         // Узел управления — на каждую секцию (ввод), DN подводящего; промывочные устройства — п. 6.7.1.15.
         var controlUnit = EquipmentSet.PathFor(normsDir, EquipmentSet.ControlUnitFile);
@@ -288,9 +298,17 @@ public static class ProjectPipeline
                     "Марки агрегатов, жокей-насоса и шкафа управления — по каталогу производителя по требуемым Q и H; DN обвязки — по скорости воды (п. 6.7.1.37).",
                     "Затворы на линиях агрегатов и перед узлом управления — с контролем положения; приборы — через трёхходовые краны (пп. 6.8.7, 6.8.10).",
                     "Оборудование, кроме оросителей, приборов и трубопроводов, окрашивается в красный цвет (п. 6.8.11).",
-                ]),
+                    "Номера позиций — по спецификации насосной станции ПТ2.СО; фланцы и крепёж — по месту (ГОСТ 21.601, п. 9.4).",
+                ],
+                schemePositions),
             SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
             project.Font));
+        if (stationTakeoff.Items.Count > 0)
+        {
+            Write(outDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
+            Write(outDir, PumpStationSpecXlsxFile, files, p => SpecificationXlsx.Write(p, stationTakeoff, new SpecificationHeader($"{project.Name}. Насосная станция. Спецификация оборудования, изделий и материалов"), project.Font, continuous: true));
+        }
+
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
         Write(outDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
 
@@ -329,7 +347,7 @@ public static class ProjectPipeline
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
-            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation),
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));

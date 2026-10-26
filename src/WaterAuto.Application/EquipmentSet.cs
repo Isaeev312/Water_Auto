@@ -47,6 +47,7 @@ public static class EquipmentSet
     /// Комплект одного места с подстановками в наименование (<paramref name="tokens"/>: «q» → «{q}») и множителями количества
     /// по полю count шаблона (<paramref name="counts"/>: «pumps», «truckInlets»).
     /// </summary>
+    /// <remarks>Раздел строки — поле group шаблона (equipment, valves, fittings — разделы насосной), без него — <paramref name="group"/>.</remarks>
     public static IReadOnlyList<TakeoffItem> Items(string path, TakeoffGroup group, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts)
     {
         ArgumentNullException.ThrowIfNull(tokens);
@@ -62,13 +63,20 @@ public static class EquipmentSet
                 continue;
             }
 
+            var section = t.TryGetProperty("group", out var g) ? g.GetString() switch
+            {
+                "valves" => TakeoffGroup.PumpStationValves,
+                "fittings" => TakeoffGroup.PumpStationFittings,
+                _ => group,
+            } : group;
             items.Add(new TakeoffItem(
-                group,
+                section,
                 name,
                 t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? designation : null,
                 t.GetProperty("per").GetDouble() * times,
                 t.GetProperty("unit").GetString()!,
-                t.TryGetProperty("note", out var n) ? n.GetString() : null));
+                t.TryGetProperty("note", out var n) ? n.GetString() : null,
+                Role: t.TryGetProperty("role", out var r) ? r.GetString() : null));
         }
 
         return Merge(items);

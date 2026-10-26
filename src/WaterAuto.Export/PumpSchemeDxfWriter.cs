@@ -8,7 +8,8 @@ namespace WaterAuto.Export;
 
 /// <summary>
 /// Данные принципиальной схемы насосной станции: число агрегатов, DN обвязки, патрубки для пожарной техники, подписи.
-/// Собирается из расчёта (Application): Export не знает про Calc.
+/// Собирается из расчёта (Application): Export не знает про Calc. Positions — номер позиции спецификации по роли элемента
+/// (pump, valveS, teeS…); у элемента без номера выноска не ставится.
 /// </summary>
 public sealed record PumpSchemeData(
     int Pumps,
@@ -20,7 +21,8 @@ public sealed record PumpSchemeData(
     string PumpText,
     string JockeyText,
     string SourceText,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes,
+    IReadOnlyDictionary<string, int>? Positions = null);
 
 /// <summary>
 /// Принципиальная схема насосной станции пожаротушения на листе A3 с рамкой и основной надписью по форме 3:
@@ -49,13 +51,25 @@ public static class PumpSchemeDxfWriter
         GostSheet.Draw(doc, sheet, stamp);
         var d = new Drawer(doc, pipes, equipment, text);
 
-        // Коллекторы: всасывающий снизу, напорный сверху; ветви агрегатов — вертикально между ними.
+        // Коллекторы: всасывающий снизу, напорный сверху; ветви агрегатов — вертикально между ними; торцы коллекторов — заглушки.
         const double yS = 100, yD = 190, x0 = 60;
         var branches = Enumerable.Range(0, data.Pumps).Select(k => 105.0 + (k * 70)).ToList();
         var xJ = branches[^1] + 65;
         var xEnd = xJ + 40;
-        d.Pipe(25, yS, xJ, yS);
+        void Pos(double x, double y, string role, int dir = 1)
+        {
+            if (data.Positions?.TryGetValue(role, out var n) == true)
+            {
+                d.Leader(x, y, n.ToString(System.Globalization.CultureInfo.InvariantCulture), dir);
+            }
+        }
+
+        d.Pipe(25, yS, xJ + 8, yS);
+        d.Cap(xJ + 8, yS, horizontal: true);
+        Pos(xJ + 8, yS, "capS");
         d.Pipe(x0, yD, xEnd + 60, yD);
+        d.Cap(x0, yD, horizontal: true, left: true);
+        Pos(x0, yD, "capD", -1);
         d.Text(27, yS + 3, $"{data.SourceText}, DN{data.SuctionDn}", 2.5);
         d.Arrow(40, yS, 1, 0);
 
@@ -63,26 +77,50 @@ public static class PumpSchemeDxfWriter
         {
             var x = branches[k];
             d.Pipe(x, yS, x, yD);
-            d.Valve(x, 113, vertical: true, sensor: true);
-            d.Insert(x, 124);
-            d.Gauge(x, 131, "Р", vacuum: true);
+            d.Valve(x, 111, vertical: true, sensor: true);
+            d.Insert(x, 120);
+            d.Gauge(x, 126, "Р", vacuum: true);
+            d.Reducer(x, 133, wideBelow: true);
             d.Pump(x, 145, 8);
             d.Text(x + 10, 145, $"Н{k + 1}", 3.5);
-            d.Insert(x, 162);
+            d.Reducer(x, 157, wideBelow: false);
+            d.Insert(x, 163);
             d.Gauge(x, 168, "Р", vacuum: false);
             d.Check(x, 175);
             d.Valve(x, 183, vertical: true, sensor: true);
             d.Text(x + 6, 104, $"DN{data.SuctionDn}", 2.5);
-            d.Text(x + 6, 186, $"DN{data.DischargeDn}", 2.5);
+            d.Text(x - 16, 182, $"DN{data.DischargeDn}", 2.5);
+            Pos(x - 8, 145, "pump", -1);
+            if (k == 0)
+            {
+                // Номера позиций — у первого агрегата; второй одинаков.
+                Pos(x, yS, "teeS", -1);
+                Pos(x + 3, 111, "valveS");
+                Pos(x + 2, 120, "insertS");
+                Pos(x - 11, 126, "vacuum", -1);
+                Pos(x + 1.5, 133, "reducerS");
+                Pos(x + 1.5, 157, "reducerD");
+                Pos(x + 2, 163, "insertD");
+                Pos(x - 11, 168, "gauge", -1);
+                Pos(x - 6, 168, "cock", -1);
+                Pos(x + 3, 175, "checkD");
+                Pos(x + 3, 181, "valveD");
+                Pos(x, yD, "teeD", -1);
+            }
         }
 
         d.Text(26, 160, data.PumpText, 2.5, width: 62);
+
+        // Шкаф управления насосами — у агрегатов.
+        d.Box(branches[0] + 22, 140, "ШУ");
+        Pos(branches[0] + 36, 140, "cabinet");
 
         // Жокей-насос с мембранным баком — между коллекторами.
         d.Pipe(xJ, yS, xJ, yD);
         d.Valve(xJ, 113, vertical: true, sensor: false);
         d.Pump(xJ, 145, 5);
         d.Text(xJ + 7, 145, "НЖ", 3.5);
+        Pos(xJ - 5, 145, "jockey", -1);
         d.Check(xJ, 170);
         d.Valve(xJ, 180, vertical: true, sensor: false);
         d.Pipe(xJ, 158, xJ + 18, 158);
@@ -95,26 +133,36 @@ public static class PumpSchemeDxfWriter
         d.Arrow(xEnd + 50, yD, 1, 0);
         d.Text(xEnd + 18, yD + 3, $"В сеть АУП DN{data.SupplyDn}", 2.5);
 
-        // Патрубки для мобильной пожарной техники — сверху в напорный коллектор.
+        // Патрубки для мобильной пожарной техники — сверху в напорный коллектор; у фасада — отвод и головка.
         for (var k = 0; k < data.TruckInlets; k++)
         {
             var x = x0 + 20 + (k * 22);
-            d.Pipe(x, yD, x, 252);
-            d.Check(x, 215, down: true);
-            d.Valve(x, 228, vertical: true, sensor: false);
-            d.Head(x, 252);
+            d.Pipe(x, yD, x, 244);
+            d.Pipe(x, 244, x - 8, 244);
+            d.Pipe(x - 8, 244, x - 8, 252);
+            d.Check(x, 210, down: true);
+            d.Valve(x, 225, vertical: true, sensor: false);
+            d.Head(x - 8, 252);
+            if (k == data.TruckInlets - 1)
+            {
+                Pos(x + 6, yD, "teeT");
+                Pos(x + 3, 210, "checkT");
+                Pos(x + 3, 225, "valveT");
+                Pos(x, 244, "elbowT");
+                Pos(x - 5, 253, "head");
+            }
         }
 
         d.Text(x0 + 10, 262, $"От мобильной пожарной техники, ГМ-{data.TruckDn} (п. 6.10.17)", 2.5);
-        d.Text(x0 + 20 + (data.TruckInlets * 22), 229, "задвижки опломбированы «открыто»", 2);
+        d.Text(x0 + 30 + (data.TruckInlets * 22), 222, "задвижки опломбированы «открыто»", 2);
 
         d.Text(150, 280, "Принципиальная схема насосной станции пожаротушения", 5);
-        Legend(d, 300, 268);
-        var y = 85.0;
+        Legend(d, 300, 272);
+        var y = 92.0;
         foreach (var note in data.Notes.Select((n, k) => $"{k + 1}. {n}"))
         {
-            d.Text(25, y, note, 2.5, width: 330);
-            y -= 7;
+            d.Text(25, y, note, 2.5, width: 200);
+            y -= 8;
         }
 
         return doc;
@@ -135,7 +183,7 @@ public static class PumpSchemeDxfWriter
             ("Головка соединительная", (cx, cy) => d.Head(cx, cy)),
             ("Трубопровод", (cx, cy) => d.Pipe(cx - 6, cy, cx + 6, cy)),
         };
-        var y = top - 8;
+        var y = top - 12;
         foreach (var (label, draw) in rows)
         {
             draw(x + 8, y);
@@ -241,6 +289,30 @@ public static class PumpSchemeDxfWriter
         {
             L(x, y - 6, x + 14, y - 6); L(x + 14, y - 6, x + 14, y + 6); L(x + 14, y + 6, x, y + 6); L(x, y + 6, x, y - 6);
             Text(x + 3, y - 1.5, mark, 3.5);
+        }
+
+        // Выноска с полкой и номером позиции над полкой.
+        public void Leader(double x, double y, string number, int dir)
+        {
+            var (kx, ky) = (x + (dir * 5), y + 5);
+            var end = kx + (dir * 5);
+            L(x, y, kx, ky);
+            L(kx, ky, end, ky);
+            Text(Math.Min(kx, end) + 1, ky + 0.8, number, 2.5);
+        }
+
+        // Переход: трапеция по оси вертикальной трубы, широкая сторона — к большему DN.
+        public void Reducer(double x, double y, bool wideBelow)
+        {
+            var (bottom, top) = wideBelow ? (2.5, 1.5) : (1.5, 2.5);
+            L(x - bottom, y - 2, x + bottom, y - 2); L(x + bottom, y - 2, x + top, y + 2); L(x + top, y + 2, x - top, y + 2); L(x - top, y + 2, x - bottom, y - 2);
+        }
+
+        // Заглушка: дуга на торце трубы.
+        public void Cap(double x, double y, bool horizontal, bool left = false)
+        {
+            var start = horizontal ? (left ? Math.PI / 2 : -Math.PI / 2) : 0;
+            doc.Entities.Add(new Arc { Center = P(x, y), Radius = 2, StartAngle = start, EndAngle = start + Math.PI, Layer = equipment });
         }
 
         public void Arrow(double x, double y, double dx, double dy)

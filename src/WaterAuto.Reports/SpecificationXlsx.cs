@@ -43,7 +43,9 @@ public static class SpecificationXlsx
 
     internal static readonly (TakeoffGroup Group, string Title)[] Sections =
     [
-        (TakeoffGroup.PumpStation, "Насосная установка"),
+        (TakeoffGroup.PumpStation, "Оборудование"),
+        (TakeoffGroup.PumpStationValves, "Арматура и приборы"),
+        (TakeoffGroup.PumpStationFittings, "Фасонные части обвязки"),
         (TakeoffGroup.ControlUnit, "Узел управления"),
         (TakeoffGroup.Sprinklers, "Оросители"),
         (TakeoffGroup.Pipes, "Трубопроводы"),
@@ -54,7 +56,25 @@ public static class SpecificationXlsx
         (TakeoffGroup.Materials, "Материалы"),
     ];
 
-    public static void Write(string path, MaterialTakeoff takeoff, SpecificationHeader header, string font = DocumentStyle.DefaultFont)
+    /// <summary>
+    /// Позиции строк в порядке разделов: заново в каждом разделе или сквозные (<paramref name="continuous"/> — когда номера
+    /// позиций стоят на схеме и не должны повторяться).
+    /// </summary>
+    public static IReadOnlyList<(TakeoffItem Item, int Position)> Positions(MaterialTakeoff takeoff, bool continuous = false)
+    {
+        ArgumentNullException.ThrowIfNull(takeoff);
+        var list = new List<(TakeoffItem, int)>();
+        var position = 0;
+        foreach (var (group, _) in Sections)
+        {
+            position = continuous ? position : 0;
+            list.AddRange(takeoff.Items.Where(i => i.Group == group).Select(i => (i, ++position)));
+        }
+
+        return list;
+    }
+
+    public static void Write(string path, MaterialTakeoff takeoff, SpecificationHeader header, string font = DocumentStyle.DefaultFont, bool continuous = false)
     {
         ArgumentNullException.ThrowIfNull(takeoff);
         ArgumentNullException.ThrowIfNull(header);
@@ -78,6 +98,7 @@ public static class SpecificationXlsx
         ws.Row(HeaderRow).Height = 45;
 
         var row = HeaderRow + 2;
+        var positions = Positions(takeoff, continuous);
         var totalMass = 0.0;
 
         // Высота строки: 8 мм на каждую строку текста самой длинной ячейки (оценка по ширине графы).
@@ -108,10 +129,9 @@ public static class SpecificationXlsx
             // Заголовок отделён от позиций пустой строкой (ГОСТ 21.110, п. 4.5).
             ws.Row(row + 1).Height = RowHeightPt;
             row += 2;
-            var position = 0;
             foreach (var item in items)
             {
-                ws.Cell(row, 1).Value = (++position).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                ws.Cell(row, 1).Value = positions.First(p => ReferenceEquals(p.Item, item)).Position.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 ws.Cell(row, 2).Value = item.Name;
                 ws.Cell(row, 3).Value = item.Designation ?? "";
                 ws.Cell(row, 5).Value = item.Supplier ?? "";

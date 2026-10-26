@@ -89,6 +89,7 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
+            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile,
             ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);
@@ -188,6 +189,16 @@ public sealed class ProjectPipelineTests : IDisposable
         rows.ShouldContain(r => r.StartsWith("Кран шаровой DN", StringComparison.Ordinal));
         rows.ShouldContain(r => r.StartsWith("Покрытие антикоррозионное", StringComparison.Ordinal));
         rows.IndexOf("Узел управления").ShouldBeLessThan(rows.IndexOf("Оросители"));
+
+        // Насосная — отдельной спецификацией ПТ2.СО со сквозными позициями и фасонными частями обвязки.
+        rows.ShouldNotContain(r => r.StartsWith("Агрегат насосный", StringComparison.Ordinal));
+        using var pns = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.PumpStationSpecFile, StringComparison.Ordinal)), false);
+        var pnsRows = pns.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TableRow>()
+            .Select(r => r.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().Select(c => c.InnerText).ToList()).Where(c => c.Count == 9).ToList();
+        pnsRows.ShouldContain(c => c[1] == "Фасонные части обвязки");
+        pnsRows.ShouldContain(c => c[1].StartsWith("Тройник DN", StringComparison.Ordinal));
+        var numbers = pnsRows.Select(c => c[0]).Where(s => int.TryParse(s, out _)).Select(int.Parse).ToList();
+        numbers.ShouldBe(Enumerable.Range(1, numbers.Count).ToList()); // сквозная нумерация
 
         // Крепления — по видам: все хомуты, затем шпильки (ГОСТ 21.110, п. 4.5).
         rows.FindLastIndex(r => r.StartsWith("Хомут", StringComparison.Ordinal)).ShouldBeLessThan(rows.FindIndex(r => r.StartsWith("Шпилька", StringComparison.Ordinal)));

@@ -20,7 +20,8 @@ public sealed record GeneralDataInputs(
     string PipeStandard,
     string WeldStandard,
     IReadOnlyDictionary<string, string> FittingStandards,
-    string? SpecificationDesignation = null);
+    string? SpecificationDesignation = null,
+    string? StationSpecificationDesignation = null);
 
 /// <summary>
 /// Лист «Общие данные» (ГОСТ Р 21.101): ведомость чертежей — из проекта; ссылочные документы — нормы расчёта и все
@@ -117,7 +118,12 @@ public static class GeneralDataComposer
             indicators,
             instructions,
             // Спецификация — в прилагаемых документах (ГОСТ 21.110, п. 4.13).
-            i.SpecificationDesignation is { } spec ? [new ReferenceRow(spec, "Спецификация оборудования, изделий и материалов", "")] : null);
+            i.SpecificationDesignation is { } spec
+                ? [
+                    new ReferenceRow(spec, "Спецификация оборудования, изделий и материалов", ""),
+                    .. i.StationSpecificationDesignation is { } st ? [new ReferenceRow(st, "Спецификация оборудования, изделий и материалов насосной станции", "")] : Array.Empty<ReferenceRow>(),
+                ]
+                : null);
     }
 
     // Наименование и признак «сверено с источником» (поле source в справочнике).

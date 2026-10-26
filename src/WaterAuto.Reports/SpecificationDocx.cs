@@ -17,7 +17,7 @@ public static class SpecificationDocx
     private const string Size = "22";
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static void Write(string path, MaterialTakeoff takeoff, TitleBlock stamp, string font = GostFrame.Font)
+    public static void Write(string path, MaterialTakeoff takeoff, TitleBlock stamp, string font = GostFrame.Font, bool continuous = false)
     {
         ArgumentNullException.ThrowIfNull(takeoff);
         ArgumentNullException.ThrowIfNull(stamp);
@@ -46,6 +46,7 @@ public static class SpecificationDocx
 
         // Шапка формы 1 — 15 мм, повторяется на каждом листе.
         table.Append(Row(SpecificationXlsx.Columns.ToArray(), 15, HeightRuleValues.Exact, header: true));
+        var positions = SpecificationXlsx.Positions(takeoff, continuous);
         foreach (var (group, title) in SpecificationXlsx.Sections)
         {
             var items = takeoff.Items.Where(i => i.Group == group).ToList();
@@ -57,12 +58,11 @@ public static class SpecificationDocx
             // Заголовок и пустая строка под ним не отрываются от первой позиции раздела (переносятся на следующий лист вместе).
             table.Append(Row(["", title, "", "", "", "", "", "", ""], 8, HeightRuleValues.AtLeast, underline: true, keepNext: true));
             table.Append(Row(["", "", "", "", "", "", "", "", ""], 8, HeightRuleValues.AtLeast, keepNext: true));
-            var position = 0;
             foreach (var item in items)
             {
                 table.Append(Row(
                     [
-                        (++position).ToString(CultureInfo.InvariantCulture),
+                        positions.First(p => ReferenceEquals(p.Item, item)).Position.ToString(CultureInfo.InvariantCulture),
                         item.Name,
                         item.Designation ?? "",
                         "",
