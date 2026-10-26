@@ -17,6 +17,8 @@ jobs:
           dotnet-version: 8.0.x
       - run: dotnet restore WaterAuto.Core.slnf
       - run: dotnet build WaterAuto.Core.slnf -c Release --no-restore
+      - name: check formatting
+        run: dotnet format WaterAuto.sln --verify-no-changes --no-restore
       - run: dotnet test WaterAuto.Core.slnf -c Release --no-build --logger trx
       - name: validate json
         run: dotnet run --project tools/ValidateData -c Release --no-build -- data/
