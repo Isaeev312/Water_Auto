@@ -48,6 +48,39 @@ public class FormulaTests
     }
 
     [Fact]
+    public void Table_dn_is_reported_when_requested_dn_differs()
+    {
+        // ГОСТ 3262 42,3×2,8 — строка DN 32 табл. Б.2. При запрошенном DN 100 Kт берётся из найденной
+        // строки, но DN расходится: это видно по TableDn/DnMatches (замечание — на этапе «Граф сети»).
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 100, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
+        kt.Source.ShouldBe(CharacteristicSource.TableB2);
+        kt.RequestedDn.ShouldBe(100);
+        kt.TableDn.ShouldBe(32);
+        kt.DnMatches.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Table_dn_matches_requested_dn()
+    {
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8))!;
+        kt.RequestedDn.ShouldBe(32);
+        kt.TableDn.ShouldBe(32);
+        kt.DnMatches.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Formula_B8_has_no_table_dn()
+    {
+        // 42,3×4,0 в табл. Б.2 нет (там 42,3×2,8 — DN 32), Kт считается по формуле Б.8:
+        // строки для сверки DN нет, DnMatches = true.
+        var kt = PipeCharacteristics.Resolve(Norms, "ГОСТ 3262", 100, Length.FromMillimeters(42.3), Length.FromMillimeters(4.0))!;
+        kt.Source.ShouldBe(CharacteristicSource.FormulaB8);
+        kt.RequestedDn.ShouldBe(100);
+        kt.TableDn.ShouldBeNull();
+        kt.DnMatches.ShouldBeTrue();
+    }
+
+    [Fact]
     public void Kt_is_null_for_unknown_standard()
     {
         PipeCharacteristics.Resolve(Norms, "PPR", 32, Length.FromMillimeters(40), Length.FromMillimeters(3.7)).ShouldBeNull();

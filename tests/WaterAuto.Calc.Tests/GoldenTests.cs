@@ -156,10 +156,24 @@ public class GoldenTests
         return (project, solution, network);
     }
 
-    private static PipeCharacteristic Characteristic(JsonElement pipe) =>
-        pipe.TryGetProperty("A", out var a)
-            ? PipeCharacteristic.FromResistivity(a.GetDouble())
-            : PipeCharacteristics.Resolve(Norms, Geometry(pipe)!)!.Value;
+    private static PipeCharacteristic Characteristic(JsonElement pipe)
+    {
+        if (pipe.TryGetProperty("A", out var a))
+        {
+            return PipeCharacteristic.FromResistivity(a.GetDouble());
+        }
+
+        var resolved = PipeCharacteristics.Resolve(Norms, Geometry(pipe)!)!;
+        if (!resolved.DnMatches)
+        {
+            // Эталон сам ошибочен: Kт найден по D и стенке, но заявленный DN не тот, что в строке табл. Б.2.
+            throw new InvalidOperationException(
+                $"Эталон, труба «{pipe.GetProperty("id").GetString()}»: заявлен DN {resolved.RequestedDn}, "
+                + $"а строка {resolved.NormId} табл. Б.2 — DN {resolved.TableDn}. Сверка идёт по D и стенке, DN — проверяемое поле.");
+        }
+
+        return resolved.Value;
+    }
 
     // Сортамент есть у стальных труб (standard, od, wall); книжные примеры через A его не задают.
     private static PipeGeometry? Geometry(JsonElement pipe) =>

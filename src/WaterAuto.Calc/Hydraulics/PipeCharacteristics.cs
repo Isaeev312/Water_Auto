@@ -9,8 +9,21 @@ public enum CharacteristicSource
     FormulaB8,
 }
 
+/// <summary>Kт трубы и откуда он взят.</summary>
+/// <param name="RequestedDn">DN, заявленный для трубы (поле DN проекта).</param>
+/// <param name="TableDn">DN строки табл. Б.2; null — Kт по формуле Б.8, строки в таблице не было.</param>
 /// <param name="OutdoorOnly">Строка табл. Б.2 отмечена «*» — трубы сетей наружного водоснабжения; для внутренней сети нужно замечание.</param>
-public sealed record ResolvedCharacteristic(PipeCharacteristic Value, CharacteristicSource Source, string NormId, bool OutdoorOnly = false);
+public sealed record ResolvedCharacteristic(
+    PipeCharacteristic Value,
+    CharacteristicSource Source,
+    string NormId,
+    int RequestedDn,
+    int? TableDn = null,
+    bool OutdoorOnly = false)
+{
+    /// <summary>DN совпадает с DN строки табл. Б.2; для формулы Б.8 сверять нечего — true.</summary>
+    public bool DnMatches => TableDn is null || TableDn == RequestedDn;
+}
 
 /// <summary>
 /// Kт стальной трубы: строка табл. Б.2 по стандарту, наружному диаметру и стенке; если строки нет —
@@ -44,7 +57,13 @@ public static class PipeCharacteristics
                 && Math.Abs(r.Values["wall"]!.Value - wallMm) < 1e-9)
             {
                 var outdoorOnly = string.Equals(r.Attributes.GetValueOrDefault("outdoorOnly"), "true", StringComparison.OrdinalIgnoreCase);
-                return new ResolvedCharacteristic(new PipeCharacteristic(r.Values["Kt"]!.Value), CharacteristicSource.TableB2, r.Id, outdoorOnly);
+                return new ResolvedCharacteristic(
+                    new PipeCharacteristic(r.Values["Kt"]!.Value),
+                    CharacteristicSource.TableB2,
+                    r.Id,
+                    dn,
+                    (int)r.Values["dn"]!.Value,
+                    outdoorOnly);
             }
         }
 
@@ -64,6 +83,6 @@ public static class PipeCharacteristics
             return null;
         }
 
-        return new ResolvedCharacteristic(new PipeCharacteristic(kt), CharacteristicSource.FormulaB8, coefficients.Id);
+        return new ResolvedCharacteristic(new PipeCharacteristic(kt), CharacteristicSource.FormulaB8, coefficients.Id, dn);
     }
 }
