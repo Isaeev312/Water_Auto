@@ -14,6 +14,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -25,13 +26,19 @@
             <Button Grid.Column="3" Content="Новый по чертежу…" Margin="8,0,0,0" Padding="12,4" Click="OnNewProject" />
             <TextBlock Grid.Row="1" Text="Папка выпуска:" VerticalAlignment="Center" Margin="0,8,8,0" />
             <TextBox x:Name="OutBox" Grid.Row="1" Grid.Column="1" Padding="4" Margin="0,8,0,0" />
-            <Button Grid.Row="1" Grid.Column="2" Content="Изменить проект" Margin="8,8,0,0" Padding="12,4" Click="OnEditProject" />
-            <Button x:Name="RunButton" Grid.Row="1" Grid.Column="3" Content="Рассчитать" Margin="8,8,0,0" Padding="12,4"
+            <Button Grid.Row="1" Grid.Column="2" Content="Файл проекта" Margin="8,8,0,0" Padding="12,4"
+                    ToolTip="Открыть JSON проекта во внешнем редакторе (для служебных полей)" Click="OnEditProject" />
+            <Button Grid.Row="1" Grid.Column="3" Content="Исходные данные…" Margin="8,8,0,0" Padding="12,4"
+                    ToolTip="Ввод данных объекта, спринклерной установки, насосной, ВПВ, резервуара и титульного листа" Click="OnEditData" />
+            <Button x:Name="RunButton" Grid.Row="1" Grid.Column="4" Content="Рассчитать" Margin="8,8,0,0" Padding="12,4"
                     FontWeight="SemiBold" Click="OnRun" />
         </Grid>
 
         <Border DockPanel.Dock="Top" Background="#F3F6FA" CornerRadius="4" Padding="12" Margin="0,4,0,8">
-            <TextBlock x:Name="Summary" TextWrapping="Wrap" Text="Выберите проект и нажмите «Рассчитать»." />
+            <StackPanel>
+                <TextBlock x:Name="Summary" TextWrapping="Wrap" Text="Выберите проект и нажмите «Рассчитать»." />
+                <TextBlock x:Name="DesignSummary" TextWrapping="Wrap" Foreground="#555" Margin="0,4,0,0" />
+            </StackPanel>
         </Border>
 
         <Grid>

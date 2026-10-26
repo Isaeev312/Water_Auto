@@ -42,7 +42,29 @@ public partial class MainWindow : Window
         }
 
         SetProject(project);
-        Summary.Text = $"Создан проект {project}. Заполните исходные данные (design): K оросителя по паспорту, высоту над осью насоса, подводящий трубопровод, давление на входе по ТУ — кнопка «Изменить проект».";
+        OpenInputData();
+        Summary.Text = $"Создан проект {project}. Заполните исходные данные и нажмите «Рассчитать».";
+    }
+
+    private void OnEditData(object sender, RoutedEventArgs e)
+    {
+        if (!File.Exists(ProjectBox.Text))
+        {
+            Summary.Text = "Сначала выберите файл проекта.";
+            return;
+        }
+
+        OpenInputData();
+    }
+
+    private void OpenInputData()
+    {
+        var dialog = new InputDataWindow(ProjectBox.Text) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            UpdateDesignSummary();
+            Summary.Text = "Исходные данные сохранены.";
+        }
     }
 
     private void OnEditProject(object sender, RoutedEventArgs e)
@@ -123,6 +145,28 @@ public partial class MainWindow : Window
     {
         ProjectBox.Text = project;
         OutBox.Text = Path.Combine(Path.GetDirectoryName(project)!, Path.GetFileNameWithoutExtension(project) + "_out");
+        UpdateDesignSummary();
+    }
+
+    // Краткая сводка исходных данных под строкой состояния: видно, что реально пойдёт в расчёт.
+    private void UpdateDesignSummary()
+    {
+        try
+        {
+            var project = ProjectFile.Load(ProjectBox.Text);
+            var d = project.Design;
+            var room = d.PumpRoom;
+            var temperature = d.MaxAmbientTemperature is { } t ? $"{t:0.#} °C" : "не задана";
+            var spacing = d.MaxSpacing is { } m ? $"{m:0.##} м (строже табл. 6.1)" : "по табл. 6.1";
+            DesignSummary.Text =
+                $"K = {d.SprinklerK:0.###}; H над осью = {d.DictatingAboveAxis:0.00} м; подводящий DN{d.SupplyDn}, {d.SupplyLength:0.0} м; " +
+                $"P_вх = {d.InletPressure:0.000} МПа; t среды = {temperature}; шаг = {spacing}; " +
+                $"насосная: пол {room.FloorElevation:+0.000;−0.000;0.000} м, земля {room.GroundElevation:+0.000;−0.000;0.000} м, h = {room.Height:0.00} м";
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
+        {
+            DesignSummary.Text = $"Исходные данные прочитать не удалось: {ex.Message}";
+        }
     }
 
     private static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
