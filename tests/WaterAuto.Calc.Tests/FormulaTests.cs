@@ -87,6 +87,22 @@ public class FormulaTests
     }
 
     [Fact]
+    public void Table_B2_records_contain_all_keys_used_by_calc()
+    {
+        // Ключи NormKeys должны совпадать с таблицей требований tools/ValidateData (T4) и с data/norms:
+        // иначе Calc ищет в норме поле, которого там нет.
+        var rows = Norms.ByClause(NormKeys.ClauseTableB2).ToList();
+        rows.ShouldNotBeEmpty();
+        foreach (var row in rows)
+        {
+            foreach (var key in new[] { NormKeys.Dn, NormKeys.DOut, NormKeys.Wall, NormKeys.Kt })
+            {
+                row.Values.ContainsKey(key).ShouldBeTrue($"{row.Id}: нет ключа values.{key}");
+            }
+        }
+    }
+
+    [Fact]
     public void Kt_resolves_from_pipe_geometry()
     {
         var geometry = new PipeGeometry("ГОСТ 3262", 32, Length.FromMillimeters(42.3), Length.FromMillimeters(2.8));
