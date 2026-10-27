@@ -9,7 +9,8 @@
         FontFamily="Segoe UI" FontSize="14"
         UseLayoutRounding="True" SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display"
-        AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop" Loaded="OnLoaded">
+        AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop" Loaded="OnLoaded"
+        PreviewKeyDown="OnPreviewKeyDown">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -60,7 +61,7 @@
                     </Button>
 
                     <Button x:Name="SettingsButton" Style="{StaticResource Button.Ghost}" Click="OnOpenSettings"
-                            ToolTip="Оформление и поведение: тема, акцент, автоматический расчёт" Padding="10,6">
+                            ToolTip="Оформление и поведение: тема, акцент, автоматический расчёт (Ctrl+,)" Padding="10,6">
                         <StackPanel Orientation="Horizontal">
                             <Path Width="16" Height="16" Fill="{DynamicResource Brush.Text.Secondary}"
                                   Data="M8,5.2 A2.8,2.8 0 1 0 8,10.8 A2.8,2.8 0 1 0 8,5.2 Z M8,4.2 A3.8,3.8 0 1 1 8,11.8 A3.8,3.8 0 1 1 8,4.2 Z M7.2,0.8 L8.8,0.8 L9.1,2.3 A5.9,5.9 0 0 1 10.5,3.1 L11.9,2.5 L12.7,3.9 L11.6,4.9 A5.9,5.9 0 0 1 11.6,6.7 L12.7,7.7 L11.9,9.1 L10.5,8.5 A5.9,5.9 0 0 1 9.1,9.3 L8.8,10.8 L7.2,10.8 L6.9,9.3 A5.9,5.9 0 0 1 5.5,8.5 L4.1,9.1 L3.3,7.7 L4.4,6.7 A5.9,5.9 0 0 1 4.4,4.9 L3.3,3.9 L4.1,2.5 L5.5,3.1 A5.9,5.9 0 0 1 6.9,2.3 Z" />
@@ -101,7 +102,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Button Grid.Column="0" Content="Открыть проект…" Style="{StaticResource Button.Secondary}"
-                                        Click="OnOpenProject" />
+                                        Click="OnOpenProject" ToolTip="Открыть проект *.waproj (Ctrl+O)" />
                                 <Button Grid.Column="1" Content="JSON" Style="{StaticResource Button.Ghost}" Margin="8,0,0,0"
                                         Click="OnEditProject" ToolTip="Открыть файл проекта во внешнем редакторе (служебные поля)" />
                                 <Button Grid.Column="2" Content="Папка" Style="{StaticResource Button.Ghost}" Margin="4,0,0,0"
@@ -150,7 +151,7 @@
                                        Text="Только данные объекта и решения проектировщика — нормы и каталоги программа берёт из data/." />
                             <Button x:Name="EditDataButton" Content="Открыть мастер исходных данных…"
                                     Style="{StaticResource Button.Primary}" HorizontalAlignment="Stretch"
-                                    Click="OnEditData" />
+                                    Click="OnEditData" ToolTip="Проверить и заполнить исходные данные проекта (Ctrl+E)" />
                             <Border Style="{StaticResource Card.Inset}" Margin="0,10,0,0">
                                 <TextBlock x:Name="DesignSummary" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
                                            Text="Проект не выбран — выберите файл проекта или создайте его по чертежу." />
@@ -163,12 +164,45 @@
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="16" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
+                <!-- Проверка проекта: готовность чертежа до расчёта (информационно, кнопку «Рассчитать» не блокирует).
+                     После расчёта карточка скрывается: её место занимает сводка и выпуск. -->
+                <Border x:Name="CheckCard" Grid.Row="0" Style="{StaticResource Card}" Padding="12,10"
+                        Margin="0,0,0,16">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Style="{StaticResource Text.H3}" Text="Проверка проекта" VerticalAlignment="Center" />
+                        <Border x:Name="CheckStatusPill" Grid.Column="1" Style="{StaticResource Pill.Neutral}"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock x:Name="CheckStatusText" Style="{StaticResource Text.Caption}"
+                                       Text="Проект не выбран" />
+                        </Border>
+                        <Button x:Name="CheckButton" Grid.Column="2" Style="{StaticResource Button.Ghost}"
+                                Content="Проверить" Padding="8,2" Click="OnCheckProject"
+                                ToolTip="Проверить чертёж и исходные данные до расчёта" />
+
+                        <TextBlock x:Name="CheckDetails" Grid.Row="1" Grid.ColumnSpan="3"
+                                   Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   Margin="0,6,0,0" Visibility="Collapsed" Text="" />
+                        <ProgressBar x:Name="CheckProgress" Grid.Row="1" Grid.ColumnSpan="3"
+                                     Margin="0,6,0,0" IsIndeterminate="True" Visibility="Collapsed" />
+                    </Grid>
+                </Border>
+
                 <!-- Сводка расчёта. -->
-                <Border Grid.Row="0" Style="{StaticResource Card}">
+                <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,16">
                     <Grid>
                         <StackPanel x:Name="SummaryEmpty" VerticalAlignment="Center" Margin="0,6">
                             <TextBlock Style="{StaticResource Text.H3}" Text="Сводка появится после расчёта" />
@@ -220,17 +254,27 @@
                                                 Visibility="Collapsed" Click="OnSelectPumpSet"
                                                 ToolTip="Выбрать комплектную установку из каталога data/catalog/pump_sets_*.json или вернуть автоподбор по расчётным Q и H (Q и H — из последнего расчёта)" />
                                     </Grid>
-                                    <TextBlock x:Name="PumpSetValue" Style="{StaticResource Text.Value}" TextWrapping="Wrap"
-                                               Margin="0,2,0,0" Text="—" />
-                                    <TextBlock x:Name="PumpCountsValue" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
-                                               Text="" />
-                                    <TextBlock x:Name="PumpRoomValue" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
-                                               Margin="0,4,0,0" Visibility="Collapsed" Text="" />
-                                    <Canvas x:Name="PumpChartCanvas" Width="260" Height="120" Margin="0,10,0,0"
-                                            HorizontalAlignment="Left" ClipToBounds="True" Visibility="Collapsed" />
-                                    <TextBlock x:Name="PumpChartHint" Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
-                                               TextWrapping="Wrap" Visibility="Collapsed"
-                                               Text="Кривая Q–H (паспортная кривая одного насоса, приведённая к подаче установки), рабочая точка при расчётных Q и H (кружок) и линия требуемого напора (пунктир)." />
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                            <TextBlock x:Name="PumpSetValue" Style="{StaticResource Text.Value}" TextWrapping="Wrap"
+                                                       Text="—" />
+                                            <TextBlock x:Name="PumpCountsValue" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                                       Text="" />
+                                            <TextBlock x:Name="PumpRoomValue" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                                       Margin="0,4,0,0" Visibility="Collapsed" Text="" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <Canvas x:Name="PumpChartCanvas" Width="260" Height="120"
+                                                    HorizontalAlignment="Left" ClipToBounds="True" Visibility="Collapsed" />
+                                            <TextBlock x:Name="PumpChartHint" Style="{StaticResource Text.Caption}" Width="260"
+                                                       Margin="0,4,0,0" TextWrapping="Wrap" Visibility="Collapsed"
+                                                       Text="Кривая Q–H установки, рабочая точка при расчётных Q и H и линия требуемого напора." />
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -264,7 +308,28 @@
                                     </StackPanel>
                                     <ListBox x:Name="FilesList" Grid.Row="1" MouseDoubleClick="OnOpenFile"
                                              BorderThickness="0" Background="Transparent"
-                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                        <ListBox.GroupStyle>
+                                            <GroupStyle>
+                                                <GroupStyle.HeaderTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="2,12,2,4">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Value}" />
+                                                            <Border Grid.Column="1" Style="{StaticResource Pill.Neutral}"
+                                                                    Padding="7,0">
+                                                                <TextBlock Text="{Binding ItemCount}"
+                                                                           Style="{StaticResource Text.Caption}" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </GroupStyle.HeaderTemplate>
+                                            </GroupStyle>
+                                        </ListBox.GroupStyle>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <Grid Margin="2,4">
@@ -378,7 +443,8 @@
                     <ProgressBar x:Name="RunProgress" Width="120" Height="4" Margin="0,0,16,0" IsIndeterminate="True"
                                  VerticalAlignment="Center" Visibility="Collapsed" />
                     <Button x:Name="RunButton" Content="Рассчитать" Style="{StaticResource Button.Primary}"
-                            MinWidth="190" FontWeight="SemiBold" Click="OnRun" />
+                            MinWidth="190" FontWeight="SemiBold" Click="OnRun"
+                            ToolTip="Выполнить расчёт проекта и выпуск документов (F5)" />
                 </StackPanel>
             </Grid>
         </Border>

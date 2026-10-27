@@ -3,6 +3,8 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
@@ -21,6 +23,19 @@ public partial class MainWindow : Window
     private const string TemplateFilter = "Чертёж DWG (*.dwg)|*.dwg|Чертёж DXF (*.dxf)|*.dxf|Шаблон DWT (*.dwt)|*.dwt";
     private const string ProjectFilter = "Проект Water_Auto (*.waproj)|*.waproj";
     private const string DrawingFilter = "Чертёж плана (*.dwg;*.dxf)|*.dwg;*.dxf|Все файлы (*.*)|*.*";
+
+    // Порядок групп в списке файлов выпуска: важен для заголовков CollectionViewSource.
+    private static readonly string[] FileGroupOrder =
+    [
+        "Планы DWG",
+        "Планы DXF",
+        "Схемы и листы DXF",
+        "Спецификации DOCX/XLSX",
+        "Записка и общие данные",
+        "Замечания TXT/др.",
+        "Прочие файлы",
+    ];
+
     private string? _project;
     private string _outDir = "";
     private IReadOnlyList<IssueRow> _allIssues = [];
@@ -31,11 +46,15 @@ public partial class MainWindow : Window
     private double? _requiredHeadMeters;
     private bool _calculating;
 
+    // Номер версии проверки проекта: результат устаревшего фонового анализа не должен перебивать новый.
+    private int _checkVersion;
+
     public MainWindow()
     {
         InitializeComponent();
         ThemeManager.Changed += (_, _) => UpdateThemeVisuals();
         Closing += OnClosing;
+        ShowCheckIdle("Проект не выбран");
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -305,6 +324,7 @@ public partial class MainWindow : Window
 
         UpdateDesignSummary();
         Summary.Text = "Исходные данные сохранены.";
+        _ = RefreshProjectCheckAsync(); // данные изменились — готовность чертежа пересчитываем
         return true;
     }
 
@@ -345,7 +365,9 @@ public partial class MainWindow : Window
         _requiredFlowM3h = null;
         _requiredHeadMeters = null;
         PumpSelectButton.Visibility = Visibility.Collapsed;
+        CheckCard.Visibility = Visibility.Visible; // готовность нового проекта показываем до его расчёта
         UpdateDesignSummary();
+        _ = RefreshProjectCheckAsync();
         Summary.Text = $"Проект: {_project}";
     }
 
@@ -506,6 +528,7 @@ public partial class MainWindow : Window
 
         ResultsEmpty.Visibility = Visibility.Collapsed;
         ResultsTabs.Visibility = Visibility.Visible;
+        CheckCard.Visibility = Visibility.Collapsed; // место готовности занимает сводка и выпуск
         AnimateIn(ResultsTabs);
         AnimateIn(SummaryFilled);
     }
@@ -698,16 +721,43 @@ public partial class MainWindow : Window
             }
 
             var info = new FileInfo(file);
+            var name = Path.GetFileNameWithoutExtension(file);
+            var group = FileGroupFor(name, info.Extension.TrimStart('.'));
             items.Add(new FileItem(
-                Path.GetFileNameWithoutExtension(file),
+                name,
                 info.Extension.TrimStart('.').ToUpperInvariant(),
                 info.Length < 1024 ? $"{info.Length} Б" : $"{info.Length / 1024.0:0.#} КБ",
                 Path.GetRelativePath(output, file),
-                file));
+                file,
+                group,
+                Array.IndexOf(FileGroupOrder, group)));
         }
 
-        FilesList.ItemsSource = items;
+        // Группировка по типу выпуска: заголовки групп со счётчиками строит GroupStyle, поэтому сортируем
+        // элементы по порядку групп, а внутри группы — по имени файла.
+        var sorted = items
+            .OrderBy(f => f.GroupOrder)
+            .ThenBy(f => f.Name, StringComparer.Ordinal)
+            .ToList();
+        var view = new CollectionViewSource { Source = sorted };
+        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FileItem.Group)));
+        FilesList.ItemsSource = view.View;
         FilesTabHeader.Text = $"Файлы выпуска ({items.Count})";
+    }
+
+    // Группа файла выпуска по имени и расширению: состав выпуска задаёт ProjectPipeline, здесь — только раскладка.
+    private static string FileGroupFor(string name, string extension)
+    {
+        return extension.ToUpperInvariant() switch
+        {
+            "DWG" => "Планы DWG",
+            "DXF" => name.StartsWith("plan", StringComparison.OrdinalIgnoreCase) ? "Планы DXF" : "Схемы и листы DXF",
+            "DOCX" or "XLSX" => name.StartsWith("specification", StringComparison.OrdinalIgnoreCase)
+                ? "Спецификации DOCX/XLSX"
+                : "Записка и общие данные",
+            "TXT" => "Замечания TXT/др.",
+            _ => "Прочие файлы",
+        };
     }
 
     private void ShowIssues(IReadOnlyList<Issue> issues)
@@ -762,8 +812,12 @@ public partial class MainWindow : Window
 
     private void OnOpenFile(object sender, MouseButtonEventArgs e)
     {
-        if (FilesList.SelectedItem is FileItem file && File.Exists(file.FullPath))
+        // Открываем именно файл под курсором: двойной щелчок по заголовку группы ничего не открывает.
+        if (e.OriginalSource is DependencyObject source
+            && ItemsControl.ContainerFromElement(FilesList, source) is ListBoxItem { DataContext: FileItem file }
+            && File.Exists(file.FullPath))
         {
+            e.Handled = true;
             Open(file.FullPath);
         }
     }
@@ -796,6 +850,175 @@ public partial class MainWindow : Window
         }
     }
 
+    // ---------- Проверка проекта: готовность до расчёта ----------
+
+    private void OnCheckProject(object sender, RoutedEventArgs e) => _ = RefreshProjectCheckAsync();
+
+    /// <summary>
+    /// Асинхронная проверка чертежа и исходных данных до расчёта: <see cref="DrawingPreview.Analyze"/> выполняется
+    /// в фоне, результат показывается в карточке. Проверка информационная — кнопку «Рассчитать» не блокирует;
+    /// номер версии отсекает устаревший результат, если проект сменили или проверку запустили повторно.
+    /// </summary>
+    private async Task RefreshProjectCheckAsync()
+    {
+        if (_project is null)
+        {
+            ShowCheckIdle("Проект не выбран");
+            return;
+        }
+
+        if (!File.Exists(_project))
+        {
+            ShowCheckIdle("Файл проекта не найден");
+            return;
+        }
+
+        var version = ++_checkVersion;
+        var project = _project;
+        var normsDir = FindDataRoot() is { } root ? DataLocator.Norms(root) : null;
+        CheckButton.IsEnabled = false;
+        CheckProgress.Visibility = Visibility.Visible;
+        CheckDetails.Visibility = Visibility.Collapsed;
+        SetCheckPill("Pill.Info", "Проверка…");
+        try
+        {
+            var preview = await Task.Run(() => DrawingPreview.Analyze(project, normsDir));
+            if (version == _checkVersion)
+            {
+                ShowCheck(preview);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException
+            or UnauthorizedAccessException or ArgumentException)
+        {
+            if (version == _checkVersion)
+            {
+                ShowCheckError($"Не удалось проверить проект: {ex.Message}");
+            }
+        }
+#pragma warning disable CA1031 // проверка информационная: любой сбой показываем в карточке, окно не роняем
+        catch (Exception ex)
+        {
+            if (version == _checkVersion)
+            {
+                ShowCheckError($"Проверка не выполнена ({ex.GetType().Name}): {ex.Message}");
+            }
+        }
+#pragma warning restore CA1031
+        finally
+        {
+            if (version == _checkVersion)
+            {
+                CheckButton.IsEnabled = true;
+                CheckProgress.Visibility = Visibility.Collapsed;
+            }
+        }
+    }
+
+    // Статус-пилюля по худшему уровню и короткая сводка распознанного в чертеже.
+    private void ShowCheck(DrawingPreviewResult preview)
+    {
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var errors = preview.Issues.Count(i => i.Level == IssueLevel.Error);
+        var warnings = preview.Issues.Count(i => i.Level == IssueLevel.Warning);
+        if (!preview.DrawingFound)
+        {
+            SetCheckPill("Pill.Warning", "Чертёж не найден");
+        }
+        else if (errors > 0)
+        {
+            SetCheckPill("Pill.Error", string.Create(ru, $"Есть ошибки ({errors})"));
+        }
+        else if (warnings > 0)
+        {
+            SetCheckPill("Pill.Warning", string.Create(ru, $"Есть замечания ({warnings})"));
+        }
+        else
+        {
+            SetCheckPill("Pill.Success", "Готов к расчёту");
+        }
+
+        var lines = new List<string>();
+        if (!preview.DrawingFound)
+        {
+            lines.Add(Truncate(
+                preview.Issues.Count > 0 ? preview.Issues[0].Message : $"Чертёж не найден: {preview.DrawingPath}.",
+                200));
+        }
+        else
+        {
+            lines.Add(preview.Rooms.Count > 0
+                ? string.Create(ru, $"Помещений: {preview.Rooms.Count}, площадь {preview.TotalProtectedAreaM2:0.0} м².")
+                : "Помещения на плане не распознаны (слой ПТ_КОНТУР).");
+            if (preview.PumpRoomId is { } roomId)
+            {
+                lines.Add(preview is { PumpRoomLengthM: { } length, PumpRoomWidthM: { } width }
+                    ? string.Create(ru, $"Насосная: {length:0.0} × {width:0.0} м; вводов {preview.PumpRoomInlets}, выпусков {preview.PumpRoomOutlets}, патрубков ГМ {preview.TruckInlets}.")
+                    : string.Create(ru, $"Насосная {roomId}: вводов {preview.PumpRoomInlets}, выпусков {preview.PumpRoomOutlets}, патрубков ГМ {preview.TruckInlets}."));
+            }
+            else
+            {
+                lines.Add("Помещение насосной не размечено (слой ПТ_НС).");
+            }
+
+            if (preview.SlabBottomM is { } slab)
+            {
+                lines.Add(string.Create(ru, $"Низ перекрытия: отм. {slab:+0.00;−0.00;0.00} м."));
+            }
+
+            if (preview.Suggestions.Count > 0)
+            {
+                lines.Add(string.Create(ru, $"Подсказок по чертежу: {preview.Suggestions.Count} — применяются в мастере исходных данных."));
+            }
+
+            var problem = preview.Issues.FirstOrDefault(i => i.Level == IssueLevel.Error)
+                ?? preview.Issues.FirstOrDefault(i => i.Level == IssueLevel.Warning);
+            if (problem is not null)
+            {
+                lines.Add("Проверить: " + Truncate(problem.Message, 200));
+            }
+        }
+
+        CheckDetails.Text = string.Join(Environment.NewLine, lines);
+        CheckDetails.ToolTip = preview.Issues.Count == 0
+            ? null
+            : string.Join(Environment.NewLine, preview.Issues.Select(i => $"{i.Level}: {i.Message}"));
+        CheckDetails.Visibility = Visibility.Visible;
+    }
+
+    // Нет проекта/файла или проверка ещё не выполнялась: карточка остаётся с нейтральной подсказкой.
+    private void ShowCheckIdle(string status)
+    {
+        _checkVersion++;
+        SetCheckPill("Pill.Neutral", status);
+        CheckButton.IsEnabled = _project is not null && File.Exists(_project);
+        CheckProgress.Visibility = Visibility.Collapsed;
+        CheckDetails.Text = "";
+        CheckDetails.ToolTip = null;
+        CheckDetails.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowCheckError(string message)
+    {
+        SetCheckPill("Pill.Warning", "Проверка не выполнена");
+        CheckDetails.Text = Truncate(message, 240);
+        CheckDetails.ToolTip = message;
+        CheckDetails.Visibility = Visibility.Visible;
+    }
+
+    // Стили пилюли — именованные из дизайн-системы (Pill.Neutral/Success/Warning/Error/Info).
+    private void SetCheckPill(string styleKey, string text)
+    {
+        CheckStatusPill.Style = (Style)FindResource(styleKey);
+        CheckStatusText.Text = text;
+    }
+
+    private static string Truncate(string text, int maxLength)
+    {
+        var oneLine = text.Replace('\r', ' ').Replace('\n', ' ');
+        return oneLine.Length <= maxLength ? oneLine : oneLine[..maxLength] + "…";
+    }
+
     // ---------- Тема и настройки ----------
 
     private void OnToggleTheme(object sender, RoutedEventArgs e) => ThemeManager.ToggleTheme();
@@ -814,6 +1037,42 @@ public partial class MainWindow : Window
         ThemeButton.ToolTip = dark ? "Включить светлую тему" : "Включить тёмную тему";
         SunGroup.Visibility = dark ? Visibility.Visible : Visibility.Collapsed;
         MoonIcon.Visibility = dark ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    // ---------- Горячие клавиши ----------
+
+    // F5 — расчёт, Ctrl+O — открыть проект, Ctrl+E — мастер исходных данных, Ctrl+, — настройки.
+    // В полях ввода Ctrl+E не перехватываем: в редакторах это команда перемещения курсора.
+    private async void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        var textEditing = Keyboard.FocusedElement is TextBoxBase;
+
+        if (e.Key == Key.F5)
+        {
+            if (!RunButton.IsEnabled)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            await RunCalculationAsync();
+        }
+        else if (ctrl && e.Key == Key.O)
+        {
+            e.Handled = true;
+            OnOpenProject(this, new RoutedEventArgs());
+        }
+        else if (ctrl && e.Key == Key.E && !textEditing)
+        {
+            e.Handled = true;
+            OnEditData(this, new RoutedEventArgs());
+        }
+        else if (ctrl && e.Key == Key.OemComma)
+        {
+            e.Handled = true;
+            OnOpenSettings(this, new RoutedEventArgs());
+        }
     }
 
     // ---------- Перетаскивание ----------
@@ -851,7 +1110,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private sealed record FileItem(string Name, string Kind, string Size, string Relative, string FullPath);
+    private sealed record FileItem(string Name, string Kind, string Size, string Relative, string FullPath, string Group, int GroupOrder);
 
     private sealed record IssueRow(string LevelText, string LevelKey, int LevelOrder, string Code, string Message, string Clause, string Location);
 }
