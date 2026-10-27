@@ -25,6 +25,7 @@ public static class ThemeManager
 
     private static AppSettings _settings = AppSettings.Load();
     private static bool _isDark;
+    private static bool _systemHook;
 
     /// <summary>Текущие настройки приложения (тема, акцент, последние проекты).</summary>
     public static AppSettings Settings => _settings;
@@ -40,6 +41,39 @@ public static class ThemeManager
     {
         _settings = AppSettings.Load();
         Apply();
+        HookSystemTheme();
+    }
+
+    // В режиме «как в системе» следим за сменой оформления Windows (светлая/тёмная) и переключаемся на лету.
+    private static void HookSystemTheme()
+    {
+        if (_systemHook)
+        {
+            return;
+        }
+
+        try
+        {
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            _systemHook = true;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or PlatformNotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            // Нет доступа к системным событиям (служба, урезанная среда) — тема просто не будет меняться на лету.
+        }
+    }
+
+    private static void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+    {
+        if (_settings.Theme != ThemeMode.System)
+        {
+            return;
+        }
+
+        if (IsSystemDarkTheme() != _isDark)
+        {
+            Apply();
+        }
     }
 
     /// <summary>

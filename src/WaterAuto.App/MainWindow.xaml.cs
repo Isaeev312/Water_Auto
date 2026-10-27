@@ -62,6 +62,12 @@ public partial class MainWindow : Window
         RestoreWindowPlacement();
         UpdateThemeVisuals();
         RefreshRecent();
+        ShowRootStatus();
+        OpenInitialDocument();
+    }
+
+    private void ShowRootStatus()
+    {
         var root = FindDataRoot();
         if (root is not null)
         {
@@ -76,6 +82,57 @@ public partial class MainWindow : Window
 
         RootStatus.Text = "Папка data/norms не найдена — расчёт недоступен.";
         NormsStatus.Text = "Нормы: —";
+    }
+
+    // Открытие файла, переданного в командной строке (или перетаскиванием на значок): проводник,
+    // ярлык, ассоциация «Открыть с помощью». .waproj открывается, DWG/DXF — создаётся проект рядом.
+    private void OpenInitialDocument()
+    {
+        string? path = null;
+        try
+        {
+            path = Environment.GetCommandLineArgs()
+                .Skip(1)
+                .FirstOrDefault(arg =>
+                    !arg.StartsWith('-')
+                    && (arg.EndsWith(".waproj", StringComparison.OrdinalIgnoreCase)
+                        || arg.EndsWith(".dwg", StringComparison.OrdinalIgnoreCase)
+                        || arg.EndsWith(".dxf", StringComparison.OrdinalIgnoreCase)));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return;
+        }
+
+        if (path is null || !File.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (path.EndsWith(".waproj", StringComparison.OrdinalIgnoreCase))
+            {
+                SetProject(path);
+                Summary.Text = $"Открыт проект: {Path.GetFileName(path)}";
+                return;
+            }
+
+            var project = Path.ChangeExtension(path, ".waproj");
+            if (!File.Exists(project))
+            {
+                File.WriteAllText(
+                    project,
+                    ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(path), Drawing = Path.GetFileName(path) }));
+            }
+
+            SetProject(project);
+            Summary.Text = $"Создан проект по чертежу {Path.GetFileName(path)}. Заполните исходные данные.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Summary.Text = $"Не удалось открыть файл из командной строки: {ex.Message}";
+        }
     }
 
     private string? FindDataRoot()
