@@ -81,9 +81,52 @@ public partial class MainWindow : Window
         SetProject(dialog.FileName);
     }
 
-    private void OnNewProject(object sender, RoutedEventArgs e) => CreateFromDrawing();
+    private async void OnNewProject(object sender, RoutedEventArgs e) => await CreateFromDrawing();
 
-    private void CreateFromDrawing()
+    // «Быстрый проект»: минимум вопросов, создание *.waproj с оценками по чертежу и сразу расчёт.
+    private async void OnQuickProject(object sender, RoutedEventArgs e)
+    {
+        var root = FindDataRoot();
+        if (root is null)
+        {
+            Summary.Text = "Не найдена папка data/norms: без норм и каталогов быстрый проект создать нельзя.";
+            return;
+        }
+
+        var initialDirectory = _project is not null && File.Exists(_project) ? Path.GetDirectoryName(_project) : null;
+        var dialog = new QuickProjectWindow(initialDirectory) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Request is not { } request)
+        {
+            return;
+        }
+
+        try
+        {
+            var created = QuickProject.Create(request, root);
+            SetProject(created.ProjectPath);
+            if (created.AlreadyExisted)
+            {
+                Summary.Text = "Проект для этого чертежа уже существует — открыт. Выполняется расчёт…";
+            }
+            else
+            {
+                var applied = created.AppliedSuggestions.Count > 0
+                    ? " По чертежу подставлено: " + string.Join("; ", created.AppliedSuggestions) + "."
+                    : " Оценки по чертежу не применялись.";
+                var warnings = created.Issues.Count > 0 ? $" Замечаний проверки: {created.Issues.Count} — откройте мастер данных." : "";
+                Summary.Text = $"Создан проект {Path.GetFileName(created.ProjectPath)}.{applied}{warnings}";
+            }
+
+            await RunCalculationAsync();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException
+            or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            Summary.Text = $"Не удалось создать быстрый проект: {ex.Message}";
+        }
+    }
+
+    private async Task CreateFromDrawing()
     {
         var dialog = new OpenFileDialog { Filter = DrawingFilter, Title = "Чертёж плана по соглашению о слоях" };
         if (dialog.ShowDialog(this) != true)
@@ -101,8 +144,11 @@ public partial class MainWindow : Window
         }
 
         SetProject(project);
-        Summary.Text = $"Создан проект {Path.GetFileName(project)}. Заполните исходные данные и нажмите «Рассчитать».";
-        OpenInputData();
+        Summary.Text = $"Создан проект {Path.GetFileName(project)}. Заполните исходные данные.";
+        if (OpenInputData() && ThemeManager.Settings.AutoCalculateAfterSave)
+        {
+            await RunCalculationAsync();
+        }
     }
 
     private void OnTemplate(object sender, RoutedEventArgs e)
@@ -141,7 +187,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnEditData(object sender, RoutedEventArgs e)
+    private async void OnEditData(object sender, RoutedEventArgs e)
     {
         if (_project is null || !File.Exists(_project))
         {
@@ -149,22 +195,42 @@ public partial class MainWindow : Window
             return;
         }
 
-        OpenInputData();
+        await OpenInputDataAndCalculateAsync();
     }
 
-    private void OpenInputData()
+    /// <summary>Открыть мастер исходных данных; true — пользователь сохранил данные.</summary>
+    private bool OpenInputData()
     {
         if (_project is null)
         {
-            return;
+            return false;
         }
 
         var dialog = new InputDataWindow(_project) { Owner = this };
-        if (dialog.ShowDialog() == true)
+        if (dialog.ShowDialog() != true)
         {
-            UpdateDesignSummary();
-            Summary.Text = "Исходные данные сохранены.";
+            return false;
         }
+
+        UpdateDesignSummary();
+        Summary.Text = "Исходные данные сохранены.";
+        return true;
+    }
+
+    // Настройка «рассчитывать сразу после сохранения данных»: пользователь заполнил стандартные данные — считаем сами.
+    private async Task<bool> OpenInputDataAndCalculateAsync()
+    {
+        if (!OpenInputData())
+        {
+            return false;
+        }
+
+        if (ThemeManager.Settings.AutoCalculateAfterSave)
+        {
+            await RunCalculationAsync();
+        }
+
+        return true;
     }
 
     private void OnEditProject(object sender, RoutedEventArgs e)
@@ -567,15 +633,15 @@ public partial class MainWindow : Window
         }
     }
 
-    // ---------- Тема ----------
+    // ---------- Тема и настройки ----------
 
     private void OnToggleTheme(object sender, RoutedEventArgs e) => ThemeManager.ToggleTheme();
 
-    private void OnAccentBlue(object sender, RoutedEventArgs e) => ThemeManager.SetAccent(AccentColor.Blue);
-
-    private void OnAccentTeal(object sender, RoutedEventArgs e) => ThemeManager.SetAccent(AccentColor.Teal);
-
-    private void OnAccentIndigo(object sender, RoutedEventArgs e) => ThemeManager.SetAccent(AccentColor.Indigo);
+    private void OnOpenSettings(object sender, RoutedEventArgs e)
+    {
+        new SettingsWindow { Owner = this }.ShowDialog();
+        UpdateThemeVisuals();
+    }
 
     private void UpdateThemeVisuals()
     {
@@ -585,16 +651,6 @@ public partial class MainWindow : Window
         ThemeButton.ToolTip = dark ? "Включить светлую тему" : "Включить тёмную тему";
         SunGroup.Visibility = dark ? Visibility.Visible : Visibility.Collapsed;
         MoonIcon.Visibility = dark ? Visibility.Collapsed : Visibility.Visible;
-        SetAccentMarker(AccentBlue, AccentColor.Blue);
-        SetAccentMarker(AccentTeal, AccentColor.Teal);
-        SetAccentMarker(AccentIndigo, AccentColor.Indigo);
-    }
-
-    private static void SetAccentMarker(Button button, AccentColor accent)
-    {
-        var selected = ThemeManager.Settings.Accent == accent;
-        button.BorderBrush = selected ? (Brush)System.Windows.Application.Current.FindResource("Brush.Accent") : Brushes.Transparent;
-        button.BorderThickness = new Thickness(selected ? 2 : 0);
     }
 
     // ---------- Перетаскивание ----------
@@ -605,7 +661,7 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void OnDrop(object sender, DragEventArgs e)
+    private async void OnDrop(object sender, DragEventArgs e)
     {
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files)
         {
@@ -628,7 +684,7 @@ public partial class MainWindow : Window
             }
 
             SetProject(project);
-            OpenInputData();
+            await OpenInputDataAndCalculateAsync();
         }
     }
 
