@@ -166,6 +166,9 @@ public sealed record ProjectDesign
     /// <summary>Комплектная насосная установка: ручной выбор из каталога (data/catalog/pump_sets_*.json) или автоподбор по Q и H.</summary>
     public ProjectPumpStation PumpStation { get; init; } = new();
 
+    /// <summary>Жокей-насос: расход и уставки — решение проектировщика (норма их не задаёт, вопрос В-07); null — не заданы.</summary>
+    public ProjectJockey? Jockey { get; init; }
+
     /// <summary>Резервуар пожарного запаса пользователя (габариты и мёртвый слой); null — без сравнения с требуемым объёмом.</summary>
     public ProjectTank? Tank { get; init; }
 }
@@ -181,6 +184,22 @@ public sealed record ProjectPumpStation
     /// автоматически по расчётным Q и H. Неизвестное обозначение — ошибка проекта (Issue pump.setNotFound).
     /// </summary>
     public string SetDesignation { get; init; } = "";
+}
+
+/// <summary>
+/// Жокей-насос: расход и уставки — решение проектировщика (норма их не задаёт, вопрос В-07). Пустые поля не заданы;
+/// параметры не влияют на расчёт Q/H и спецификацию — только на замечания и пояснительную записку.
+/// </summary>
+public sealed record ProjectJockey
+{
+    /// <summary>Расход жокей-насоса, л/с; норма его не задаёт (В-07) — по опросному листу изготовителя.</summary>
+    public double? FlowLitersPerSecond { get; init; }
+
+    /// <summary>Давление включения жокей-насоса, МПа; норма уставку не задаёт (В-07).</summary>
+    public double? StartPressureMpa { get; init; }
+
+    /// <summary>Давление отключения жокей-насоса, МПа; норма уставку не задаёт (В-07).</summary>
+    public double? StopPressureMpa { get; init; }
 }
 
 /// <summary>Резервуар пожарного запаса: габариты и мёртвый слой, м (ARCHITECTURE §5).</summary>

@@ -34,7 +34,8 @@ public sealed record NoteInputs(
     PumpRoomPlan? RoomPlan = null,
     PipingResult? Piping = null,
     string? PipingSource = null,
-    UserTank? Tank = null);
+    UserTank? Tank = null,
+    ProjectJockey? Jockey = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -414,8 +415,38 @@ public static class ExplanatoryNoteComposer
         return new NoteSection("6", "Насосная установка", [
             .. PumpHeadBlocks(i, supplyDn, kt, m3h, jockey),
             .. i.Station is { } st ? StationBlocks(st, norms, i.SetChoice) : [],
+            .. JockeyBlocks(i, jockey),
             .. SetBlocks(i),
         ]);
+    }
+
+    // Жокей-насос — решение проектировщика (В-07): норма расход и уставки не задаёт. В записку идут только заданные
+    // данные, без выдуманных уставок; ёмкость мембранного бака — из данных норм (п. 6.9.4).
+    private static IEnumerable<NoteBlock> JockeyBlocks(NoteInputs i, NormRecord jockeyRule)
+    {
+        if (i.Jockey is not { } jockey
+            || (jockey.FlowLitersPerSecond is null && jockey.StartPressureMpa is null && jockey.StopPressureMpa is null))
+        {
+            yield break;
+        }
+
+        var parts = new List<string>();
+        if (jockey.FlowLitersPerSecond is { } flow)
+        {
+            parts.Add($"расход {F(flow, "0.###")} л/с");
+        }
+
+        if (jockey.StartPressureMpa is { } start)
+        {
+            parts.Add($"включение при *P*_{{вкл}} = {F(start, "0.###")} МПа");
+        }
+
+        if (jockey.StopPressureMpa is { } stop)
+        {
+            parts.Add($"отключение при *P*_{{откл}} = {F(stop, "0.###")} МПа");
+        }
+
+        yield return new NoteParagraph($"**Жокей-насос.** Принято решением проектировщика: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
     }
 
     private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord jockey)

@@ -272,6 +272,10 @@ public static class ProjectPipeline
         var pumpCount = setChoice?.Chosen is { } chosenForCount
             ? chosenForCount.MainPumps + chosenForCount.StandbyPumps
             : station.WorkingPumps + station.StandbyPumps;
+
+        // Жокей-насос: расход и уставки — решение проектировщика (В-07), норма их не задаёт. Данные не влияют на расчёт
+        // Q/H и спецификацию — только замечания и пояснительная записка; Error jockey.flow выпуск не останавливает.
+        issues.AddRange(JockeyIssues(design.Jockey));
         var stationTakeoff = new MaterialTakeoff([], []);
 
         // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
@@ -972,7 +976,8 @@ public static class ProjectPipeline
                 roomPlan,
                 piping,
                 PumpCatalog.Piping(normsDir)?.Source,
-                userTank),
+                userTank,
+                design.Jockey),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
@@ -1081,6 +1086,67 @@ public static class ProjectPipeline
         }
 
         return null;
+    }
+
+    // Жокей-насос — решение проектировщика (В-07): норма расход и уставки не задаёт. Проверяются только заданные данные:
+    // отрицательный расход — Error; уставки включения/отключения несогласованы — Warning; валидные данные — Info.
+    private static IEnumerable<Issue> JockeyIssues(ProjectJockey? jockey)
+    {
+        if (jockey is null)
+        {
+            yield break;
+        }
+
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var valid = true;
+        if (jockey.FlowLitersPerSecond is { } flow && flow <= 0)
+        {
+            valid = false;
+            yield return new Issue("jockey.flow", IssueLevel.Error,
+                "Расход жокей-насоса должен быть больше 0. Расход/уставки норма не задаёт — В-07: уточните по опросному листу изготовителя.");
+        }
+
+        var start = jockey.StartPressureMpa;
+        var stop = jockey.StopPressureMpa;
+        if (start is { } startValue && stop is { } stopValue && startValue >= stopValue)
+        {
+            valid = false;
+            yield return new Issue("jockey.settings", IssueLevel.Warning, string.Create(ru,
+                $"Давление включения жокей-насоса {startValue:0.###} МПа не меньше давления отключения {stopValue:0.###} МПа: уточните уставки — норма их не задаёт (В-07)."));
+        }
+        else if (stop is not null && start is null)
+        {
+            valid = false;
+            yield return new Issue("jockey.settings", IssueLevel.Warning,
+                "Задано давление отключения жокей-насоса без давления включения: уточните уставки — норма их не задаёт (В-07).");
+        }
+
+        if (!valid)
+        {
+            yield break;
+        }
+
+        var parts = new List<string>();
+        if (jockey.FlowLitersPerSecond is { } flowValue)
+        {
+            parts.Add(string.Create(ru, $"расход {flowValue:0.###} л/с"));
+        }
+
+        if (start is { } startText)
+        {
+            parts.Add(string.Create(ru, $"включение при P = {startText:0.###} МПа"));
+        }
+
+        if (stop is { } stopText)
+        {
+            parts.Add(string.Create(ru, $"отключение при P = {stopText:0.###} МПа"));
+        }
+
+        if (parts.Count > 0)
+        {
+            yield return new Issue("jockey.manual", IssueLevel.Info, string.Create(ru,
+                $"Параметры жокей-насоса заданы решением проектировщика: {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07)."));
+        }
     }
 
     // «Отвод» → «отводы» для перечня стандартов фасонных частей в ПЗ.
