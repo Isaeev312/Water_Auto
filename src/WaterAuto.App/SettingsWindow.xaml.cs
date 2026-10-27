@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         AccentTeal.IsChecked = settings.Accent == AccentColor.Teal;
         AccentIndigo.IsChecked = settings.Accent == AccentColor.Indigo;
         AutoCalcCheck.IsChecked = settings.AutoCalculateAfterSave;
+        OpenOutDirCheck.IsChecked = settings.OpenOutDirAfterRun;
         FillAbout();
         _loading = false;
         ThemeManager.Changed += OnThemeChanged;
@@ -101,6 +102,17 @@ public partial class SettingsWindow : Window
         }
 
         ThemeManager.Settings.AutoCalculateAfterSave = AutoCalcCheck.IsChecked == true;
+        ThemeManager.Settings.Save();
+    }
+
+    private void OnOpenOutDirChanged(object sender, RoutedEventArgs e)
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        ThemeManager.Settings.OpenOutDirAfterRun = OpenOutDirCheck.IsChecked == true;
         ThemeManager.Settings.Save();
     }
 

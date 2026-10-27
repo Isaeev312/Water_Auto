@@ -35,10 +35,12 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         ThemeManager.Changed += (_, _) => UpdateThemeVisuals();
+        Closing += OnClosing;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        RestoreWindowPlacement();
         UpdateThemeVisuals();
         RefreshRecent();
         var root = FindDataRoot();
@@ -68,11 +70,81 @@ public partial class MainWindow : Window
         return DataLocator.FindRoot([.. starts]);
     }
 
+    // ---------- Окно: положение и последняя папка ----------
+
+    // Последняя папка проектов/чертежей для диалогов открытия и сохранения.
+    private static string? StartDirectory()
+    {
+        var directory = ThemeManager.Settings.LastDirectory;
+        return directory.Length > 0 && Directory.Exists(directory) ? directory : null;
+    }
+
+    private static void RememberDirectory(string path)
+    {
+        var directory = File.Exists(path) ? Path.GetDirectoryName(path) : path;
+        if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory))
+        {
+            ThemeManager.Settings.LastDirectory = directory;
+            ThemeManager.Settings.Save();
+        }
+    }
+
+    // Восстановление размеров и положения главного окна; окно вне видимой области не восстанавливается.
+    private void RestoreWindowPlacement()
+    {
+        var settings = ThemeManager.Settings;
+        if (settings.WindowWidth is not { } width || settings.WindowHeight is not { } height
+            || width < MinWidth || height < MinHeight)
+        {
+            return;
+        }
+
+        var left = settings.WindowLeft ?? ((SystemParameters.PrimaryScreenWidth - width) / 2);
+        var top = settings.WindowTop ?? ((SystemParameters.PrimaryScreenHeight - height) / 2);
+        var virtualLeft = SystemParameters.VirtualScreenLeft;
+        var virtualTop = SystemParameters.VirtualScreenTop;
+        var visible = left + width > virtualLeft + 60
+            && left < virtualLeft + SystemParameters.VirtualScreenWidth - 60
+            && top + height > virtualTop + 60
+            && top < virtualTop + SystemParameters.VirtualScreenHeight - 60;
+        if (!visible)
+        {
+            return;
+        }
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = left;
+        Top = top;
+        Width = width;
+        Height = height;
+        if (settings.WindowMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        var settings = ThemeManager.Settings;
+        settings.WindowLeft = bounds.Left;
+        settings.WindowTop = bounds.Top;
+        settings.WindowWidth = bounds.Width;
+        settings.WindowHeight = bounds.Height;
+        settings.WindowMaximized = WindowState == WindowState.Maximized;
+        settings.Save();
+    }
+
     // ---------- Проект ----------
 
     private void OnOpenProject(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog { Filter = ProjectFilter, Title = "Проект Water_Auto" };
+        if (StartDirectory() is { } start)
+        {
+            dialog.InitialDirectory = start;
+        }
+
         if (dialog.ShowDialog(this) != true)
         {
             return;
@@ -93,7 +165,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var initialDirectory = _project is not null && File.Exists(_project) ? Path.GetDirectoryName(_project) : null;
+        var initialDirectory = _project is not null && File.Exists(_project) ? Path.GetDirectoryName(_project) : StartDirectory();
         var dialog = new QuickProjectWindow(initialDirectory) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Request is not { } request)
         {
@@ -129,6 +201,11 @@ public partial class MainWindow : Window
     private async Task CreateFromDrawing()
     {
         var dialog = new OpenFileDialog { Filter = DrawingFilter, Title = "Чертёж плана по соглашению о слоях" };
+        if (StartDirectory() is { } start)
+        {
+            dialog.InitialDirectory = start;
+        }
+
         if (dialog.ShowDialog(this) != true)
         {
             return;
@@ -162,6 +239,11 @@ public partial class MainWindow : Window
             AddExtension = true,
             OverwritePrompt = true,
         };
+        if (StartDirectory() is { } start)
+        {
+            dialog.InitialDirectory = start;
+        }
+
         if (dialog.ShowDialog(this) != true)
         {
             return;
@@ -170,6 +252,7 @@ public partial class MainWindow : Window
         try
         {
             DrawingTemplate.Write(dialog.FileName);
+            RememberDirectory(dialog.FileName);
             Summary.Text = $"Шаблон записан: {dialog.FileName}. Архитектурный план вставляется внешней ссылкой в 0,0, контуры — на слоях ПТ_.";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -246,6 +329,7 @@ public partial class MainWindow : Window
         _project = Path.GetFullPath(path);
         ProjectPathText.Text = _project;
         ProjectPathText.ToolTip = _project;
+        RememberDirectory(_project);
         _outDir = Path.Combine(Path.GetDirectoryName(_project)!, Path.GetFileNameWithoutExtension(_project) + "_out");
         OutBox.Text = _outDir;
         AddRecent(_project);
@@ -282,10 +366,16 @@ public partial class MainWindow : Window
     private void OnBrowseOut(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFolderDialog { Title = "Папка выпуска проекта" };
+        if (StartDirectory() is { } start)
+        {
+            dialog.InitialDirectory = start;
+        }
+
         if (dialog.ShowDialog(this) == true)
         {
             OutBox.Text = dialog.FolderName;
             _outDir = dialog.FolderName;
+            RememberDirectory(dialog.FolderName);
         }
     }
 
@@ -345,6 +435,7 @@ public partial class MainWindow : Window
             var project = _project;
             var result = await Task.Run(() => ProjectPipeline.Run(project, output, DataLocator.Norms(root), DataLocator.Registry(root)));
             ShowResult(result, output);
+            OpenOutputIfRequested(result, output);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
@@ -407,6 +498,32 @@ public partial class MainWindow : Window
 
         ResultsEmpty.Visibility = Visibility.Collapsed;
         ResultsTabs.Visibility = Visibility.Visible;
+        AnimateIn(ResultsTabs);
+        AnimateIn(SummaryFilled);
+    }
+
+    // После успешного расчёта — открыть папку выпуска, если так задано в настройках.
+    private static void OpenOutputIfRequested(PipelineResult result, string output)
+    {
+        if (!result.Success || !ThemeManager.Settings.OpenOutDirAfterRun || !Directory.Exists(output))
+        {
+            return;
+        }
+
+        try
+        {
+            Open(output);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            // Проводник не открылся — это не ошибка расчёта: сообщение уже есть в сводке.
+        }
+    }
+
+    // Мягкое появление сводки/результатов после расчёта — визуальный акцент без «прыжков» вёрстки.
+    private static void AnimateIn(UIElement element)
+    {
+        element.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(180)));
     }
 
     // Пометка в строке состояния: установка выбрана вручную в окне подбора или подобрана автоматически.

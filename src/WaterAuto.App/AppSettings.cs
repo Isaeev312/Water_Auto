@@ -45,6 +45,24 @@ public sealed class AppSettings
     /// </summary>
     public bool AutoCalculateAfterSave { get; set; } = true;
 
+    /// <summary>Открывать папку выпуска в проводнике после успешного расчёта.</summary>
+    public bool OpenOutDirAfterRun { get; set; }
+
+    /// <summary>Последняя папка проектов/чертежей — с неё начинаются диалоги открытия и сохранения.</summary>
+    public string LastDirectory { get; set; } = "";
+
+    /// <summary>Геометрия главного окна (сохраняется при закрытии, восстанавливается при запуске), px.</summary>
+    public double? WindowLeft { get; set; }
+
+    public double? WindowTop { get; set; }
+
+    public double? WindowWidth { get; set; }
+
+    public double? WindowHeight { get; set; }
+
+    /// <summary>Главное окно было развёрнуто на весь экран.</summary>
+    public bool WindowMaximized { get; set; }
+
     /// <summary>Последние открытые проекты (последний — первым).</summary>
 #pragma warning disable CA1002, CA2227 // контракт внешнего API: обычный изменяемый List<string> для JSON
     public List<string> RecentProjects { get; set; } = [];

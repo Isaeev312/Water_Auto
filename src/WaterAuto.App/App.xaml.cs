@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         ThemeManager.Initialize();
+        WindowChrome.Attach();
         base.OnStartup(e);
     }
 

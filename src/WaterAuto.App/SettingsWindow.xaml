@@ -83,6 +83,11 @@
                                   Checked="OnAutoCalcChanged" Unchecked="OnAutoCalcChanged" />
                         <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="24,4,0,0"
                                    Text="Мастер сохранил данные — программа сама выполняет расчёт и показывает сводку. Если выключено, расчёт запускается кнопкой «Рассчитать»." />
+                        <CheckBox x:Name="OpenOutDirCheck" Margin="0,14,0,0"
+                                  Content="Открывать папку выпуска после расчёта"
+                                  Checked="OnOpenOutDirChanged" Unchecked="OnOpenOutDirChanged" />
+                        <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="24,4,0,0"
+                                   Text="После успешного расчёта проводник откроет папку с планом, спецификацией и запиской." />
                     </StackPanel>
                 </Border>
 
