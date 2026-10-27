@@ -805,6 +805,7 @@ public partial class InputDataWindow : Window
     private static string SuggestionFieldId(DrawingSuggestion suggestion) => suggestion.Key switch
     {
         "pumpRoom.height" => "design.pumpRoom|height",
+        "pumpRoom.floorElevation" => "design.pumpRoom|floorElevation",
         _ => "design|" + suggestion.Key,
     };
 

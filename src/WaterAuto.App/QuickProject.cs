@@ -228,12 +228,29 @@ public static class QuickProject
     /// <summary>Перенос оценки в поле проекта; <c>null</c> — для этого ключа в модели проекта нет поля.</summary>
     private static ProjectDesign? ApplySuggestion(ProjectDesign design, DrawingSuggestion suggestion) => suggestion.Key switch
     {
+        "floorElevation" => design with { FloorElevation = suggestion.Value },
         "roomHeight" => design with { RoomHeight = suggestion.Value },
         "pipeElevation" => design with { PipeElevation = suggestion.Value },
         "dictatingAboveAxis" => design with { DictatingAboveAxis = suggestion.Value },
         "supplyLength" => design with { SupplyLength = suggestion.Value },
+        "pumpRoom.floorElevation" => design with { PumpRoom = WithFloor(design.PumpRoom, suggestion.Value) },
         "pumpRoom.height" => design with { PumpRoom = WithHeight(design.PumpRoom, suggestion.Value) },
         _ => null,
+    };
+
+    /// <summary>Копия помещения насосной с новой отметкой пола: <see cref="ProjectPumpRoom"/> — класс, не запись.</summary>
+    private static ProjectPumpRoom WithFloor(ProjectPumpRoom room, double floorElevation) => new()
+    {
+        FloorElevation = floorElevation,
+        GroundElevation = room.GroundElevation,
+        InletDepth = room.InletDepth,
+        Height = room.Height,
+        WallThickness = room.WallThickness,
+        Underground = room.Underground,
+        PitSize = room.PitSize,
+        PitDepth = room.PitDepth,
+        InletRouteElevation = room.InletRouteElevation,
+        InletRouteClearance = room.InletRouteClearance,
     };
 
     /// <summary>Копия помещения насосной с новой высотой: <see cref="ProjectPumpRoom"/> — класс, не запись.</summary>
