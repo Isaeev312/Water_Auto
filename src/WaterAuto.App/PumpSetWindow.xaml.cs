@@ -13,7 +13,9 @@ namespace WaterAuto.App;
 /// Модальное окно подбора комплектной насосной установки из каталога: подходящие варианты — первыми
 /// (как автоподбор), текущий выбор проекта выделен, неподходящая установка требует явного подтверждения
 /// в самом окне. Над таблицей — поиск по каталогу и фильтр «Только подходящие»; строки показывают габариты
-/// установки, прибора управления и ось коллекторов для проверки помещения. Выбор сохраняется в
+/// установки, прибора управления и ось коллекторов для проверки помещения. В шапке — помещение насосной по
+/// чертежу проекта (размеры, площадь, вводы/выпуски, патрубки ГМ) с бейджем состояния чертежа: данные видны
+/// сразу, а сбой чтения остаётся в бейдже и не мешает подбору. Выбор сохраняется в
 /// <c>design.pumpStation.setDesignation</c> через <see cref="ProjectJson"/> (правка ключа без потери
 /// незнакомых полей проекта); пересчёт и обновление сводки выполняет главное окно после закрытия окна с
 /// <see cref="Window.DialogResult"/> = <c>true</c>.
@@ -53,6 +55,7 @@ public partial class PumpSetWindow : Window
         CurrentSetText.Text = _currentDesignation.Length > 0
             ? $"Текущая установка: {_currentDesignation} (выбрана вручную)"
             : "Текущая установка: автоподбор по расчётным Q и H";
+        LoadDrawingPumpRoom();
         LoadCandidates();
     }
 
@@ -341,6 +344,124 @@ public partial class PumpSetWindow : Window
             ShowError($"Текущий выбор установки прочитать не удалось: {ex.Message}");
             return "";
         }
+    }
+
+    // ---------- Помещение насосной по чертежу ----------
+
+    /// <summary>
+    /// Габариты и обвязка помещения насосной из чертежа проекта — чтобы сравнить их с габаритами установки и
+    /// прибора управления, не уходя из окна. Разбор синхронный: окно должно быть готово к снимку сразу после
+    /// конструктора; любой сбой (нет файла, битый DWG/DXF, нечитаемый проект) остаётся в бейдже и не мешает
+    /// подбору установки. Норм здесь нет — только геометрия плана и данные чертежа.
+    /// </summary>
+    private void LoadDrawingPumpRoom()
+    {
+        ProjectFile project;
+        try
+        {
+            project = ProjectFile.Load(_projectPath);
+        }
+#pragma warning disable CA1031 // данные чертежа вспомогательные: сбой чтения проекта показываем в бейдже, окно подбора работает
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            ShowDrawingRoomUnavailable("Файл проекта не прочитан: " + ex.Message);
+            return;
+        }
+
+        DrawingPreviewResult preview;
+        try
+        {
+            var projectDirectory = Path.GetDirectoryName(Path.GetFullPath(_projectPath))!;
+            var drawingPath = Path.GetFullPath(Path.Combine(projectDirectory, project.Drawing));
+            preview = DrawingPreview.Analyze(project, drawingPath, _normsDir);
+        }
+#pragma warning disable CA1031 // битый DWG/DXF или каталог не должны ронять окно: причина остаётся в бейдже
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            ShowDrawingRoomUnavailable("Чертёж не прочитан: " + ex.Message);
+            return;
+        }
+
+        if (!preview.DrawingFound)
+        {
+            ShowDrawingRoomUnavailable(preview.Issues.Count > 0
+                ? preview.Issues[0].Message
+                : "Файл чертежа не найден.");
+            return;
+        }
+
+        if (preview.PumpRoomId is null)
+        {
+            // Ошибки импорта (файл не разобран, не те единицы) — это «чертёж не прочитан», а не «насосная не размечена».
+            if (FirstImportError(preview) is { } readError)
+            {
+                ShowDrawingRoomUnavailable(readError, preview.HasErrors ? preview.Issues.Count : 0);
+                return;
+            }
+
+            SetDrawingRoomPill("Pill.Warning", "в чертеже не размечено");
+            DrawingRoomBlock.ToolTip = null;
+            DrawingRoomText.Text = "Контур помещения насосной на плане не найден (слой ПТ_НС).";
+            DrawingRoomHintText.Text = WithIssuesHint("Листы насосной и ПТ2.СО не выпустятся (слой ПТ_НС).", preview);
+            return;
+        }
+
+        SetDrawingRoomPill("Pill.Success", "по чертежу");
+        DrawingRoomText.Text = FormatPumpRoom(preview);
+        DrawingRoomHintText.Text = WithIssuesHint("Сравните с габаритами установки и прибора управления в таблице.", preview);
+        DrawingRoomBlock.ToolTip = string.Create(
+            Ru,
+            $"Помещение {preview.PumpRoomId}: дверь {(preview.PumpRoomHasDoor ? "есть" : "не найдена")}, помещений на плане: {preview.Rooms.Count}.");
+    }
+
+    // «Помещение насосной: 12 × 8 м, 96 м²; вводов 2, выпусков 1, патрубков ГМ 2.» — только данные чертежа.
+    private static string FormatPumpRoom(DrawingPreviewResult preview)
+    {
+        var size = preview.PumpRoomLengthM is { } length && preview.PumpRoomWidthM is { } width
+            ? string.Create(Ru, $"{length:0.##} × {width:0.##} м")
+            : "размер не определён";
+        var area = preview.PumpRoomAreaM2 is { } areaM2 ? string.Create(Ru, $", {areaM2:0.##} м²") : "";
+        return string.Create(
+            Ru,
+            $"Помещение насосной: {size}{area}; вводов {preview.PumpRoomInlets}, выпусков {preview.PumpRoomOutlets}, патрубков ГМ {preview.TruckInlets}.");
+    }
+
+    // Число замечаний предпроверки — рядом с данными: видно, насколько чертёж готов к выпуску листов насосной.
+    private static string WithIssuesHint(string hint, DrawingPreviewResult preview) => preview.Issues.Count == 0
+        ? hint
+        : string.Create(Ru, $"{hint} Замечаний предпроверки: {preview.Issues.Count}.");
+
+    // Ошибка именно чтения файла: план не разобран, поэтому «насосная не размечена» здесь была бы неправдой.
+    private static string? FirstImportError(DrawingPreviewResult preview) => preview.Issues
+        .FirstOrDefault(issue => issue.Level == IssueLevel.Error && issue.Code.StartsWith("import.", StringComparison.Ordinal))
+        ?.Message;
+
+    // Чертёж не найден/не читается: в бейдже — статус и краткая причина, без MessageBox и без падения окна.
+    private void ShowDrawingRoomUnavailable(string reason, int issueCount = 0)
+    {
+        SetDrawingRoomPill("Pill.Warning", "чертёж не прочитан");
+        DrawingRoomBlock.ToolTip = null;
+        DrawingRoomText.Text = Shorten(reason);
+        DrawingRoomHintText.Text = issueCount > 0
+            ? string.Create(Ru, $"Подбор установки работает и без чертежа: проверьте файл проекта и поле drawing. Замечаний предпроверки: {issueCount}.")
+            : "Подбор установки работает и без чертежа: проверьте файл проекта и поле drawing.";
+    }
+
+    // Длинные сообщения импорта оставляем в бейдже одной-двумя строками.
+    private static string Shorten(string message) => message.Length switch
+    {
+        0 => "Чертёж не прочитан.",
+        <= 240 => message,
+        _ => message[..239] + "…",
+    };
+
+    // Бейдж состояния данных чертежа; стили и кисти — только из дизайн-системы (светлая и тёмная тема).
+    private void SetDrawingRoomPill(string styleKey, string text)
+    {
+        DrawingRoomPill.Style = (Style)FindResource(styleKey);
+        DrawingRoomPillText.Text = text;
     }
 
     private void ShowError(string message)

@@ -22,6 +22,10 @@
         <Border Grid.Row="0" Background="{DynamicResource Brush.Bg.Surface}"
                 BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1" Padding="20,16">
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -45,6 +49,30 @@
                                MaxWidth="380" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap"
                                Foreground="{DynamicResource Brush.Text.Tertiary}" Visibility="Collapsed" />
                 </StackPanel>
+
+                <!-- Помещение насосной по чертежу: с ним сравнивают габариты установки и прибора управления. -->
+                <Border x:Name="DrawingRoomBlock" Grid.Row="1" Grid.ColumnSpan="2"
+                        Style="{StaticResource Card.Inset}" Margin="0,12,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Style="{StaticResource Text.Label}" Text="Помещение насосной по чертежу" />
+                            <TextBlock x:Name="DrawingRoomText" Style="{StaticResource Text.Body}" Margin="0,3,0,0"
+                                       TextWrapping="Wrap" Text="Данные чертежа не загружены." />
+                            <TextBlock x:Name="DrawingRoomHintText" Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource Brush.Text.Tertiary}" />
+                        </StackPanel>
+
+                        <Border x:Name="DrawingRoomPill" Grid.Column="1" Style="{StaticResource Pill.Neutral}"
+                                VerticalAlignment="Top" HorizontalAlignment="Right">
+                            <TextBlock x:Name="DrawingRoomPillText" Style="{StaticResource Text.Caption}" Text="нет данных" />
+                        </Border>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
 
