@@ -1,75 +1,380 @@
 <Window x:Class="WaterAuto.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Water_Auto — расчёт АУПТ по СП 485" Height="720" Width="1100"
-        FontFamily="Segoe UI" FontSize="14">
-    <DockPanel Margin="16">
-        <TextBlock DockPanel.Dock="Top" FontSize="20" FontWeight="SemiBold" Text="Расчёт по чертежу" />
-        <TextBlock DockPanel.Dock="Top" Margin="0,4,0,12" Foreground="#555" TextWrapping="Wrap"
-                   Text="Проект (*.waproj) ссылается на план DWG/DXF по соглашению о слоях и содержит исходные данные. Новый проект создаётся рядом с выбранным чертежом." />
+        Title="Water_Auto — расчёт водяных АУПТ по СП 485"
+        Height="800" Width="1240" MinHeight="680" MinWidth="1020"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Brush.Bg.App}"
+        Foreground="{DynamicResource Brush.Text.Primary}"
+        FontFamily="Segoe UI" FontSize="14"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop" Loaded="OnLoaded">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
 
-        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <TextBlock Text="Проект:" VerticalAlignment="Center" Margin="0,0,8,0" />
-            <TextBox x:Name="ProjectBox" Grid.Column="1" Padding="4" />
-            <Button Grid.Column="2" Content="Открыть…" Margin="8,0,0,0" Padding="12,4" Click="OnOpenProject" />
-            <Button Grid.Column="3" Content="Новый по чертежу…" Margin="8,0,0,0" Padding="12,4" Click="OnNewProject" />
-            <TextBlock Grid.Row="1" Text="Папка выпуска:" VerticalAlignment="Center" Margin="0,8,8,0" />
-            <TextBox x:Name="OutBox" Grid.Row="1" Grid.Column="1" Padding="4" Margin="0,8,0,0" />
-            <Button Grid.Row="1" Grid.Column="2" Content="Файл проекта" Margin="8,8,0,0" Padding="12,4"
-                    ToolTip="Открыть JSON проекта во внешнем редакторе (для служебных полей)" Click="OnEditProject" />
-            <Button Grid.Row="1" Grid.Column="3" Content="Исходные данные…" Margin="8,8,0,0" Padding="12,4"
-                    ToolTip="Ввод данных объекта, спринклерной установки, насосной, ВПВ, резервуара и титульного листа" Click="OnEditData" />
-            <Button x:Name="RunButton" Grid.Row="1" Grid.Column="4" Content="Рассчитать" Margin="8,8,0,0" Padding="12,4"
-                    FontWeight="SemiBold" Click="OnRun" />
-        </Grid>
+        <!-- Шапка приложения: марка, название, тема и акцент. -->
+        <Border Grid.Row="0" Background="{DynamicResource Brush.Bg.Surface}" BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-        <Border DockPanel.Dock="Top" Background="#F3F6FA" CornerRadius="4" Padding="12" Margin="0,4,0,8">
-            <StackPanel>
-                <TextBlock x:Name="Summary" TextWrapping="Wrap" Text="Выберите проект и нажмите «Рассчитать»." />
-                <TextBlock x:Name="DesignSummary" TextWrapping="Wrap" Foreground="#555" Margin="0,4,0,0" />
-            </StackPanel>
+                <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Brush.Brand}"
+                        VerticalAlignment="Center">
+                    <Viewbox Width="22" Height="22">
+                        <Path Fill="{DynamicResource Brush.Text.OnBrand}"
+                              Data="M10,1 C10,1 3,9 3,13 A7,7 0 0 0 17,13 C17,9 10,1 10,1 Z" />
+                    </Viewbox>
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Text.H2}" Text="Water_Auto" />
+                    <TextBlock Style="{StaticResource Text.Caption}" Text="Расчёт водяных автоматических установок пожаротушения по СП 485" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center"
+                                ToolTip="Акцентный цвет интерфейса">
+                        <Button x:Name="AccentBlue" Style="{StaticResource Button.Ghost}" Padding="4"
+                                Click="OnAccentBlue" ToolTip="Синий акцент">
+                            <Border Width="18" Height="18" CornerRadius="9" Background="#2563EB" />
+                        </Button>
+                        <Button x:Name="AccentTeal" Style="{StaticResource Button.Ghost}" Padding="4"
+                                Click="OnAccentTeal" ToolTip="Бирюзовый акцент">
+                            <Border Width="18" Height="18" CornerRadius="9" Background="#0F766E" />
+                        </Button>
+                        <Button x:Name="AccentIndigo" Style="{StaticResource Button.Ghost}" Padding="4"
+                                Click="OnAccentIndigo" ToolTip="Индиго акцент">
+                            <Border Width="18" Height="18" CornerRadius="9" Background="#4F46E5" />
+                        </Button>
+                    </StackPanel>
+
+                    <Button x:Name="ThemeButton" Style="{StaticResource Button.Ghost}" Click="OnToggleTheme"
+                            ToolTip="Переключить светлую/тёмную тему" Padding="10,6">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="16" Height="16">
+                                <Grid x:Name="SunGroup">
+                                    <Ellipse Width="8.4" Height="8.4" Fill="{DynamicResource Brush.Text.Secondary}" />
+                                    <Path Stroke="{DynamicResource Brush.Text.Secondary}" StrokeThickness="1.4"
+                                          Data="M8,0.8 L8,2.6 M8,13.4 L8,15.2 M0.8,8 L2.6,8 M13.4,8 L15.2,8 M2.9,2.9 L4.2,4.2 M11.8,11.8 L13.1,13.1 M13.1,2.9 L11.8,4.2 M4.2,11.8 L2.9,13.1" />
+                                </Grid>
+                                <Path x:Name="MoonIcon" Visibility="Collapsed" Fill="{DynamicResource Brush.Text.Secondary}"
+                                      Data="M13.5,9.6 A6.5,6.5 0 1 1 6.4,2.5 A5.2,5.2 0 0 0 13.5,9.6 Z" />
+                            </Grid>
+                            <TextBlock x:Name="ThemeLabel" Margin="8,0,0,0" VerticalAlignment="Center"
+                                       Style="{StaticResource Text.Body}" Text="Тема" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
         </Border>
 
-        <Grid>
+        <!-- Рабочая область: слева проект и исходные данные, справа сводка и выпуск. -->
+        <Grid Grid.Row="1" Margin="20,16,20,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="320" />
+                <ColumnDefinition Width="420" />
+                <ColumnDefinition Width="20" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <DockPanel Margin="0,0,12,0">
-                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Файлы выпуска (двойной щелчок — открыть)" Margin="0,0,0,4" />
-                <Button DockPanel.Dock="Bottom" Content="Открыть папку" Margin="0,8,0,0" Padding="12,4" Click="OnOpenFolder" />
-                <ListBox x:Name="Files" MouseDoubleClick="OnOpenFile" />
-            </DockPanel>
-            <DockPanel Grid.Column="1">
-                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Text="Замечания" Margin="0,0,0,4" />
-                <DataGrid x:Name="Issues" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
-                          GridLinesVisibility="Horizontal" CanUserAddRows="False">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Уровень" Binding="{Binding Level}" Width="90" />
-                        <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="170" />
-                        <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*">
-                            <DataGridTextColumn.ElementStyle>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="TextWrapping" Value="Wrap" />
-                                </Style>
-                            </DataGridTextColumn.ElementStyle>
-                        </DataGridTextColumn>
-                        <DataGridTextColumn Header="Пункт" Binding="{Binding Clause}" Width="90" />
-                        <DataGridTextColumn Header="Место, мм" Binding="{Binding Location}" Width="160" />
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
+
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <!-- Шаг 1. Проект. -->
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Text.H3}" Text="1 · Проект" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,10" TextWrapping="Wrap"
+                                       Text="Проект *.waproj ссылается на чертёж DWG/DXF и хранит исходные данные." />
+
+                            <TextBlock Style="{StaticResource Text.Label}" Text="Последние проекты" />
+                            <ComboBox x:Name="RecentBox" Margin="0,4,0,0" SelectionChanged="OnRecentChanged" />
+                            <TextBlock x:Name="ProjectPathText" Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
+                                       TextTrimming="CharacterEllipsis" Text="Проект не выбран" />
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Content="Открыть проект…" Style="{StaticResource Button.Secondary}"
+                                        Click="OnOpenProject" />
+                                <Button Grid.Column="1" Content="JSON" Style="{StaticResource Button.Ghost}" Margin="8,0,0,0"
+                                        Click="OnEditProject" ToolTip="Открыть файл проекта во внешнем редакторе (служебные поля)" />
+                                <Button Grid.Column="2" Content="Папка" Style="{StaticResource Button.Ghost}" Margin="4,0,0,0"
+                                        Click="OnOpenOutFolder" ToolTip="Открыть папку выпуска" />
+                            </Grid>
+
+                            <Separator Margin="0,12" />
+                            <TextBlock Style="{StaticResource Text.Label}" Text="Папка выпуска" />
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="OutBox" Grid.Column="0" />
+                                <Button Grid.Column="1" Content="Обзор…" Style="{StaticResource Button.Secondary}"
+                                        Margin="8,0,0,0" Click="OnBrowseOut" />
+                            </Grid>
+
+                            <Separator Margin="0,12" />
+                            <TextBlock Style="{StaticResource Text.H3}" Text="Новый проект по чертежу"
+                                       ToolTip="Файл проекта создаётся рядом с чертежом, сразу открывается мастер исходных данных." />
+                            <WrapPanel Margin="0,8,0,0">
+                                <Button Content="Создать из DWG…" Style="{StaticResource Button.Primary}"
+                                        Click="OnNewProject" />
+                                <Button Content="Шаблон DWG…" Style="{StaticResource Button.Secondary}" Margin="8,0,0,0"
+                                        Click="OnTemplate" ToolTip="Шаблон слоёв ПТ_ для архитектурного плана (единицы — мм)" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Шаг 2. Исходные данные. -->
+                    <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Text.H3}" Text="2 · Исходные данные" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,10" TextWrapping="Wrap"
+                                       Text="Только данные объекта и решения проектировщика — нормы и каталоги программа берёт из data/." />
+                            <Button x:Name="EditDataButton" Content="Открыть мастер исходных данных…"
+                                    Style="{StaticResource Button.Primary}" HorizontalAlignment="Stretch"
+                                    Click="OnEditData" />
+                            <Border Style="{StaticResource Card.Inset}" Margin="0,10,0,0">
+                                <TextBlock x:Name="DesignSummary" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                           Text="Проект не выбран — выберите файл проекта или создайте его по чертежу." />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="16" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Сводка расчёта. -->
+                <Border Grid.Row="0" Style="{StaticResource Card}">
+                    <Grid>
+                        <StackPanel x:Name="SummaryEmpty" VerticalAlignment="Center" Margin="0,6">
+                            <TextBlock Style="{StaticResource Text.H3}" Text="Сводка появится после расчёта" />
+                            <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,4,0,0"
+                                       Text="Расход и напор насоса, запас воды, подобранная установка насосной и количество замечаний." />
+                        </StackPanel>
+
+                        <StackPanel x:Name="SummaryFilled" Visibility="Collapsed">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="Расход насоса" />
+                                    <TextBlock x:Name="FlowValue" Style="{StaticResource Text.H1}" Text="—" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="л/с" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="Напор насоса" />
+                                    <TextBlock x:Name="HeadValue" Style="{StaticResource Text.H1}" Text="—" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="м" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="Запас воды" />
+                                    <TextBlock x:Name="VolumeValue" Style="{StaticResource Text.H1}" Text="—" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="м³" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="3">
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="Замечаний" />
+                                    <TextBlock x:Name="IssuesValue" Style="{StaticResource Text.H1}" Text="—" />
+                                    <TextBlock Style="{StaticResource Text.Caption}" Text="проверить" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Style="{StaticResource Card.Inset}" Margin="0,14,0,0">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Text.Label}" Text="Насосная установка" />
+                                    <TextBlock x:Name="PumpSetValue" Style="{StaticResource Text.Value}" TextWrapping="Wrap"
+                                               Margin="0,2,0,0" Text="—" />
+                                    <TextBlock x:Name="PumpCountsValue" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                               Text="" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Результаты: файлы выпуска и замечания. -->
+                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+                    <Grid>
+                        <StackPanel x:Name="ResultsEmpty" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock Style="{StaticResource Text.H3}" Text="Результатов пока нет" HorizontalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                       Text="После расчёта здесь появятся файлы выпуска и замечания." />
+                        </StackPanel>
+
+                        <TabControl x:Name="ResultsTabs" Visibility="Collapsed" Margin="4">
+                            <TabItem x:Name="FilesTab">
+                                <TabItem.Header>
+                                    <TextBlock x:Name="FilesTabHeader" Text="Файлы выпуска" />
+                                </TabItem.Header>
+                                <Grid Margin="12,8,12,12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                                                   Text="Двойной щелчок открывает файл. " />
+                                        <Button Content="Открыть папку выпуска" Style="{StaticResource Button.Ghost}"
+                                                Click="OnOpenOutFolder" Padding="8,2" />
+                                    </StackPanel>
+                                    <ListBox x:Name="FilesList" Grid.Row="1" MouseDoubleClick="OnOpenFile"
+                                             BorderThickness="0" Background="Transparent"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="2,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Width="42" Height="26" CornerRadius="5"
+                                                            Background="{DynamicResource Brush.Accent.Soft}"
+                                                            VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Kind}" Style="{StaticResource Text.Mono}"
+                                                                   Foreground="{DynamicResource Brush.Accent}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="10,0,10,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource Text.Body}" />
+                                                        <TextBlock Text="{Binding Size}" Style="{StaticResource Text.Caption}" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Relative}" Style="{StaticResource Text.Caption}"
+                                                               VerticalAlignment="Center" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                            </TabItem>
+
+                            <TabItem x:Name="IssuesTab">
+                                <TabItem.Header>
+                                    <TextBlock x:Name="IssuesTabHeader" Text="Замечания" />
+                                </TabItem.Header>
+                                <Grid Margin="12,8,12,12">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
+                                                   Text="Показать:" Margin="0,0,8,0" />
+                                        <ComboBox x:Name="IssueFilter" Width="220" SelectionChanged="OnIssueFilterChanged">
+                                            <ComboBoxItem Content="Все замечания" IsSelected="True" />
+                                            <ComboBoxItem Content="Ошибки" />
+                                            <ComboBoxItem Content="Предупреждения" />
+                                            <ComboBoxItem Content="Информация" />
+                                        </ComboBox>
+                                    </StackPanel>
+                                    <DataGrid x:Name="Issues" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                                              HeadersVisibility="Column" CanUserAddRows="False" CanUserResizeRows="False"
+                                              SelectionMode="Single" BorderThickness="0">
+                                        <DataGrid.Columns>
+                                            <DataGridTemplateColumn Header="Уровень" Width="120" SortMemberPath="LevelOrder">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Border x:Name="LevelBadge" Style="{StaticResource Pill.Neutral}"
+                                                                HorizontalAlignment="Left">
+                                                            <TextBlock Text="{Binding LevelText}"
+                                                                       Style="{StaticResource Text.Caption}" />
+                                                        </Border>
+                                                        <DataTemplate.Triggers>
+                                                            <DataTrigger Binding="{Binding LevelKey}" Value="Error">
+                                                                <Setter TargetName="LevelBadge" Property="Style" Value="{StaticResource Pill.Error}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding LevelKey}" Value="Warning">
+                                                                <Setter TargetName="LevelBadge" Property="Style" Value="{StaticResource Pill.Warning}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding LevelKey}" Value="Info">
+                                                                <Setter TargetName="LevelBadge" Property="Style" Value="{StaticResource Pill.Info}" />
+                                                            </DataTrigger>
+                                                        </DataTemplate.Triggers>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="170" />
+                                            <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*">
+                                                <DataGridTextColumn.ElementStyle>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+                                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                                    </Style>
+                                                </DataGridTextColumn.ElementStyle>
+                                            </DataGridTextColumn>
+                                            <DataGridTextColumn Header="Пункт" Binding="{Binding Clause}" Width="90" />
+                                            <DataGridTextColumn Header="Место, мм" Binding="{Binding Location}" Width="150" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </Grid>
+                            </TabItem>
+                        </TabControl>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
-    </DockPanel>
+
+        <!-- Панель действия: главная кнопка всегда на виду, рядом — сообщение о ходе расчёта. -->
+        <Border Grid.Row="2" Background="{DynamicResource Brush.Bg.Surface}" BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,1,0,0" Padding="20,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="Summary" Style="{StaticResource Text.Body}" TextWrapping="Wrap"
+                               Text="Выберите проект или создайте его по чертежу, заполните исходные данные и нажмите «Рассчитать»." />
+                    <TextBlock Style="{StaticResource Text.Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Проект .waproj или чертёж DWG/DXF можно перетащить в окно." />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <ProgressBar x:Name="RunProgress" Width="120" Height="4" Margin="0,0,16,0" IsIndeterminate="True"
+                                 VerticalAlignment="Center" Visibility="Collapsed" />
+                    <Button x:Name="RunButton" Content="Рассчитать" Style="{StaticResource Button.Primary}"
+                            MinWidth="190" FontWeight="SemiBold" Click="OnRun" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Строка состояния: редакция норм, корень data, тема. -->
+        <Border Grid.Row="3" Background="{DynamicResource Brush.Bg.App}" BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,1,0,0" Padding="20,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="NormsStatus" Grid.Column="0" Style="{StaticResource Text.Caption}" Text="Нормы: —" />
+                <TextBlock x:Name="RootStatus" Grid.Column="1" Style="{StaticResource Text.Caption}" Text=""
+                           TextTrimming="CharacterEllipsis" Margin="16,0" HorizontalAlignment="Left" />
+                <TextBlock x:Name="ThemeStatus" Grid.Column="2" Style="{StaticResource Text.Caption}" Text="Светлая тема" />
+            </Grid>
+        </Border>
+    </Grid>
 </Window>

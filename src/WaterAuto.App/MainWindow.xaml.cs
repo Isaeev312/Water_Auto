@@ -1,34 +1,85 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using Microsoft.Win32;
 using WaterAuto.Application;
+using WaterAuto.Core;
 
 namespace WaterAuto.App;
 
 /// <summary>
-/// Простое окно сквозного расчёта: проект → «Рассчитать» → файлы выпуска и замечания.
-/// Расчёт — тот же <see cref="ProjectPipeline"/>, что и в консоли; мастер из 8 шагов (макет «Экраны») — позже.
+/// Главное окно: проект → исходные данные → расчёт → файлы выпуска и замечания.
+/// Расчёт — тот же <see cref="ProjectPipeline"/>, что и в консоли. Нормативных чисел в окне нет:
+/// подписи и значения берутся из data/ через <see cref="InputCatalog"/> и сам конвейер.
 /// </summary>
 public partial class MainWindow : Window
 {
+    private const string TemplateFilter = "Чертёж DWG (*.dwg)|*.dwg|Чертёж DXF (*.dxf)|*.dxf|Шаблон DWT (*.dwt)|*.dwt";
+    private const string ProjectFilter = "Проект Water_Auto (*.waproj)|*.waproj";
+    private const string DrawingFilter = "Чертёж плана (*.dwg;*.dxf)|*.dwg;*.dxf|Все файлы (*.*)|*.*";
+    private string? _project;
+    private string _outDir = "";
+    private IReadOnlyList<IssueRow> _allIssues = [];
+
     public MainWindow()
     {
         InitializeComponent();
+        ThemeManager.Changed += (_, _) => UpdateThemeVisuals();
     }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        UpdateThemeVisuals();
+        RefreshRecent();
+        var root = FindDataRoot();
+        if (root is not null)
+        {
+            RootStatus.Text = $"Данные: {root}";
+            if (InputCatalog.Norms(DataLocator.Norms(root)) is { } norms)
+            {
+                NormsStatus.Text = $"Нормы: {norms.Document}, {norms.Edition}";
+            }
+
+            return;
+        }
+
+        RootStatus.Text = "Папка data/norms не найдена — расчёт недоступен.";
+        NormsStatus.Text = "Нормы: —";
+    }
+
+    private string? FindDataRoot()
+    {
+        var starts = new List<string> { Environment.CurrentDirectory, AppContext.BaseDirectory };
+        if (_project is not null)
+        {
+            starts.Insert(0, Path.GetDirectoryName(_project)!);
+        }
+
+        return DataLocator.FindRoot([.. starts]);
+    }
+
+    // ---------- Проект ----------
 
     private void OnOpenProject(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = "Проект Water_Auto (*.waproj)|*.waproj" };
-        if (dialog.ShowDialog(this) == true)
+        var dialog = new OpenFileDialog { Filter = ProjectFilter, Title = "Проект Water_Auto" };
+        if (dialog.ShowDialog(this) != true)
         {
-            SetProject(dialog.FileName);
+            return;
         }
+
+        SetProject(dialog.FileName);
     }
 
-    private void OnNewProject(object sender, RoutedEventArgs e)
+    private void OnNewProject(object sender, RoutedEventArgs e) => CreateFromDrawing();
+
+    private void CreateFromDrawing()
     {
-        var dialog = new OpenFileDialog { Filter = "Чертёж (*.dwg;*.dxf)|*.dwg;*.dxf", Title = "Чертёж плана по соглашению о слоях" };
+        var dialog = new OpenFileDialog { Filter = DrawingFilter, Title = "Чертёж плана по соглашению о слоях" };
         if (dialog.ShowDialog(this) != true)
         {
             return;
@@ -38,19 +89,57 @@ public partial class MainWindow : Window
         var project = Path.ChangeExtension(drawing, ".waproj");
         if (!File.Exists(project))
         {
-            File.WriteAllText(project, ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(drawing), Drawing = Path.GetFileName(drawing) }));
+            File.WriteAllText(
+                project,
+                ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(drawing), Drawing = Path.GetFileName(drawing) }));
         }
 
         SetProject(project);
+        Summary.Text = $"Создан проект {Path.GetFileName(project)}. Заполните исходные данные и нажмите «Рассчитать».";
         OpenInputData();
-        Summary.Text = $"Создан проект {project}. Заполните исходные данные и нажмите «Рассчитать».";
+    }
+
+    private void OnTemplate(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = TemplateFilter,
+            Title = "Шаблон чертежа: слои ПТ_ и памятка",
+            FileName = "WaterAuto-шаблон.dwg",
+            DefaultExt = ".dwg",
+            AddExtension = true,
+            OverwritePrompt = true,
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            DrawingTemplate.Write(dialog.FileName);
+            Summary.Text = $"Шаблон записан: {dialog.FileName}. Архитектурный план вставляется внешней ссылкой в 0,0, контуры — на слоях ПТ_.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Summary.Text = $"Не удалось записать шаблон: {ex.Message}";
+        }
+    }
+
+    private void OnRecentChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (RecentBox.SelectedItem is string path && File.Exists(path))
+        {
+            SetProject(path);
+            RecentBox.SelectedIndex = -1;
+        }
     }
 
     private void OnEditData(object sender, RoutedEventArgs e)
     {
-        if (!File.Exists(ProjectBox.Text))
+        if (_project is null || !File.Exists(_project))
         {
-            Summary.Text = "Сначала выберите файл проекта.";
+            Summary.Text = "Сначала выберите проект или создайте его по чертежу.";
             return;
         }
 
@@ -59,7 +148,12 @@ public partial class MainWindow : Window
 
     private void OpenInputData()
     {
-        var dialog = new InputDataWindow(ProjectBox.Text) { Owner = this };
+        if (_project is null)
+        {
+            return;
+        }
+
+        var dialog = new InputDataWindow(_project) { Owner = this };
         if (dialog.ShowDialog() == true)
         {
             UpdateDesignSummary();
@@ -69,43 +163,98 @@ public partial class MainWindow : Window
 
     private void OnEditProject(object sender, RoutedEventArgs e)
     {
-        if (File.Exists(ProjectBox.Text))
+        if (_project is not null && File.Exists(_project))
         {
-            Open(ProjectBox.Text);
+            Open(_project);
         }
     }
 
+    private void SetProject(string path)
+    {
+        _project = Path.GetFullPath(path);
+        ProjectPathText.Text = _project;
+        ProjectPathText.ToolTip = _project;
+        _outDir = Path.Combine(Path.GetDirectoryName(_project)!, Path.GetFileNameWithoutExtension(_project) + "_out");
+        OutBox.Text = _outDir;
+        AddRecent(_project);
+        UpdateDesignSummary();
+        Summary.Text = $"Проект: {_project}";
+    }
+
+    private void RefreshRecent()
+    {
+        var recent = ThemeManager.Settings.RecentProjects.Where(File.Exists).ToList();
+        RecentBox.ItemsSource = recent;
+        RecentBox.IsEnabled = recent.Count > 0;
+        RecentBox.ToolTip = recent.Count == 0 ? "Список пуст — откройте проект или создайте его по чертежу." : _project ?? recent[0];
+    }
+
+    private void AddRecent(string path)
+    {
+        var recent = ThemeManager.Settings.RecentProjects;
+        recent.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+        recent.Insert(0, path);
+        while (recent.Count > 10)
+        {
+            recent.RemoveAt(recent.Count - 1);
+        }
+
+        ThemeManager.Settings.Save();
+        RefreshRecent();
+    }
+
+    private void OnBrowseOut(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = "Папка выпуска проекта" };
+        if (dialog.ShowDialog(this) == true)
+        {
+            OutBox.Text = dialog.FolderName;
+            _outDir = dialog.FolderName;
+        }
+    }
+
+    private void OnOpenOutFolder(object sender, RoutedEventArgs e)
+    {
+        var dir = OutBox.Text.Trim();
+        if (Directory.Exists(dir))
+        {
+            Open(dir);
+        }
+        else
+        {
+            Summary.Text = "Папка выпуска ещё не создана — выполните расчёт.";
+        }
+    }
+
+    private static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+
+    // ---------- Расчёт ----------
+
     private async void OnRun(object sender, RoutedEventArgs e)
     {
-        var project = ProjectBox.Text;
-        if (!File.Exists(project))
+        if (_project is null || !File.Exists(_project))
         {
             Summary.Text = "Файл проекта не найден.";
             return;
         }
 
-        var root = DataLocator.FindRoot(Path.GetDirectoryName(project)!, AppContext.BaseDirectory);
+        var root = FindDataRoot();
         if (root is null)
         {
-            Summary.Text = "Не найдена папка data/norms с нормами.";
+            Summary.Text = "Не найдена папка data/norms с нормами и каталогами.";
             return;
         }
 
-        var output = OutBox.Text;
+        var output = string.IsNullOrWhiteSpace(OutBox.Text) ? _outDir : OutBox.Text.Trim();
         RunButton.IsEnabled = false;
-        Summary.Text = "Расчёт…";
+        RunButton.Content = "Расчёт…";
+        RunProgress.Visibility = Visibility.Visible;
+        Summary.Text = "Расчёт и выпуск документов…";
         try
         {
+            var project = _project;
             var result = await Task.Run(() => ProjectPipeline.Run(project, output, DataLocator.Norms(root), DataLocator.Registry(root)));
-            Files.ItemsSource = result.Files;
-            Issues.ItemsSource = result.Issues
-                .OrderByDescending(i => i.Level)
-                .Select(i => new { i.Level, i.Code, i.Message, i.Clause, Location = i.Location?.ToString() })
-                .ToList();
-            var errors = result.Issues.Count(i => i.Level == Core.IssueLevel.Error);
-            Summary.Text = result.Design is { } d
-                ? $"Готово. Расход насоса {d.PumpFlow.LitersPerSecond:0.00} л/с ({d.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч), напор {d.PumpHead.Meters:0.0} м, запас воды {d.WaterVolume:0.0} м³. Замечаний: {result.Issues.Count}."
-                : $"Расчёт остановлен: ошибок {errors}. Исправьте чертёж или исходные данные — см. замечания.";
+            ShowResult(result, output);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
@@ -122,46 +271,183 @@ public partial class MainWindow : Window
         finally
         {
             RunButton.IsEnabled = true;
+            RunButton.Content = "Рассчитать";
+            RunProgress.Visibility = Visibility.Collapsed;
         }
     }
 
-    private void OnOpenFile(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void ShowResult(PipelineResult result, string output)
     {
-        if (Files.SelectedItem is string file && File.Exists(file))
+        _outDir = output;
+        var errors = result.Issues.Count(i => i.Level == IssueLevel.Error);
+        ShowSummary(result);
+        ShowFiles(result.Files, output);
+        ShowIssues(result.Issues);
+
+        if (!result.Success)
         {
-            Open(file);
+            ResultsTabs.SelectedItem = IssuesTab;
+            Summary.Text = $"Расчёт остановлен: ошибок {errors}. Исправьте чертёж или исходные данные — см. замечания.";
         }
-    }
-
-    private void OnOpenFolder(object sender, RoutedEventArgs e)
-    {
-        if (Directory.Exists(OutBox.Text))
+        else if (result.Design is { } design)
         {
-            Open(OutBox.Text);
+            if (errors > 0)
+            {
+                ResultsTabs.SelectedItem = IssuesTab;
+                Summary.Text = string.Create(
+                    CultureInfo.GetCultureInfo("ru-RU"),
+                    $"Выпуск готов: файлов {result.Files.Count}, но есть ошибки — {errors}. Проверьте замечания: расход {design.PumpFlow.LitersPerSecond:0.00} л/с, напор {design.PumpHead.Meters:0.0} м, запас воды {design.WaterVolume:0.0} м³.");
+            }
+            else
+            {
+                ResultsTabs.SelectedItem = FilesTab;
+                Summary.Text = string.Create(
+                    CultureInfo.GetCultureInfo("ru-RU"),
+                    $"Готово: файлов {result.Files.Count}. Расход насоса {design.PumpFlow.LitersPerSecond:0.00} л/с, напор {design.PumpHead.Meters:0.0} м, запас воды {design.WaterVolume:0.0} м³, замечаний {result.Issues.Count}.");
+            }
+        }
+        else
+        {
+            Summary.Text = $"Расчёт не выполнен: замечаний {result.Issues.Count}, ошибок {errors}.";
+            ResultsTabs.SelectedItem = IssuesTab;
+        }
+
+        ResultsEmpty.Visibility = Visibility.Collapsed;
+        ResultsTabs.Visibility = Visibility.Visible;
+    }
+
+    private void ShowSummary(PipelineResult result)
+    {
+        SummaryEmpty.Visibility = Visibility.Collapsed;
+        SummaryFilled.Visibility = Visibility.Visible;
+        IssuesValue.Text = result.Issues.Count.ToString(CultureInfo.InvariantCulture);
+        if (result.Design is not { } design)
+        {
+            FlowValue.Text = HeadValue.Text = VolumeValue.Text = "—";
+            PumpSetValue.Text = "Установка не подобрана — см. замечания";
+            PumpCountsValue.Text = "";
+            return;
+        }
+
+        FlowValue.Text = string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.PumpFlow.LitersPerSecond:0.00}");
+        HeadValue.Text = string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.PumpHead.Meters:0.0}");
+        VolumeValue.Text = string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.WaterVolume:0.0}");
+        if (result.Pump is { } pump)
+        {
+            PumpSetValue.Text = string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{pump.Designation} · {pump.Pump} · {pump.PowerKw:0.##} кВт");
+            PumpCountsValue.Text = string.Create(
+                CultureInfo.GetCultureInfo("ru-RU"),
+                $"{pump.MainPumps} основных + {pump.StandbyPumps} резервных насосов; напор по кривой каталога при расчётной подаче — {pump.HeadAtDutyMeters:0.0} м.");
+        }
+        else
+        {
+            PumpSetValue.Text = "Установка не подобрана — см. замечания";
+            PumpCountsValue.Text = "";
         }
     }
 
-    private void SetProject(string project)
+    private void ShowFiles(IReadOnlyList<string> files, string output)
     {
-        ProjectBox.Text = project;
-        OutBox.Text = Path.Combine(Path.GetDirectoryName(project)!, Path.GetFileNameWithoutExtension(project) + "_out");
-        UpdateDesignSummary();
+        var items = new List<FileItem>();
+        foreach (var file in files)
+        {
+            if (!File.Exists(file))
+            {
+                continue;
+            }
+
+            var info = new FileInfo(file);
+            items.Add(new FileItem(
+                Path.GetFileNameWithoutExtension(file),
+                info.Extension.TrimStart('.').ToUpperInvariant(),
+                info.Length < 1024 ? $"{info.Length} Б" : $"{info.Length / 1024.0:0.#} КБ",
+                Path.GetRelativePath(output, file),
+                file));
+        }
+
+        FilesList.ItemsSource = items;
+        FilesTabHeader.Text = $"Файлы выпуска ({items.Count})";
     }
 
-    // Краткая сводка исходных данных под строкой состояния: видно, что реально пойдёт в расчёт.
+    private void ShowIssues(IReadOnlyList<Issue> issues)
+    {
+        _allIssues =
+        [
+            .. issues
+                .OrderByDescending(i => i.Level)
+                .ThenBy(i => i.Code, StringComparer.Ordinal)
+                .Select(i => new IssueRow(
+                    i.Level switch
+                    {
+                        IssueLevel.Error => "Ошибка",
+                        IssueLevel.Warning => "Предупреждение",
+                        _ => "Информация",
+                    },
+                    i.Level.ToString(),
+                    (int)i.Level,
+                    i.Code,
+                    i.Message,
+                    i.Clause ?? "",
+                    i.Location?.ToString() ?? "")),
+        ];
+        IssuesTabHeader.Text = $"Замечания ({_allIssues.Count})";
+        ApplyIssueFilter();
+    }
+
+    private void OnIssueFilterChanged(object sender, SelectionChangedEventArgs e) => ApplyIssueFilter();
+
+    private void ApplyIssueFilter()
+    {
+        if (Issues is null)
+        {
+            return; // событие выбора фильтра приходит ещё во время разбора XAML
+        }
+
+        if (_allIssues.Count == 0)
+        {
+            Issues.ItemsSource = _allIssues;
+            return;
+        }
+
+        var filter = (IssueFilter.SelectedItem as ComboBoxItem)?.Content as string;
+        Issues.ItemsSource = filter switch
+        {
+            "Ошибки" => _allIssues.Where(i => i.LevelKey == nameof(IssueLevel.Error)).ToList(),
+            "Предупреждения" => _allIssues.Where(i => i.LevelKey == nameof(IssueLevel.Warning)).ToList(),
+            "Информация" => _allIssues.Where(i => i.LevelKey == nameof(IssueLevel.Info)).ToList(),
+            _ => _allIssues,
+        };
+    }
+
+    private void OnOpenFile(object sender, MouseButtonEventArgs e)
+    {
+        if (FilesList.SelectedItem is FileItem file && File.Exists(file.FullPath))
+        {
+            Open(file.FullPath);
+        }
+    }
+
+    // ---------- Исходные данные: краткая сводка ----------
+
     private void UpdateDesignSummary()
     {
+        if (_project is null)
+        {
+            DesignSummary.Text = "Проект не выбран.";
+            return;
+        }
+
         try
         {
-            var project = ProjectFile.Load(ProjectBox.Text);
+            var project = ProjectFile.Load(_project);
             var d = project.Design;
             var room = d.PumpRoom;
-            var temperature = d.MaxAmbientTemperature is { } t ? $"{t:0.#} °C" : "не задана";
-            var spacing = d.MaxSpacing is { } m ? $"{m:0.##} м (строже табл. 6.1)" : "по табл. 6.1";
-            DesignSummary.Text =
-                $"K = {d.SprinklerK:0.###}; H над осью = {d.DictatingAboveAxis:0.00} м; подводящий DN{d.SupplyDn}, {d.SupplyLength:0.0} м; " +
-                $"P_вх = {d.InletPressure:0.000} МПа; t среды = {temperature}; шаг = {spacing}; " +
-                $"насосная: пол {room.FloorElevation:+0.000;−0.000;0.000} м, земля {room.GroundElevation:+0.000;−0.000;0.000} м, h = {room.Height:0.00} м";
+            var temperature = d.MaxAmbientTemperature is { } t ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{t:0.#} °C") : "не задана";
+            var spacing = d.MaxSpacing is { } m ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{m:0.##} м (строже табл. 6.1)") : "по табл. 6.1";
+            var pump = d.PumpStation.SetDesignation.Length > 0 ? $"установка {d.PumpStation.SetDesignation}" : "установка — автоподбор по Q и H";
+            DesignSummary.Text = string.Create(
+                CultureInfo.GetCultureInfo("ru-RU"),
+                $"Объект: {project.Name}. Группа {d.RoomGroup}; K = {d.SprinklerK:0.###}; H над осью = {d.DictatingAboveAxis:0.00} м; подводящий DN{d.SupplyDn}, {d.SupplyLength:0.0} м; P_вх = {d.InletPressure:0.000} МПа; t среды = {temperature}; шаг = {spacing}. Насосная: {pump}; пол {room.FloorElevation:+0.000;−0.000;0.000} м, земля {room.GroundElevation:+0.000;−0.000;0.000} м, h = {room.Height:0.00} м.");
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
         {
@@ -169,5 +455,72 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    // ---------- Тема ----------
+
+    private void OnToggleTheme(object sender, RoutedEventArgs e) => ThemeManager.ToggleTheme();
+
+    private void OnAccentBlue(object sender, RoutedEventArgs e) => ThemeManager.SetAccent(AccentColor.Blue);
+
+    private void OnAccentTeal(object sender, RoutedEventArgs e) => ThemeManager.SetAccent(AccentColor.Teal);
+
+    private void OnAccentIndigo(object sender, RoutedEventArgs e) => ThemeManager.SetAccent(AccentColor.Indigo);
+
+    private void UpdateThemeVisuals()
+    {
+        var dark = ThemeManager.IsDark;
+        ThemeStatus.Text = dark ? "Тёмная тема" : "Светлая тема";
+        ThemeLabel.Text = dark ? "Светлая" : "Тёмная";
+        ThemeButton.ToolTip = dark ? "Включить светлую тему" : "Включить тёмную тему";
+        SunGroup.Visibility = dark ? Visibility.Visible : Visibility.Collapsed;
+        MoonIcon.Visibility = dark ? Visibility.Collapsed : Visibility.Visible;
+        SetAccentMarker(AccentBlue, AccentColor.Blue);
+        SetAccentMarker(AccentTeal, AccentColor.Teal);
+        SetAccentMarker(AccentIndigo, AccentColor.Indigo);
+    }
+
+    private static void SetAccentMarker(Button button, AccentColor accent)
+    {
+        var selected = ThemeManager.Settings.Accent == accent;
+        button.BorderBrush = selected ? (Brush)System.Windows.Application.Current.FindResource("Brush.Accent") : Brushes.Transparent;
+        button.BorderThickness = new Thickness(selected ? 2 : 0);
+    }
+
+    // ---------- Перетаскивание ----------
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files)
+        {
+            return;
+        }
+
+        var file = files[0];
+        if (file.EndsWith(".waproj", StringComparison.OrdinalIgnoreCase))
+        {
+            SetProject(file);
+            return;
+        }
+
+        if (file.EndsWith(".dwg", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".dxf", StringComparison.OrdinalIgnoreCase))
+        {
+            var project = Path.ChangeExtension(file, ".waproj");
+            if (!File.Exists(project))
+            {
+                File.WriteAllText(project, ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(file), Drawing = Path.GetFileName(file) }));
+            }
+
+            SetProject(project);
+            OpenInputData();
+        }
+    }
+
+    private sealed record FileItem(string Name, string Kind, string Size, string Relative, string FullPath);
+
+    private sealed record IssueRow(string LevelText, string LevelKey, int LevelOrder, string Code, string Message, string Clause, string Location);
 }
