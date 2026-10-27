@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Подбор насосной установки"
-        Width="1000" Height="700" MinWidth="840" MinHeight="540"
+        Width="1180" Height="720" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource Brush.Bg.App}"
         Foreground="{DynamicResource Brush.Text.Primary}"
@@ -41,6 +41,9 @@
                     <TextBlock x:Name="CurrentSetText" Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
                                MaxWidth="380" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap"
                                Text="Текущая установка: —" />
+                    <TextBlock x:Name="CurrentSetFootprintText" Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                               MaxWidth="380" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.Text.Tertiary}" Visibility="Collapsed" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -66,70 +69,142 @@
             </Border>
         </StackPanel>
 
-        <!-- Каталог установок: строки уже отсортированы как автоподбор. -->
+        <!-- Каталог установок: поиск/фильтр над таблицей, строки уже отсортированы как автоподбор. -->
         <Border Grid.Row="2" Style="{StaticResource Card}" Margin="20,12,20,12" Padding="0">
             <Grid>
-                <DataGrid x:Name="CandidatesGrid" BorderThickness="0" IsReadOnly="True"
-                          SelectionMode="Single" SelectionUnit="FullRow" CanUserSortColumns="False"
-                          CanUserReorderColumns="False" HeadersVisibility="Column"
-                          SelectionChanged="OnSelectionChanged">
-                    <DataGrid.Columns>
-                        <DataGridTemplateColumn Header="Обозначение" Width="2*">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border x:Name="CurrentBar" Width="3" Height="18" CornerRadius="2"
-                                                Margin="0,0,8,0" VerticalAlignment="Center"
-                                                Background="{DynamicResource Brush.Accent}" Visibility="Collapsed" />
-                                        <StackPanel Grid.Column="1">
-                                            <TextBlock Text="{Binding Designation}" Style="{StaticResource Text.Body}" />
-                                            <TextBlock Text="{Binding DetailText}" Style="{StaticResource Text.Caption}"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Поиск по каталогу и «только подходящие»: по умолчанию показан весь каталог. -->
+                <Border Grid.Row="0" Padding="16,12"
+                        BorderBrush="{DynamicResource Brush.Border}" BorderThickness="0,0,0,1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Width="340" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <TextBox x:Name="SearchBox" Padding="10,4" TextChanged="OnSearchChanged"
+                                     ToolTip="Фильтр по обозначению установки, насосу или производителю — без учёта регистра" />
+                            <TextBlock x:Name="SearchPlaceholder" IsHitTestVisible="False" Margin="11,0,8,0"
+                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                       Style="{StaticResource Text.Caption}"
+                                       Foreground="{DynamicResource Brush.Text.Tertiary}"
+                                       Text="Поиск по обозначению или насосу" />
+                        </Grid>
+
+                        <TextBlock x:Name="FilterCountText" Grid.Column="1" Style="{StaticResource Text.Caption}"
+                                   Margin="12,0,0,0" VerticalAlignment="Center" Text="Показано: —" />
+
+                        <CheckBox x:Name="FitsOnlyCheck" Grid.Column="3" Content="Только подходящие"
+                                  VerticalAlignment="Center"
+                                  Checked="OnFitsOnlyChanged" Unchecked="OnFitsOnlyChanged"
+                                  ToolTip="Оставить в списке только установки, обеспечивающие требуемый напор при расчётной подаче" />
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <DataGrid x:Name="CandidatesGrid" BorderThickness="0" IsReadOnly="True"
+                              SelectionMode="Single" SelectionUnit="FullRow" CanUserSortColumns="False"
+                              CanUserReorderColumns="False" HeadersVisibility="Column"
+                              SelectionChanged="OnSelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Обозначение" Width="2*" MinWidth="220">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border x:Name="CurrentBar" Width="3" Height="18" CornerRadius="2"
+                                                    Margin="0,0,8,0" VerticalAlignment="Center"
+                                                    Background="{DynamicResource Brush.Accent}" Visibility="Collapsed" />
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding Designation}" Style="{StaticResource Text.Body}" />
+                                                <TextBlock Text="{Binding DetailText}" Style="{StaticResource Text.Caption}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                                                <Setter TargetName="CurrentBar" Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Насосы" Binding="{Binding PumpsText}" Width="85" />
+                            <DataGridTextColumn Header="Мощность, кВт" Binding="{Binding PowerText}" Width="110" />
+                            <DataGridTextColumn Header="Напор при Q, м" Binding="{Binding HeadAtDutyText}" Width="120" />
+                            <DataGridTextColumn Header="Запас, м" Binding="{Binding MarginText}" Width="90" />
+                            <DataGridTemplateColumn Header="Подходит" Width="105">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="FitBadge" Style="{StaticResource Pill.Success}" HorizontalAlignment="Left">
+                                            <TextBlock Text="{Binding FitsText}" Style="{StaticResource Text.Caption}" />
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Fits}" Value="False">
+                                                <Setter TargetName="FitBadge" Property="Style"
+                                                        Value="{StaticResource Pill.Warning}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Габариты, мм" Width="200">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel ToolTip="Гидравлическая часть; прибор управления отдельно">
+                                            <TextBlock Text="{Binding FootprintText}" Style="{StaticResource Text.Body}" />
+                                            <TextBlock Text="{Binding CabinetText}" Style="{StaticResource Text.Caption}"
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
-                                    </Grid>
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                                            <Setter TargetName="CurrentBar" Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Насосы" Binding="{Binding PumpsText}" Width="90" />
-                        <DataGridTextColumn Header="Мощность, кВт" Binding="{Binding PowerText}" Width="120" />
-                        <DataGridTextColumn Header="Напор при Q, м" Binding="{Binding HeadAtDutyText}" Width="130" />
-                        <DataGridTextColumn Header="Запас, м" Binding="{Binding MarginText}" Width="100" />
-                        <DataGridTemplateColumn Header="Подходит" Width="110">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Border x:Name="FitBadge" Style="{StaticResource Pill.Success}" HorizontalAlignment="Left">
-                                        <TextBlock Text="{Binding FitsText}" Style="{StaticResource Text.Caption}" />
-                                    </Border>
-                                    <DataTemplate.Triggers>
-                                        <DataTrigger Binding="{Binding Fits}" Value="False">
-                                            <Setter TargetName="FitBadge" Property="Style"
-                                                    Value="{StaticResource Pill.Warning}" />
-                                        </DataTrigger>
-                                    </DataTemplate.Triggers>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="DN коллектора" Binding="{Binding CollectorText}" Width="130" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Коллектор, DN" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel ToolTip="Ось коллекторов — высота от пола, мм">
+                                            <TextBlock Text="{Binding CollectorText}" Style="{StaticResource Text.Body}" />
+                                            <TextBlock Text="{Binding CollectorAxisText}" Style="{StaticResource Text.Caption}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
 
-                <StackPanel x:Name="EmptyPanel" Visibility="Collapsed" VerticalAlignment="Center"
-                            HorizontalAlignment="Center" Margin="24">
-                    <TextBlock Style="{StaticResource Text.H3}" HorizontalAlignment="Center"
-                               Text="Каталог установок пуст" />
-                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0" HorizontalAlignment="Center"
-                               TextWrapping="Wrap"
-                               Text="Не найдены data/catalog/pump_sets_*.json или в них нет установок. Доступен только автоподбор — вернитесь к нему кнопкой «Автоподбор»." />
-                </StackPanel>
+                    <!-- Каталог не прочитан: фильтровать нечего, остаётся автоподбор. -->
+                    <StackPanel x:Name="EmptyPanel" Visibility="Collapsed" VerticalAlignment="Center"
+                                HorizontalAlignment="Center" Margin="24">
+                        <TextBlock Style="{StaticResource Text.H3}" HorizontalAlignment="Center"
+                                   Text="Каталог установок пуст" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0" HorizontalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Text="Не найдены data/catalog/pump_sets_*.json или в них нет установок. Доступен только автоподбор — вернитесь к нему кнопкой «Автоподбор»." />
+                    </StackPanel>
+
+                    <!-- Фильтр скрыл весь каталог: подсказка изменить запрос, «Применить» заблокирована. -->
+                    <StackPanel x:Name="NoResultsPanel" Visibility="Collapsed" VerticalAlignment="Center"
+                                HorizontalAlignment="Center" Margin="24" MaxWidth="440">
+                        <TextBlock Style="{StaticResource Text.H3}" HorizontalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   Text="Ничего не найдено — измените запрос" />
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0" HorizontalAlignment="Center"
+                                   TextAlignment="Center" TextWrapping="Wrap"
+                                   Text="Под условия поиска и фильтр «Только подходящие» не подошла ни одна установка каталога. Измените запрос или снимите флажок." />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 

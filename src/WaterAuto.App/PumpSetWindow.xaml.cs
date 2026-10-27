@@ -5,15 +5,18 @@ using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using WaterAuto.Application;
+using WaterAuto.Core;
 
 namespace WaterAuto.App;
 
 /// <summary>
 /// Модальное окно подбора комплектной насосной установки из каталога: подходящие варианты — первыми
 /// (как автоподбор), текущий выбор проекта выделен, неподходящая установка требует явного подтверждения
-/// в самом окне. Выбор сохраняется в <c>design.pumpStation.setDesignation</c> через
-/// <see cref="ProjectJson"/> (правка ключа без потери незнакомых полей проекта); пересчёт и обновление
-/// сводки выполняет главное окно после закрытия окна с <see cref="Window.DialogResult"/> = <c>true</c>.
+/// в самом окне. Над таблицей — поиск по каталогу и фильтр «Только подходящие»; строки показывают габариты
+/// установки, прибора управления и ось коллекторов для проверки помещения. Выбор сохраняется в
+/// <c>design.pumpStation.setDesignation</c> через <see cref="ProjectJson"/> (правка ключа без потери
+/// незнакомых полей проекта); пересчёт и обновление сводки выполняет главное окно после закрытия окна с
+/// <see cref="Window.DialogResult"/> = <c>true</c>.
 /// </summary>
 public partial class PumpSetWindow : Window
 {
@@ -24,6 +27,13 @@ public partial class PumpSetWindow : Window
     private readonly double _requiredFlowM3h;
     private readonly double _requiredHeadMeters;
     private readonly string _currentDesignation;
+
+    // Весь каталог в порядке автоподбора; фильтр лишь выбирает из него строки для таблицы.
+    private List<PumpSetRow> _allRows = [];
+
+    // Последняя осознанно выбранная установка: фильтр может временно убрать её из таблицы, но после сброса
+    // фильтра выделение возвращается к ней, если она снова видна.
+    private string? _selectedDesignation;
 
     /// <param name="projectPath">Файл проекта <c>*.waproj</c> — выбор сохраняется в него.</param>
     /// <param name="normsDir">Папка <c>data/norms</c> — из неё каталог установок (как в расчёте).</param>
@@ -57,7 +67,7 @@ public partial class PumpSetWindow : Window
         }
     }
 
-    // ---------- Каталог ----------
+    // ---------- Каталог и фильтр ----------
 
     private void LoadCandidates()
     {
@@ -74,7 +84,7 @@ public partial class PumpSetWindow : Window
             candidates = [];
         }
 
-        var rows = candidates
+        _allRows = candidates
             .Select(c => new PumpSetRow(
                 c.Designation,
                 c.Pump,
@@ -86,18 +96,33 @@ public partial class PumpSetWindow : Window
                 c.Fits,
                 c.MarginMeters,
                 c.CollectorDn,
+                c.CollectorAxisMm,
+                c.Hydraulic,
+                c.Cabinet,
                 _currentDesignation.Length > 0 && string.Equals(c.Designation, _currentDesignation, StringComparison.Ordinal)))
             .ToList();
-        CandidatesGrid.ItemsSource = rows;
-        if (rows.Count == 0)
+
+        if (_allRows.Count == 0)
         {
+            SearchBox.IsEnabled = false;
+            FitsOnlyCheck.IsEnabled = false;
             EmptyPanel.Visibility = Visibility.Visible;
+            NoResultsPanel.Visibility = Visibility.Collapsed;
+            FilterCountText.Text = "Показано 0";
             ApplyButton.IsEnabled = false;
             SelectionHint.Text = "Каталог установок пуст: доступен только автоподбор по расчётным Q и H.";
             return;
         }
 
-        if (_currentDesignation.Length > 0 && rows.All(r => !r.IsCurrent))
+        if (_allRows.FirstOrDefault(r => r.IsCurrent) is { } current)
+        {
+            // Текущая установка проекта известна, её габариты — сразу в шапке: проверка помещения насосной.
+            CurrentSetFootprintText.Text = string.Create(
+                Ru,
+                $"Габариты установки {current.FootprintText} мм, прибор управления {current.CabinetFootprintText} мм, ось коллекторов {current.CollectorAxisMm:0.#} мм от пола.");
+            CurrentSetFootprintText.Visibility = Visibility.Visible;
+        }
+        else if (_currentDesignation.Length > 0)
         {
             CurrentSetText.Text = string.Create(
                 Ru,
@@ -105,10 +130,66 @@ public partial class PumpSetWindow : Window
         }
 
         // Текущий выбор проекта, иначе первый подходящий (он же первый в порядке автоподбора).
-        var initial = rows.FirstOrDefault(r => r.IsCurrent) ?? rows.FirstOrDefault(r => r.Fits) ?? rows[0];
-        CandidatesGrid.SelectedItem = initial;
+        ApplyFilter(_currentDesignation.Length > 0 ? _currentDesignation : null);
+    }
+
+    // Пересобирает строки таблицы под запрос и флажок «Только подходящие»; порядок строк — порядок автоподбора.
+    private void ApplyFilter(string? preferredDesignation = null)
+    {
+        if (SearchBox is null || FitsOnlyCheck is null || CandidatesGrid is null || _allRows.Count == 0)
+        {
+            return; // событие приходит ещё во время разбора XAML или каталог пуст — фильтровать нечего
+        }
+
+        SearchPlaceholder.Visibility = SearchBox.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var query = SearchBox.Text.Trim();
+        var fitsOnly = FitsOnlyCheck.IsChecked == true;
+        var rows = _allRows
+            .Where(row => (!fitsOnly || row.Fits) && Matches(row, query))
+            .ToList();
+
+        var previousDesignation = preferredDesignation
+            ?? (CandidatesGrid.SelectedItem as PumpSetRow)?.Designation
+            ?? _selectedDesignation;
+        CandidatesGrid.ItemsSource = rows;
+        FilterCountText.Text = string.Create(Ru, $"Показано {rows.Count} из {_allRows.Count}");
+
+        if (rows.Count == 0)
+        {
+            NoResultsPanel.Visibility = Visibility.Visible;
+            EmptyPanel.Visibility = Visibility.Collapsed;
+            ApplyButton.IsEnabled = false;
+            NoticeBanner.Visibility = Visibility.Collapsed;
+            ConfirmInsufficient.Visibility = Visibility.Collapsed;
+            SelectionHint.Text = "Ничего не найдено — измените запрос или снимите флажок «Только подходящие».";
+            return;
+        }
+
+        NoResultsPanel.Visibility = Visibility.Collapsed;
+        var selection = rows.FirstOrDefault(row => string.Equals(row.Designation, previousDesignation, StringComparison.Ordinal))
+            ?? rows[0];
+        CandidatesGrid.SelectedItem = selection;
+        CandidatesGrid.ScrollIntoView(selection);
         UpdateSelectionState();
     }
+
+    private static bool Matches(PumpSetRow row, string query)
+    {
+        if (query.Length == 0)
+        {
+            return true;
+        }
+
+        const StringComparison CaseInsensitive = StringComparison.CurrentCultureIgnoreCase;
+        return row.Designation.Contains(query, CaseInsensitive)
+            || row.Pump.Contains(query, CaseInsensitive)
+            || row.Maker.Contains(query, CaseInsensitive);
+    }
+
+    private void OnSearchChanged(object sender, TextChangedEventArgs e) => ApplyFilter();
+
+    private void OnFitsOnlyChanged(object sender, RoutedEventArgs e) => ApplyFilter();
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateSelectionState();
 
@@ -133,9 +214,13 @@ public partial class PumpSetWindow : Window
             ApplyButton.IsEnabled = false;
             NoticeBanner.Visibility = Visibility.Collapsed;
             ConfirmInsufficient.Visibility = Visibility.Collapsed;
-            SelectionHint.Text = "Выберите установку в списке.";
+            SelectionHint.Text = CandidatesGrid.Items.Count == 0 && _allRows.Count > 0
+                ? "Ничего не найдено — измените запрос или снимите флажок «Только подходящие»."
+                : "Выберите установку в списке.";
             return;
         }
+
+        _selectedDesignation = row.Designation;
 
         if (row.Fits)
         {
@@ -289,6 +374,9 @@ public partial class PumpSetWindow : Window
         bool Fits,
         double MarginMeters,
         int CollectorDn,
+        double CollectorAxisMm,
+        Footprint Hydraulic,
+        Footprint Cabinet,
         bool IsCurrent)
     {
         public string PumpsText => $"{MainPumps} + {StandbyPumps}";
@@ -303,6 +391,21 @@ public partial class PumpSetWindow : Window
 
         public string CollectorText => $"DN{CollectorDn}";
 
+        // Габариты гидравлической части (длина×ширина×высота) — по ним проверяют помещение насосной.
+        public string FootprintText => FootprintString(Hydraulic);
+
+        // Прибор управления — отдельная позиция комплекта, поэтому отдельной строкой под габаритами установки.
+        public string CabinetFootprintText => FootprintString(Cabinet);
+
+        public string CabinetText => $"прибор {CabinetFootprintText}";
+
+        // Высота оси коллекторов от пола, мм.
+        public string CollectorAxisText => string.Create(Ru, $"ось {CollectorAxisMm:0.#} мм");
+
         public string DetailText => $"{Maker} · {Pump}";
+
+        private static string FootprintString(Footprint footprint) => string.Create(
+            Ru,
+            $"{footprint.LengthMm:0.#}×{footprint.WidthMm:0.#}×{footprint.HeightMm:0.#}");
     }
 }
