@@ -1,10 +1,12 @@
 using WaterAuto.Calc.Hydraulics;
+using WaterAuto.Core;
 
 namespace WaterAuto.Application;
 
 /// <summary>
 /// Кандидат на комплектную насосную установку для окна подбора: обозначение, количество насосов, напор по кривой
-/// при требуемой подаче, подходит ли по напору и запас, кривая Q–H одного насоса для графика.
+/// при требуемой подаче, подходит ли по напору и запас, кривая Q–H одного насоса для графика, габариты
+/// гидравлической части и прибора управления (для проверки помещения), ось коллекторов.
 /// </summary>
 public sealed record PumpSetCandidate(
     string Designation,
@@ -13,6 +15,9 @@ public sealed record PumpSetCandidate(
     int StandbyPumps,
     double PowerKw,
     int CollectorDn,
+    Footprint Hydraulic,
+    Footprint Cabinet,
+    double CollectorAxisMm,
     string Maker,
     double? HeadAtDutyMeters,
     bool Fits,
@@ -26,7 +31,10 @@ public sealed record PumpSetCandidate(
 /// </summary>
 public static class PumpAdvisor
 {
-    /// <summary>Все установки каталога с оценкой при требуемых подаче (м³/ч) и напоре (м).</summary>
+    /// <summary>
+    /// Все установки каталога с оценкой при требуемых подаче (м³/ч) и напоре (м). Габариты и высота оси коллекторов
+    /// берутся из каталога без пересчёта — по ним проектировщик проверяет помещение насосной.
+    /// </summary>
     public static IReadOnlyList<PumpSetCandidate> Candidates(string normsDir, double requiredFlowM3h, double requiredHeadM)
     {
         ArgumentException.ThrowIfNullOrEmpty(normsDir);
@@ -42,6 +50,9 @@ public static class PumpAdvisor
                 set.StandbyPumps,
                 set.PowerKw,
                 set.CollectorDn,
+                set.Hydraulic,
+                set.Cabinet,
+                set.CollectorAxisMm,
                 set.Maker,
                 head,
                 fits,
