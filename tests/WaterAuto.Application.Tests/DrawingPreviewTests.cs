@@ -19,8 +19,9 @@ public sealed class DrawingPreviewTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 
-    // Этаж 30 × 20 м, помещение насосной 12 × 8 м, два ввода, выпуск, два патрубка ГМ; балка с отметкой низа -1,2 м.
-    private string Drawing(bool withPumpRoom = true, bool withBeam = true)
+    // Этаж 30 × 20 м, помещение насосной 12 × 8 м, два ввода, выпуск, два патрубка ГМ; балка с отметкой низа -1,2 м;
+    // по желанию — тексты высотных отметок на слое ПТ_ОТМЕТКИ.
+    private string Drawing(bool withPumpRoom = true, bool withBeam = true, params (double X, double Y, string Text)[] levelMarks)
     {
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
@@ -50,6 +51,11 @@ public sealed class DrawingPreviewTests : IDisposable
             beam.Thickness = 400; // высота балки, мм
             beam.Elevation = -1200; // низ перекрытия, мм
             doc.Entities.Add(beam);
+        }
+
+        foreach (var (x, y, text) in levelMarks)
+        {
+            doc.Entities.Add(new TextEntity(text) { InsertPoint = new XYZ(x, y, 0), Height = 250, Layer = L(FloorPlanImporter.LevelMarkLayer) });
         }
 
         if (!withPumpRoom)
@@ -82,7 +88,7 @@ public sealed class DrawingPreviewTests : IDisposable
         return path;
     }
 
-    private static ProjectFile Project() => new()
+    private static ProjectFile Project(double? floorElevation = -3, double pumpFloorElevation = -3) => new()
     {
         Name = "Проверка чертежа",
         Drawing = "floor.dxf",
@@ -90,9 +96,9 @@ public sealed class DrawingPreviewTests : IDisposable
         {
             RoomGroup = "2",
             SprinklerK = 0.35,
-            FloorElevation = -3,
+            FloorElevation = floorElevation,
             HangerRodLength = 300,
-            PumpRoom = new ProjectPumpRoom { FloorElevation = -3, Height = 4.5 },
+            PumpRoom = new ProjectPumpRoom { FloorElevation = pumpFloorElevation, Height = 4.5 },
         },
     };
 
@@ -164,5 +170,32 @@ public sealed class DrawingPreviewTests : IDisposable
         var noBeam = DrawingPreview.Analyze(Project(), Drawing(withBeam: false), RepoPaths.Norms);
         noBeam.Suggestions.ShouldBeEmpty();
         noBeam.SlabBottomM.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Level_marks_suggest_floor_elevations_and_heights_are_recalculated_from_them()
+    {
+        // Отметки на слое ПТ_ОТМЕТКИ: у помещения −2,500, у насосной −3,000. В проекте пол этажа пуст, пол насосной 0 —
+        // отметки должны прийти с чертежа, а высоты — считаться от них (низ перекрытия −1,2 м).
+        var drawing = Drawing(levelMarks: [(15000, 10000, "-2,500"), (7000, 5000, "отм. -3,000")]);
+        var result = DrawingPreview.Analyze(Project(floorElevation: null, pumpFloorElevation: 0), drawing, RepoPaths.Norms);
+        var byKey = result.Suggestions.ToDictionary(s => s.Key);
+
+        byKey["floorElevation"].Value.ShouldBe(-2.5, 0.001);
+        byKey["floorElevation"].Basis.ShouldContain("ПТ_ОТМЕТКИ");
+        byKey["floorElevation"].Basis.ShouldContain("помещением");
+        byKey["pumpRoom.floorElevation"].Value.ShouldBe(-3, 0.001);
+        byKey["pumpRoom.floorElevation"].Basis.ShouldContain("насосной");
+
+        byKey["roomHeight"].Value.ShouldBe(1.3, 0.001);
+        byKey["pumpRoom.height"].Value.ShouldBe(1.8, 0.001);
+        var axisMm = PumpCatalog.Sets(RepoPaths.Norms)
+            .GroupBy(s => s.CollectorAxisMm)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key)
+            .First().Key;
+        byKey["dictatingAboveAxis"].Value.ShouldBe(-1.5 - (-3 + (axisMm / 1000.0)), 0.01);
+        // Отметка труб от отметок пола не зависит.
+        byKey["pipeElevation"].Value.ShouldBe(-1.5);
     }
 }

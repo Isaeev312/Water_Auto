@@ -201,14 +201,47 @@ public static class DrawingPreview
     {
         var suggestions = new List<DrawingSuggestion>();
         var design = project.Design;
-        if (plan is null || slabBottom is not { } slab)
+        if (plan is null)
         {
             return suggestions;
         }
 
-        if (design.FloorElevation is { } floor)
+        // Отметки пола — по ближайшим текстам слоя ПТ_ОТМЕТКИ: к первому помещению и к контуру насосной. Найденная отметка
+        // заменяет значение проекта при расчёте высот ниже (если отметки на чертеже нет — используется значение проекта).
+        var floorMark = plan.Rooms.Count > 0 ? NearestLevelMark(plan.LevelMarks, plan.Rooms[0].Contour.Centroid) : null;
+        if (floorMark is not null)
         {
-            var roomHeight = slab - floor;
+            suggestions.Add(new DrawingSuggestion(
+                "floorElevation",
+                "Отметка пола этажа",
+                Math.Round(floorMark.Elevation.Meters, 3),
+                "м",
+                "текст отметки на слое ПТ_ОТМЕТКИ рядом с помещением",
+                "чертёж"));
+        }
+
+        var pumpFloorMark = pumpRoom is null ? null : NearestLevelMark(plan.LevelMarks, pumpRoom.Outline.Centroid);
+        if (pumpFloorMark is not null)
+        {
+            suggestions.Add(new DrawingSuggestion(
+                "pumpRoom.floorElevation",
+                "Отметка пола насосной",
+                Math.Round(pumpFloorMark.Elevation.Meters, 3),
+                "м",
+                "текст отметки на слое ПТ_ОТМЕТКИ рядом с насосной",
+                "чертёж"));
+        }
+
+        if (slabBottom is not { } slab)
+        {
+            return suggestions;
+        }
+
+        var floor = floorMark is not null ? floorMark.Elevation.Meters : design.FloorElevation;
+        var pumpFloor = pumpFloorMark is not null ? pumpFloorMark.Elevation.Meters : design.PumpRoom.FloorElevation;
+        if (floor is { } floorValue)
+        {
+            var roomHeight = slab - floorValue;
             if (roomHeight > 0.5)
             {
                 suggestions.Add(new DrawingSuggestion(
@@ -216,7 +249,7 @@ public static class DrawingPreview
                     "Высота помещения",
                     Math.Round(roomHeight, 2),
                     "м",
-                    $"низ перекрытия {Fmt(slab)} м (слой ПТ_БАЛКИ) − отметка пола {Fmt(floor)} м",
+                    $"низ перекрытия {Fmt(slab)} м (слой ПТ_БАЛКИ) − отметка пола {Fmt(floorValue)} м",
                     "чертёж"));
             }
         }
@@ -232,7 +265,7 @@ public static class DrawingPreview
 
         if (pumpRoom is not null)
         {
-            var pumpHeight = slab - design.PumpRoom.FloorElevation;
+            var pumpHeight = slab - pumpFloor;
             if (pumpHeight > 1.0)
             {
                 suggestions.Add(new DrawingSuggestion(
@@ -240,14 +273,14 @@ public static class DrawingPreview
                     "Высота помещения насосной",
                     Math.Round(pumpHeight, 2),
                     "м",
-                    $"низ перекрытия {Fmt(slab)} м − отметка пола насосной {Fmt(design.PumpRoom.FloorElevation)} м",
+                    $"низ перекрытия {Fmt(slab)} м − отметка пола насосной {Fmt(pumpFloor)} м",
                     "чертёж"));
             }
         }
 
         if (pumpRoom is not null && normsDir is not null && CollectorAxisMm(normsDir) is { } axisMm)
         {
-            var axis = design.PumpRoom.FloorElevation + (axisMm / 1000.0);
+            var axis = pumpFloor + (axisMm / 1000.0);
             var h = pipeElevation - axis;
             if (h > 0.5)
             {
@@ -256,7 +289,7 @@ public static class DrawingPreview
                     "Высота диктующего оросителя над осью насоса H",
                     Math.Round(h, 2),
                     "м",
-                    $"отметка труб {Fmt(pipeElevation)} м − (пол насосной {Fmt(design.PumpRoom.FloorElevation)} м + ось коллектора {Fmt(axisMm)} мм по каталогу); спуск к оросителю не вычтен",
+                    $"отметка труб {Fmt(pipeElevation)} м − (пол насосной {Fmt(pumpFloor)} м + ось коллектора {Fmt(axisMm)} мм по каталогу); спуск к оросителю не вычтен",
                     "чертёж + каталог"));
             }
 
@@ -277,6 +310,25 @@ public static class DrawingPreview
         }
 
         return suggestions;
+    }
+
+    // Ближайшая высотная отметка слоя ПТ_ОТМЕТКИ к точке плана (по плану, мм); null — отметок нет.
+    private static LevelMark? NearestLevelMark(IReadOnlyList<LevelMark> marks, PlanPoint point)
+    {
+        LevelMark? nearest = null;
+        var best = double.MaxValue;
+        foreach (var mark in marks)
+        {
+            double dx = mark.Location.XMm - point.XMm, dy = mark.Location.YMm - point.YMm;
+            var distance = (dx * dx) + (dy * dy);
+            if (distance < best)
+            {
+                best = distance;
+                nearest = mark;
+            }
+        }
+
+        return nearest;
     }
 
     // Ось коллекторов установки — из каталога (чаще всего встречающееся значение, мм); null — каталога нет.
