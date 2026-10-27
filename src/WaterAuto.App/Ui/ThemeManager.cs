@@ -59,6 +59,14 @@ public static class ThemeManager
         Apply();
     }
 
+    /// <summary>Сохраняет и применяет выбранный режим темы (светлая, тёмная, как в системе).</summary>
+    public static void SetTheme(ThemeMode mode)
+    {
+        _settings.Theme = mode;
+        _settings.Save();
+        Apply();
+    }
+
     /// <summary>Сохраняет и применяет акцентный цвет.</summary>
     public static void SetAccent(AccentColor accent)
     {

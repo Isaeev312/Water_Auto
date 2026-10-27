@@ -39,6 +39,12 @@ public sealed class AppSettings
     /// <summary>Акцентный цвет.</summary>
     public AccentColor Accent { get; set; } = AccentColor.Blue;
 
+    /// <summary>
+    /// Считать проект сразу после сохранения исходных данных в мастере: пользователь заполнил стандартные данные —
+    /// программа сама выполняет расчёт и показывает сводку. Отключается в настройках оформления.
+    /// </summary>
+    public bool AutoCalculateAfterSave { get; set; } = true;
+
     /// <summary>Последние открытые проекты (последний — первым).</summary>
 #pragma warning disable CA1002, CA2227 // контракт внешнего API: обычный изменяемый List<string> для JSON
     public List<string> RecentProjects { get; set; } = [];
