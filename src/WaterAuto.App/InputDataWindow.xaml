@@ -102,8 +102,17 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:Name="FillCountText" Style="{StaticResource Text.Caption}" VerticalAlignment="Center"
-                           Text="Заполнено полей: 0" />
+                <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="FillCountText" Style="{StaticResource Text.Caption}"
+                               Text="Заполнено полей: 0" />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
+                        <ProgressBar x:Name="RequiredProgress" Width="140" Height="4"
+                                     Minimum="0" Maximum="1" Value="0" VerticalAlignment="Center"
+                                     ToolTip="Доля заполненных обязательных полей среди показанных" />
+                        <TextBlock x:Name="RequiredText" Style="{StaticResource Text.Caption}" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" Text="Обязательные: 0 из 0" />
+                    </StackPanel>
+                </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="SaveButton" Style="{StaticResource Button.Primary}" Content="Сохранить"

@@ -3,10 +3,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using WaterAuto.App.InputData;
 using WaterAuto.Application;
-using ShapePath = System.Windows.Shapes.Path;
 
 namespace WaterAuto.App;
 
@@ -66,6 +64,7 @@ public partial class InputDataWindow : Window
     private readonly IInputFieldHost _host;
     private readonly Dictionary<string, InputFieldController> _controllers = new(StringComparer.Ordinal);
     private readonly List<SectionView> _sections = [];
+    private readonly List<NavSectionItem> _navItems = [];
     private DrawingPreviewCard _previewCard = null!;
     private Border? _pumpRoomHint;
     private string? _readError;
@@ -200,13 +199,13 @@ public partial class InputDataWindow : Window
                 {
                     fieldsHost.IsEnabled = true;
                     ApplyAdvancedVisibility();
-                    UpdateFillCounter();
+                    RefreshCounters();
                 };
                 toggle.Unchecked += (_, _) =>
                 {
                     fieldsHost.IsEnabled = false;
                     ApplyAdvancedVisibility();
-                    UpdateFillCounter();
+                    RefreshCounters();
                 };
             }
 
@@ -218,38 +217,19 @@ public partial class InputDataWindow : Window
             }
         }
 
-        Nav.ItemsSource = _sections
-            .Select(section => BuildNavItem(section.Spec.NavTitle, NavIcon(section.Spec.NavTitle)))
-            .ToList();
+        _navItems.Clear();
+        foreach (var section in _sections)
+        {
+            _navItems.Add(new NavSectionItem(section.Spec.NavTitle, NavIcon(section.Spec.NavTitle)));
+        }
+
+        Nav.ItemsSource = _navItems.Select(item => item.View).ToList();
         ApplyAdvancedVisibility();
-        UpdateFillCounter();
+        RefreshCounters();
         if (_sections.Count > 0)
         {
             SelectSection(0);
         }
-    }
-
-    /// <summary>Пункт навигации: векторная иконка раздела (без эмодзи) и подпись.</summary>
-    private static StackPanel BuildNavItem(string title, string iconData)
-    {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal };
-        var icon = new ShapePath
-        {
-            Data = Geometry.Parse(iconData),
-            Width = 16,
-            Height = 16,
-            Stretch = Stretch.Uniform,
-            StrokeThickness = 1.4,
-            StrokeStartLineCap = PenLineCap.Round,
-            StrokeEndLineCap = PenLineCap.Round,
-            StrokeLineJoin = PenLineJoin.Round,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        icon.SetResourceReference(ShapePath.StrokeProperty, "Brush.Text.Secondary");
-        panel.Children.Add(icon);
-        var text = new TextBlock { Text = title, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
-        panel.Children.Add(text);
-        return panel;
     }
 
     // Линейные иконки 16×16: документ, капля, трубы, насос, пожарный кран, резервуар, титульный лист.
@@ -419,44 +399,86 @@ public partial class InputDataWindow : Window
     private void OnAdvancedToggled(object sender, RoutedEventArgs e)
     {
         ApplyAdvancedVisibility();
-        UpdateFillCounter();
+        RefreshCounters();
     }
 
-    private void UpdateFillCounter()
+    /// <summary>
+    /// Пересчитать прогресс мастера: счётчик заполнения, обязательные поля (мини-прогрессбар в нижней панели)
+    /// и статусы разделов в навигации. Учитываются только видимые поля: в простом режиме скрытые экспертные
+    /// карточки и поля не считаются, выключенные необязательные разделы (ВПВ, резервуар) — тоже.
+    /// </summary>
+    private void RefreshCounters()
     {
         var filled = 0;
         var total = 0;
-        foreach (var section in _sections)
+        var requiredFilled = 0;
+        var requiredTotal = 0;
+        for (var index = 0; index < _sections.Count; index++)
         {
-            if (section.Spec.OptionalPath is not null && section.Toggle?.IsChecked != true)
+            var section = _sections[index];
+            var sectionActive = section.Spec.OptionalPath is null || section.Toggle?.IsChecked == true;
+            var sectionRequired = 0;
+            var sectionMissing = 0;
+            if (sectionActive)
             {
-                continue;
-            }
-
-            foreach (var card in section.Cards)
-            {
-                if (card.Element.Visibility != Visibility.Visible)
+                foreach (var card in section.Cards)
                 {
-                    continue;
-                }
-
-                foreach (var field in card.Rows)
-                {
-                    if (field.Controller.View.Visibility != Visibility.Visible)
+                    if (card.Element.Visibility != Visibility.Visible)
                     {
                         continue;
                     }
 
-                    total++;
-                    if (field.Controller.IsFilled)
+                    foreach (var field in card.Rows)
                     {
-                        filled++;
+                        if (field.Controller.View.Visibility != Visibility.Visible)
+                        {
+                            continue;
+                        }
+
+                        total++;
+                        var isFilled = field.Controller.IsFilled;
+                        if (isFilled)
+                        {
+                            filled++;
+                        }
+
+                        if (!field.Field.Required)
+                        {
+                            continue;
+                        }
+
+                        sectionRequired++;
+                        requiredTotal++;
+                        if (isFilled)
+                        {
+                            requiredFilled++;
+                        }
+                        else
+                        {
+                            sectionMissing++;
+                        }
                     }
                 }
             }
+
+            _navItems[index].SetStatus(
+                !sectionActive || sectionRequired == 0
+                    ? NavSectionStatus.None
+                    : sectionMissing > 0 ? NavSectionStatus.Missing : NavSectionStatus.Ok,
+                sectionRequired == 0
+                    ? null
+                    : sectionMissing > 0
+                        ? $"Осталось обязательных полей: {sectionMissing}"
+                        : "Обязательные поля раздела заполнены");
         }
 
         FillCountText.Text = $"Заполнено {filled} из {total} полей";
+        RequiredProgress.Value = requiredTotal == 0 ? 1 : (double)requiredFilled / requiredTotal;
+        RequiredText.Text = requiredTotal == 0
+            ? "Нет обязательных полей"
+            : requiredFilled == requiredTotal
+                ? "Обязательные данные заполнены"
+                : $"Обязательные: {requiredFilled} из {requiredTotal}";
     }
 
     private void SelectSection(int index)
@@ -479,6 +501,9 @@ public partial class InputDataWindow : Window
         }
 
         SectionScroll.ScrollToTop();
+
+        // Статусы разделов могли измениться (например, поле заполнили в другом разделе) — обновляем при переходе.
+        RefreshCounters();
     }
 
     private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -605,7 +630,7 @@ public partial class InputDataWindow : Window
             item.ClearError();
         }
 
-        UpdateFillCounter();
+        RefreshCounters();
     }
 
     private void SetFieldValue(string path, string key, string value)
