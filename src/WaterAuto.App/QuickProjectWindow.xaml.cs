@@ -57,6 +57,7 @@ public partial class QuickProjectWindow : Window
         LoadCatalogs();
         ApplyCatalogs(DefaultRoomGroup, null, null);
         SetPreview("Pill.Neutral", "Ожидает чертёж", "Выберите файл чертежа — программа покажет, что распознано на плане, и предложит оценки исходных данных.");
+        ClearPreviewDetails();
         UpdateCreateState();
     }
 
@@ -292,6 +293,7 @@ public partial class QuickProjectWindow : Window
             UpdateCreateState();
             _previewVersion++; // ответ прежнего разбора (если ещё идёт) уже неактуален
             SetPreview("Pill.Neutral", "Проверка чертежа…", "Разбираем чертёж: что распознано на плане и какие данные можно подставить.");
+            ClearPreviewDetails();
             _previewTimer.Start();
             return;
         }
@@ -302,6 +304,7 @@ public partial class QuickProjectWindow : Window
             kind == DrawingPathKind.Empty ? "Pill.Neutral" : "Pill.Warning",
             kind == DrawingPathKind.Empty ? "Ожидает чертёж" : "Чертёж не найден",
             message ?? "Выберите файл чертежа — программа покажет, что распознано на плане.");
+        ClearPreviewDetails();
     }
 
     private void OnDataSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -438,6 +441,7 @@ public partial class QuickProjectWindow : Window
 
         var version = ++_previewVersion;
         SetPreview("Pill.Neutral", "Проверка чертежа…", "Разбираем чертёж и сверяем геометрию — это может занять несколько секунд.");
+        ClearPreviewDetails();
         var project = BuildPreviewProject(drawingPath);
         var normsDir = _normsDir;
         DrawingPreviewResult? result = null;
@@ -500,11 +504,13 @@ public partial class QuickProjectWindow : Window
         if (failure is not null)
         {
             SetPreview("Pill.Error", "Проверка не выполнена", "Не удалось разобрать чертёж: " + failure + " Проект можно создать, а данные проверить в мастере.");
+            ClearPreviewDetails();
             return;
         }
 
         if (result is null)
         {
+            ClearPreviewDetails();
             return;
         }
 
@@ -516,6 +522,7 @@ public partial class QuickProjectWindow : Window
                 string.IsNullOrEmpty(result.DrawingPath)
                     ? "Файл не найден — проверьте путь в поле «Файл чертежа»."
                     : "Файл не найден: " + result.DrawingPath + ". Проверьте путь в поле «Файл чертежа».");
+            ClearPreviewDetails();
             return;
         }
 
@@ -535,6 +542,8 @@ public partial class QuickProjectWindow : Window
         {
             SetPreview("Pill.Success", "Чертёж распознан", summary);
         }
+
+        ShowPreviewDetails(result);
     }
 
     /// <summary>Компактная сводка: помещения и площадь, насосная, вводы/выпуски, число предложений по данным.</summary>
@@ -560,6 +569,176 @@ public partial class QuickProjectWindow : Window
         parts.Add(string.Create(Ru, $"вводов {result.Inlets} / выпусков {result.PumpRoomOutlets}"));
         parts.Add(string.Create(Ru, $"предложений {result.Suggestions.Count}"));
         return "Распознано: " + string.Join(" · ", parts) + ".";
+    }
+
+    /// <summary>
+    /// Подробности предпроверки под сводкой: какие исходные данные будут подставлены по чертежу (с основанием)
+    /// и какие замечания есть у чертежа. Списки ограничены по высоте и прокручиваются, чтобы не распирать окно.
+    /// </summary>
+    private void ShowPreviewDetails(DrawingPreviewResult result)
+    {
+        ShowSuggestions(result.Suggestions);
+        ShowIssues(result.Issues);
+    }
+
+    // «Будет подставлено по чертежу (N)»: значение и основание каждого предложения DrawingPreview.
+    private void ShowSuggestions(IReadOnlyList<DrawingSuggestion> suggestions)
+    {
+        if (SuggestionsBlock is null)
+        {
+            return;
+        }
+
+        SuggestionsList.Children.Clear();
+        foreach (var suggestion in suggestions)
+        {
+            var row = new StackPanel { Margin = new Thickness(0, 3, 0, 3) };
+            var line = new TextBlock
+            {
+                Text = string.Create(Ru, $"{suggestion.Label} — {suggestion.Value:0.##} {suggestion.Unit}"),
+                TextWrapping = TextWrapping.Wrap,
+            };
+            InputTheme.ApplyStyle(line, "Text.Body");
+            row.Children.Add(line);
+            var basis = new TextBlock
+            {
+                Text = "Основание: " + suggestion.Basis + " · " + suggestion.Source,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 1, 0, 0),
+            };
+            InputTheme.ApplyStyle(basis, "Text.Caption");
+            row.Children.Add(basis);
+            SuggestionsList.Children.Add(row);
+        }
+
+        SuggestionsBlock.Visibility = Visibility.Visible;
+        SuggestionsTitle.Text = string.Create(Ru, $"Будет подставлено по чертежу ({suggestions.Count})");
+        SuggestionsEmpty.Visibility = suggestions.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SuggestionsScroll.Visibility = suggestions.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        UpdateSuggestionsAvailability();
+    }
+
+    // «Замечания предпроверки (N)»: ошибки, затем предупреждения, затем информация; с пунктом и элементом.
+    private void ShowIssues(IReadOnlyList<Issue> issues)
+    {
+        if (IssuesBlock is null)
+        {
+            return;
+        }
+
+        IssuesList.Children.Clear();
+        foreach (var issue in issues
+                     .OrderByDescending(issue => (int)issue.Level)
+                     .ThenBy(issue => issue.Code, StringComparer.Ordinal))
+        {
+            IssuesList.Children.Add(BuildIssueRow(issue));
+        }
+
+        IssuesBlock.Visibility = Visibility.Visible;
+        IssuesTitle.Text = string.Create(Ru, $"Замечания предпроверки ({issues.Count})");
+        IssuesEmpty.Visibility = issues.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        IssuesScroll.Visibility = issues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private static Grid BuildIssueRow(Issue issue)
+    {
+        var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var pill = new Border { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 8, 0) };
+        InputTheme.ApplyStyle(pill, issue.Level switch
+        {
+            IssueLevel.Error => "Pill.Error",
+            IssueLevel.Warning => "Pill.Warning",
+            _ => "Pill.Info",
+        });
+        var levelText = new TextBlock
+        {
+            Text = issue.Level switch
+            {
+                IssueLevel.Error => "Ошибка",
+                IssueLevel.Warning => "Предупреждение",
+                _ => "Информация",
+            },
+        };
+        InputTheme.ApplyStyle(levelText, "Text.Caption");
+        pill.Child = levelText;
+        row.Children.Add(pill);
+
+        var text = new StackPanel();
+        var message = new TextBlock { Text = issue.Message, TextWrapping = TextWrapping.Wrap };
+        InputTheme.ApplyStyle(message, "Text.Body");
+        text.Children.Add(message);
+        var meta = new List<string>(2);
+        if (issue.Clause is { Length: > 0 } clause)
+        {
+            meta.Add("Пункт: " + clause);
+        }
+
+        if (issue.ElementId is { Length: > 0 } element)
+        {
+            meta.Add("Элемент: " + element);
+        }
+
+        if (meta.Count > 0)
+        {
+            var metaText = new TextBlock
+            {
+                Text = string.Join(" · ", meta),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 1, 0, 0),
+            };
+            InputTheme.ApplyStyle(metaText, "Text.Caption");
+            text.Children.Add(metaText);
+        }
+
+        Grid.SetColumn(text, 1);
+        row.Children.Add(text);
+        return row;
+    }
+
+    /// <summary>Оценки при выключенной галочке остаются видимыми, но приглушёнными: подпись объясняет, что не применится.</summary>
+    private void UpdateSuggestionsAvailability()
+    {
+        if (SuggestionsBlock is null || SuggestionsDisabledHint is null)
+        {
+            return;
+        }
+
+        var enabled = ApplySuggestionsBox?.IsChecked == true;
+        var hasSuggestions = SuggestionsList.Children.Count > 0;
+        SuggestionsDisabledHint.Visibility = !enabled && hasSuggestions ? Visibility.Visible : Visibility.Collapsed;
+        SuggestionsList.Opacity = enabled ? 1 : 0.55;
+    }
+
+    private void OnApplySuggestionsChanged(object sender, RoutedEventArgs e)
+    {
+        if (SuggestionsBlock is null)
+        {
+            return;
+        }
+
+        UpdateSuggestionsAvailability();
+    }
+
+    /// <summary>Скрыть подробности предпроверки (нет чертежа, идёт разбор, ошибка): старые списки не должны висеть.</summary>
+    private void ClearPreviewDetails()
+    {
+        if (SuggestionsBlock is null || IssuesBlock is null)
+        {
+            return;
+        }
+
+        SuggestionsBlock.Visibility = Visibility.Collapsed;
+        IssuesBlock.Visibility = Visibility.Collapsed;
+        SuggestionsList.Children.Clear();
+        IssuesList.Children.Clear();
+        SuggestionsEmpty.Visibility = Visibility.Collapsed;
+        IssuesEmpty.Visibility = Visibility.Collapsed;
+        SuggestionsScroll.Visibility = Visibility.Collapsed;
+        IssuesScroll.Visibility = Visibility.Collapsed;
+        SuggestionsDisabledHint.Visibility = Visibility.Collapsed;
     }
 
     private void SetPreview(string styleKey, string status, string text)
