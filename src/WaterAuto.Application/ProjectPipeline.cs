@@ -11,7 +11,13 @@ using WaterAuto.Reports;
 
 namespace WaterAuto.Application;
 
-public sealed record PipelineResult(bool Success, IReadOnlyList<string> Files, IReadOnlyList<Issue> Issues, DesignResult? Design);
+public sealed record PipelineResult(bool Success, IReadOnlyList<string> Files, IReadOnlyList<Issue> Issues, DesignResult? Design, PumpSetSummary? Pump = null);
+
+/// <summary>
+/// Подобранная комплектная насосная установка (автоподбор или выбор вручную из каталога): обозначение, насос,
+/// количество основных и резервных, мощность и напор по кривой каталога при расчётной подаче — для карточки насосной.
+/// </summary>
+public sealed record PumpSetSummary(string Designation, string Pump, int MainPumps, int StandbyPumps, double PowerKw, double HeadAtDutyMeters, string Maker);
 
 /// <summary>
 /// Сквозной расчёт по проекту (README §4): импорт чертежа → раскладка → трасса → проектный расчёт → ведомость
@@ -201,6 +207,28 @@ public static class ProjectPipeline
         var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
+
+        // Подбор комплектной установки по каталогу (Q, H) — до спецификации ПТ2.СО: количество насосов в выпуске должно
+        // совпадать с фактической установкой. Обозначение из проекта — выбор вручную; пусто — прежний автоподбор.
+        // Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — эти строки шаблона заменяются строкой установки.
+        var catalogSets = PumpCatalog.Sets(normsDir);
+        var roomData = PumpCatalog.Room(normsDir);
+        if (catalogSets.Count == 0)
+        {
+            issues.Add(new Issue("pump.catalogMissing", IssueLevel.Warning,
+                "Не найден каталог комплектных насосных установок (data/catalog/pump_sets_*.json): установка не подбирается, листы плана/разреза/аксонометрии насосной не выпускаются."));
+        }
+
+        if (roomData is null)
+        {
+            issues.Add(new Issue("pump.roomDataMissing", IssueLevel.Warning,
+                "Не найден data/catalog/pump_room.json: расстановка оборудования и обвязка насосной не строятся."));
+        }
+
+        var setChoice = ChoosePumpSet(design.PumpStation.SetDesignation, catalogSets, worst, File.Exists(stationSet), issues);
+        var pumpCount = setChoice?.Chosen is { } chosenForCount
+            ? chosenForCount.MainPumps + chosenForCount.StandbyPumps
+            : station.WorkingPumps + station.StandbyPumps;
         var stationTakeoff = new MaterialTakeoff([], []);
 
         // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
@@ -251,7 +279,7 @@ public static class ProjectPipeline
                         ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                         ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
                     },
-                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 })],
+                    new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 })],
             };
         }
 
@@ -274,41 +302,21 @@ public static class ProjectPipeline
                 $"В помещении насосной {plan.PumpRooms[0].Id} нет вводов на слое ПТ_НС_ВВОД: обвязка и трасса ввода не трассируются.", plan.PumpRooms[0].Id));
         }
 
-        // Подбор комплектной установки по каталогу (Q, H); насосы, прибор управления, обвязка с арматурой и КИП входят в неё —
-        // эти строки шаблона заменяются строкой установки.
-        var catalogSets = PumpCatalog.Sets(normsDir);
-        var roomData = PumpCatalog.Room(normsDir);
-        if (catalogSets.Count == 0)
+        // Строка комплектной установки в ПТ2.СО: насосы, прибор управления и обвязка с арматурой входят в неё — строки
+        // шаблона заменяются (при автоподборе и при выборе вручную из каталога одинаково).
+        if (setChoice?.Chosen is { } chosenSetRow && stationTakeoff.Items.Count > 0)
         {
-            issues.Add(new Issue("pump.catalogMissing", IssueLevel.Warning,
-                "Не найден каталог комплектных насосных установок (data/catalog/pump_sets_*.json): установка не подбирается, листы плана/разреза/аксонометрии насосной не выпускаются."));
-        }
-
-        if (roomData is null)
-        {
-            issues.Add(new Issue("pump.roomDataMissing", IssueLevel.Warning,
-                "Не найден data/catalog/pump_room.json: расстановка оборудования и обвязка насосной не строятся."));
-        }
-        PumpSetChoice? setChoice = null;
-        if (catalogSets.Count > 0 && stationTakeoff.Items.Count > 0)
-        {
-            setChoice = PumpSetSelection.Choose(catalogSets, worst.PumpFlow.LitersPerSecond * 3.6, worst.PumpHead.Meters);
-            issues.AddRange(setChoice.Issues);
-            if (setChoice.Chosen is { } set)
-            {
-                string[] covered = ["pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD"];
-                var row = new TakeoffItem(
-                    TakeoffGroup.PumpStation,
-                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Установка пожаротушения {set.Designation}: {set.MainPumps} основн. + {set.StandbyPumps} резервн. насос {set.Pump}, P2 = {set.PowerKw:0.##} кВт, прибор управления Control MX-II, обвязка с арматурой и КИП; H = {setChoice.HeadAtDuty:0.0} м при Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч"),
-                    roomData?.SetNote ?? "по каталогу изготовителя",
-                    1,
-                    "компл.",
-                    $"коллекторы DN{set.CollectorDn}; или аналог",
-                    Supplier: set.Maker,
-                    Role: "pumpSet");
-                stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !covered.Contains(i.Role))] };
-                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, $"Подобрана установка {set.Designation}: напор по каталогу {setChoice.HeadAtDuty:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем."));
-            }
+            string[] covered = ["pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD"];
+            var row = new TakeoffItem(
+                TakeoffGroup.PumpStation,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Установка пожаротушения {chosenSetRow.Designation}: {chosenSetRow.MainPumps} основн. + {chosenSetRow.StandbyPumps} резервн. насос {chosenSetRow.Pump}, P2 = {chosenSetRow.PowerKw:0.##} кВт, прибор управления Control MX-II, обвязка с арматурой и КИП; H = {setChoice.HeadAtDuty:0.0} м при Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч"),
+                roomData?.SetNote ?? "по каталогу изготовителя",
+                1,
+                "компл.",
+                $"коллекторы DN{chosenSetRow.CollectorDn}; или аналог",
+                Supplier: chosenSetRow.Maker,
+                Role: "pumpSet");
+            stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !covered.Contains(i.Role))] };
         }
 
         // Расстановка оборудования в помещении насосной (слой ПТ_НС) с проходами п. 6.10.16.
@@ -932,7 +940,55 @@ public static class ProjectPipeline
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
         files.Add(WriteIssues(outDir, issues));
-        return new PipelineResult(true, files, issues, worst);
+        var pumpSummary = setChoice?.Chosen is { } summarySet
+            ? new PumpSetSummary(summarySet.Designation, summarySet.Pump, summarySet.MainPumps, summarySet.StandbyPumps, summarySet.PowerKw, setChoice.HeadAtDuty, summarySet.Maker)
+            : null;
+        return new PipelineResult(true, files, issues, worst, pumpSummary);
+    }
+
+    // Комплектная установка: обозначение из проекта (design.pumpStation.setDesignation) — выбор вручную из каталога с проверкой
+    // напора по кривой; пустое — автоподбор по требуемым Q и H (PumpSetSelection). Неизвестное обозначение — Error и продолжение
+    // автоподбором; недостаточный напор — Error (документы не выпускаются общим Stop по Error насосной). Исключений нет.
+    private static PumpSetChoice? ChoosePumpSet(string designation, IReadOnlyList<PumpSet> sets, DesignResult worst, bool hasTemplate, List<Issue> issues)
+    {
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var qM3h = worst.PumpFlow.LitersPerSecond * 3.6;
+        if (designation.Length > 0)
+        {
+            if (sets.FirstOrDefault(s => string.Equals(s.Designation, designation, StringComparison.Ordinal)) is not { } set)
+            {
+                issues.Add(new Issue("pump.setNotFound", IssueLevel.Error, $"Установка «{designation}» не найдена в каталоге (data/catalog/pump_sets_*.json): выполнен автоподбор по требуемым Q и H. Проверьте обозначение в design.pumpStation.setDesignation."));
+            }
+            else
+            {
+                var headAtDuty = PumpSetSelection.HeadAt(set, qM3h);
+                if (headAtDuty is not { } head || head < worst.PumpHead.Meters)
+                {
+                    var headText = headAtDuty is { } h
+                        ? string.Create(ru, $"напор по кривой H = {h:0.0} м")
+                        : "подача Q вне диапазона кривой установки (напор не определён)";
+                    issues.Add(new Issue("pump.setInsufficient", IssueLevel.Error, string.Create(ru, $"Установка {set.Designation} не обеспечивает требуемый напор: {headText} при Q = {qM3h:0.0} м³/ч, требуется H = {worst.PumpHead.Meters:0.0} м. Выберите другую установку в design.pumpStation.setDesignation.")));
+                    return null;
+                }
+
+                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, string.Create(ru, $"Выбрана вручную из каталога установка {set.Designation}: напор по кривой {head:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем.")));
+                return new PumpSetChoice(set, head, []);
+            }
+        }
+
+        if (sets.Count > 0 && hasTemplate)
+        {
+            var auto = PumpSetSelection.Choose(sets, qM3h, worst.PumpHead.Meters);
+            issues.AddRange(auto.Issues);
+            if (auto.Chosen is { } picked)
+            {
+                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, string.Create(ru, $"Подобрана установка {picked.Designation}: напор по каталогу {auto.HeadAtDuty:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем.")));
+            }
+
+            return auto;
+        }
+
+        return null;
     }
 
     // «Отвод» → «отводы» для перечня стандартов фасонных частей в ПЗ.

@@ -413,7 +413,7 @@ public static class ExplanatoryNoteComposer
         var jockey = Need(norms, "sp485.p6_9_4.jockeyTank");
         return new NoteSection("6", "Насосная установка", [
             .. PumpHeadBlocks(i, supplyDn, kt, m3h, jockey),
-            .. i.Station is { } st ? StationBlocks(st, norms) : [],
+            .. i.Station is { } st ? StationBlocks(st, norms, i.SetChoice) : [],
             .. SetBlocks(i),
         ]);
     }
@@ -489,14 +489,16 @@ public static class ExplanatoryNoteComposer
         return blocks;
     }
 
-    // Насосная станция: состав агрегатов, обвязка по скорости (6.7.1.37), проходы (6.10.16), патрубки (6.10.17, 6.10.18), микроклимат (6.10.12).
-    private static List<NoteBlock> StationBlocks(PumpStationResult st, INormsProvider norms)
+    // Насосная станция: состав агрегатов (по выбранной установке или п. 6.10.3), обвязка по скорости (6.7.1.37), проходы (6.10.16), патрубки (6.10.17, 6.10.18), микроклимат (6.10.12).
+    private static List<NoteBlock> StationBlocks(PumpStationResult st, INormsProvider norms, PumpSetChoice? setChoice)
     {
         double V(StationPipe p) => (p.Pipe.OuterDiameterMm - (2 * p.Pipe.WallMm)) / 1000;
         var q = st.PumpFlow.LitersPerSecond / 1000;
         var blocks = new List<NoteBlock>
         {
-            new NoteParagraph($"**Насосная станция.** Принято {st.WorkingPumps} рабочий и {st.StandbyPumps} резервный насосный агрегат одинаковой конструкции, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении."),
+            new NoteParagraph(setChoice?.Chosen is { } set
+                ? string.Create(Ru, $"**Насосная станция.** Принята комплектная установка {set.Designation} ({set.Pump}): основных насосов — {set.MainPumps}, резервных — {set.StandbyPumps}, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении.")
+                : $"**Насосная станция.** Принято {st.WorkingPumps} рабочий и {st.StandbyPumps} резервный насосный агрегат одинаковой конструкции, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении."),
             new NoteParagraph("Диаметры всасывающего и напорного трубопроводов агрегата подобраны по скорости воды *v* = 4·*Q* / (π·*d*^{2}) (п. 6.7.1.37):"),
             new NoteFormula($"*v*_{{вс}} = 4·{F(q, "0.0000")} / (π·{F(V(st.Suction), "0.000")}^{{2}}) = **{F(st.Suction.Velocity, "0.00")} м/с** ≤ {F(st.SuctionLimit)} м/с — DN{st.Suction.Pipe.Dn} (Ø{F(st.Suction.Pipe.OuterDiameterMm, "0.#")}×{F(st.Suction.Pipe.WallMm, "0.#")} мм);", "6.6", []),
             new NoteFormula($"*v*_{{нап}} = 4·{F(q, "0.0000")} / (π·{F(V(st.Discharge), "0.000")}^{{2}}) = **{F(st.Discharge.Velocity, "0.00")} м/с** ≤ {F(st.DischargeLimit)} м/с — DN{st.Discharge.Pipe.Dn} (Ø{F(st.Discharge.Pipe.OuterDiameterMm, "0.#")}×{F(st.Discharge.Pipe.WallMm, "0.#")} мм).", "6.7", [
