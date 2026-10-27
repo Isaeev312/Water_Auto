@@ -150,6 +150,29 @@ public sealed class PumpSetPipelineTests : IDisposable
         result.Pump.Curve.Count.ShouldBeGreaterThan(1);
         result.Pump.Curve.Select(p => p.QM3h).ShouldBe(result.Pump.Curve.Select(p => p.QM3h).OrderBy(q => q));
         result.Issues.ShouldContain(i => i.Code == "pump.setChosen" && i.Level == Core.IssueLevel.Info, IssueText(result));
+
+        // Сводка помещения насосной и габаритов установки для карточки главного окна: помещение 12 × 8 м из чертежа,
+        // разметка вводов/выпусков/патрубков ГМ и размеры выбранной установки из каталога.
+        result.PumpRoom.ShouldNotBeNull();
+        var room = result.PumpRoom!;
+        room.RoomId.ShouldNotBeNull();
+        room.RoomLengthM.ShouldBe(12.0);
+        room.RoomWidthM.ShouldBe(8.0);
+        room.RoomAreaM2.ShouldBe(96.0);
+        room.Inlets.ShouldBe(2);
+        room.Outlets.ShouldBe(1);
+        room.TruckInlets.ShouldBe(2);
+        room.SetDesignation.ShouldBe(result.Pump!.Designation);
+        room.MainPumps.ShouldBe(result.Pump.MainPumps);
+        room.StandbyPumps.ShouldBe(result.Pump.StandbyPumps);
+        room.SetHydraulic.LengthMm.ShouldBeGreaterThan(0);
+        room.SetHydraulic.WidthMm.ShouldBeGreaterThan(0);
+        room.SetHydraulic.HeightMm.ShouldBeGreaterThan(0);
+        room.SetCabinet.LengthMm.ShouldBeGreaterThan(0);
+        room.SetCabinet.WidthMm.ShouldBeGreaterThan(0);
+        room.SetCabinet.HeightMm.ShouldBeGreaterThan(0);
+        room.CollectorDn.ShouldBeGreaterThan(0);
+        room.CollectorAxisMm.ShouldBeGreaterThan(0);
     }
 
     [Fact]

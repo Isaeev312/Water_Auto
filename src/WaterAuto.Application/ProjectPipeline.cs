@@ -11,7 +11,13 @@ using WaterAuto.Reports;
 
 namespace WaterAuto.Application;
 
-public sealed record PipelineResult(bool Success, IReadOnlyList<string> Files, IReadOnlyList<Issue> Issues, DesignResult? Design, PumpSetSummary? Pump = null);
+public sealed record PipelineResult(
+    bool Success,
+    IReadOnlyList<string> Files,
+    IReadOnlyList<Issue> Issues,
+    DesignResult? Design,
+    PumpSetSummary? Pump = null,
+    PumpStationSummary? PumpRoom = null);
 
 /// <summary>
 /// Подобранная комплектная насосная установка (автоподбор или выбор вручную из каталога): обозначение, насос,
@@ -29,6 +35,29 @@ public sealed record PumpSetSummary(
     double RequiredFlowM3h,
     double RequiredHeadMeters,
     IReadOnlyList<PumpCurvePoint> Curve);
+
+/// <summary>
+/// Помещение насосной станции из чертежа и габариты подобранной установки — для карточки главного окна:
+/// контур помещения в плане (длина, ширина, площадь), разметка вводов/выпусков/патрубков для мобильной техники
+/// и габариты гидравлической части, прибора управления и коллектора из каталога. Нормативных чисел здесь нет.
+/// Если помещения насосной в чертеже нет, <see cref="RoomId"/> и размеры равны null, счётчики — 0;
+/// если установка не подобрана, <see cref="SetDesignation"/> пуст, а габариты нулевые.
+/// </summary>
+public sealed record PumpStationSummary(
+    string? RoomId,
+    double? RoomLengthM,
+    double? RoomWidthM,
+    double? RoomAreaM2,
+    int Inlets,
+    int Outlets,
+    int TruckInlets,
+    string SetDesignation,
+    int MainPumps,
+    int StandbyPumps,
+    Footprint SetHydraulic,
+    Footprint SetCabinet,
+    int CollectorDn,
+    double CollectorAxisMm);
 
 /// <summary>Точка паспортной кривой насоса Q–H, м³/ч и м.</summary>
 public sealed record PumpCurvePoint(double QM3h, double HM);
@@ -967,7 +996,46 @@ public static class ProjectPipeline
                 worst.PumpHead.Meters,
                 [.. summarySet.PumpCurve.Select(p => new PumpCurvePoint(p.QM3h, p.HM))])
             : null;
-        return new PipelineResult(true, files, issues, worst, pumpSummary);
+        var pumpRoomSummary = PumpRoomSummary(plan, setChoice?.Chosen);
+        return new PipelineResult(true, files, issues, worst, pumpSummary, pumpRoomSummary);
+    }
+
+    // Помещение насосной и габариты установки для карточки главного окна: контур в плане (bbox, м и м²),
+    // разметка вводов/выпусков/патрубков ГМ и размеры выбранной установки из каталога. Никаких новых чисел:
+    // всё либо прочитано из чертежа, либо взято из data/catalog/pump_sets_*.json.
+    private static PumpStationSummary PumpRoomSummary(FloorPlan plan, PumpSet? set)
+    {
+        var room = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0] : null;
+        double? length = null;
+        double? width = null;
+        double? area = null;
+        if (room is { Outline.Vertices.Count: > 0 } withRoom)
+        {
+            var vertices = withRoom.Outline.Vertices;
+            var x0 = vertices.Min(p => p.XMm);
+            var y0 = vertices.Min(p => p.YMm);
+            var x1 = vertices.Max(p => p.XMm);
+            var y1 = vertices.Max(p => p.YMm);
+            length = Math.Round((x1 - x0) / 1000, 1);
+            width = Math.Round((y1 - y0) / 1000, 1);
+            area = Math.Round((x1 - x0) * (y1 - y0) / 1_000_000, 2);
+        }
+
+        return new PumpStationSummary(
+            room?.Id,
+            length,
+            width,
+            area,
+            room?.Inlets.Count ?? 0,
+            room?.Outlets.Count ?? 0,
+            room?.TruckInlets.Count ?? 0,
+            set?.Designation ?? "",
+            set?.MainPumps ?? 0,
+            set?.StandbyPumps ?? 0,
+            set?.Hydraulic ?? new Footprint(0, 0, 0),
+            set?.Cabinet ?? new Footprint(0, 0, 0),
+            set?.CollectorDn ?? 0,
+            set?.CollectorAxisMm ?? 0);
     }
 
     // Комплектная установка: обозначение из проекта (design.pumpStation.setDesignation) — выбор вручную из каталога с проверкой
