@@ -799,6 +799,7 @@ public partial class MainWindow : Window
         var view = new CollectionViewSource { Source = sorted };
         view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(FileItem.Group)));
         FilesList.ItemsSource = view.View;
+        PreviewButton.IsEnabled = false; // выбор сброшен новым списком файлов
         FilesTabHeader.Text = $"Файлы выпуска ({items.Count})";
     }
 
@@ -876,6 +877,18 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             Open(file.FullPath);
+        }
+    }
+
+    // «Предпросмотр…» доступен для выбранного файла .xlsx/.docx: таблица спецификации или текст записки.
+    private void OnFileSelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        PreviewButton.IsEnabled = FilesList.SelectedItem is FileItem file && OutputPreview.CanPreview(file.FullPath);
+
+    private void OnPreviewFile(object sender, RoutedEventArgs e)
+    {
+        if (FilesList.SelectedItem is FileItem file && OutputPreview.CanPreview(file.FullPath) && File.Exists(file.FullPath))
+        {
+            new PreviewWindow(file.FullPath) { Owner = this }.ShowDialog();
         }
     }
 

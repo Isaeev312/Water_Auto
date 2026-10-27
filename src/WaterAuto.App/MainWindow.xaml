@@ -305,8 +305,13 @@
                                                    Text="Двойной щелчок открывает файл. " />
                                         <Button Content="Открыть папку выпуска" Style="{StaticResource Button.Ghost}"
                                                 Click="OnOpenOutFolder" Padding="8,2" />
+                                        <Button x:Name="PreviewButton" Content="Предпросмотр…"
+                                                Style="{StaticResource Button.Ghost}" Padding="8,2" Margin="8,0,0,0"
+                                                IsEnabled="False" Click="OnPreviewFile"
+                                                ToolTip="Показать таблицу спецификации (.xlsx) или текст записки (.docx) прямо в программе: выберите файл в списке" />
                                     </StackPanel>
                                     <ListBox x:Name="FilesList" Grid.Row="1" MouseDoubleClick="OnOpenFile"
+                                             SelectionChanged="OnFileSelectionChanged"
                                              BorderThickness="0" Background="Transparent"
                                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                              ScrollViewer.VerticalScrollBarVisibility="Auto">
