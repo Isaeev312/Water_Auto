@@ -55,7 +55,14 @@ public partial class QuickProjectWindow : Window
         _previewTimer = new DispatcherTimer { Interval = PreviewDelay };
         _previewTimer.Tick += OnPreviewTimerTick;
         LoadCatalogs();
-        ApplyCatalogs(DefaultRoomGroup, null, null);
+        // Стандартные ответы прошлого быстрого проекта подставляются сразу: для следующего объекта
+        // пользователь обычно повторяет ту же группу помещений и решение по оросителю/установке.
+        var settings = ThemeManager.Settings;
+        ApplyCatalogs(
+            settings.LastRoomGroup is { Length: > 0 } group ? group : DefaultRoomGroup,
+            settings.LastSprinklerId is { Length: > 0 } sprinkler ? sprinkler : null,
+            settings.LastPumpSetDesignation is { Length: > 0 } pumpSet ? pumpSet : null);
+        ApplySuggestionsBox.IsChecked = settings.QuickProjectApplySuggestions;
         SetPreview("Pill.Neutral", "Ожидает чертёж", "Выберите файл чертежа — программа покажет, что распознано на плане, и предложит оценки исходных данных.");
         ClearPreviewDetails();
         UpdateCreateState();

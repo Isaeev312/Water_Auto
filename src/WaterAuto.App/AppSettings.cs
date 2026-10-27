@@ -51,6 +51,18 @@ public sealed class AppSettings
     /// <summary>Последняя папка проектов/чертежей — с неё начинаются диалоги открытия и сохранения.</summary>
     public string LastDirectory { get; set; } = "";
 
+    /// <summary>Группа помещений, выбранная в прошлом «быстром проекте» — подставляется по умолчанию.</summary>
+    public string LastRoomGroup { get; set; } = "2";
+
+    /// <summary>Ороситель прошлого «быстрого проекта» (id каталога); пусто — автоподбор.</summary>
+    public string LastSprinklerId { get; set; } = "";
+
+    /// <summary>Комплектная установка прошлого «быстрого проекта» (обозначение); пусто — автоподбор.</summary>
+    public string LastPumpSetDesignation { get; set; } = "";
+
+    /// <summary>Применять оценки по геометрии в «быстром проекте» (по умолчанию да).</summary>
+    public bool QuickProjectApplySuggestions { get; set; } = true;
+
     /// <summary>Геометрия главного окна (сохраняется при закрытии, восстанавливается при запуске), px.</summary>
     public double? WindowLeft { get; set; }
 

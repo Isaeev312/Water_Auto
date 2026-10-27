@@ -182,6 +182,14 @@ public partial class MainWindow : Window
             }
             else
             {
+                // Ответы быстрого проекта запоминаются: в следующий раз они подставлены по умолчанию.
+                var settings = ThemeManager.Settings;
+                settings.LastRoomGroup = request.RoomGroup;
+                settings.LastSprinklerId = request.SprinklerId ?? "";
+                settings.LastPumpSetDesignation = request.PumpSetDesignation ?? "";
+                settings.QuickProjectApplySuggestions = request.ApplyDrawingSuggestions;
+                settings.Save();
+
                 var applied = created.AppliedSuggestions.Count > 0
                     ? " По чертежу подставлено: " + string.Join("; ", created.AppliedSuggestions) + "."
                     : " Оценки по чертежу не применялись.";
@@ -557,6 +565,7 @@ public partial class MainWindow : Window
             FlowValue.Text = HeadValue.Text = VolumeValue.Text = "—";
             PumpSetValue.Text = "Установка не подобрана — см. замечания";
             PumpCountsValue.Text = "";
+            ShowPumpRoom(null);
             ShowPumpChart(null);
             return;
         }
@@ -582,7 +591,44 @@ public partial class MainWindow : Window
             PumpCountsValue.Text = "";
         }
 
+        ShowPumpRoom(result.PumpRoom);
         ShowPumpChart(result.Pump);
+    }
+
+    // Помещение насосной и габариты установки из расчёта (PipelineResult.PumpRoom): размеры контура в плане,
+    // разметка вводов/выпусков/патрубков ГМ и размеры установки с прибором управления из каталога.
+    // Нормативных чисел здесь нет — всё приходит из конвейера; нет данных — строка скрыта.
+    private void ShowPumpRoom(PumpStationSummary? room)
+    {
+        if (room is null)
+        {
+            PumpRoomValue.Text = "";
+            PumpRoomValue.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var lines = new List<string>();
+        if (room.RoomId is not null)
+        {
+            lines.Add(room is { RoomLengthM: { } length, RoomWidthM: { } width, RoomAreaM2: { } area }
+                ? string.Create(ru, $"Помещение насосной: {length:0.0} × {width:0.0} м, {area:0.0} м²; вводов {room.Inlets}, выпусков {room.Outlets}, патрубков ГМ {room.TruckInlets}.")
+                : string.Create(ru, $"Помещение насосной: вводов {room.Inlets}, выпусков {room.Outlets}, патрубков ГМ {room.TruckInlets}."));
+        }
+        else
+        {
+            lines.Add("Помещение насосной: в чертеже не размечено (слой ПТ_НС).");
+        }
+
+        if (room.SetDesignation.Length > 0)
+        {
+            lines.Add(string.Create(
+                ru,
+                $"Габариты установки: {room.SetHydraulic.LengthMm:0} × {room.SetHydraulic.WidthMm:0} × {room.SetHydraulic.HeightMm:0} мм; прибор управления: {room.SetCabinet.LengthMm:0} × {room.SetCabinet.WidthMm:0} × {room.SetCabinet.HeightMm:0} мм; коллектор DN{room.CollectorDn}, ось {room.CollectorAxisMm:0} мм."));
+        }
+
+        PumpRoomValue.Text = string.Join(Environment.NewLine, lines);
+        PumpRoomValue.Visibility = Visibility.Visible;
     }
 
     // Мини-график Q–H в карточке насосной: кривая, рабочая точка и линия требуемого напора.
