@@ -28,7 +28,7 @@
 | WaterAuto.Export | DXF, SVG, JSON/CSV обмена, EPANET .inp | Core |
 | WaterAuto.Reports | Записка docx/pdf, спецификация xlsx/pdf (форма 1 ГОСТ 21.110) | Core |
 | WaterAuto.Application | Сценарии: открыть проект, импорт, расчёт, выпуск комплекта; `InputCatalog` — списки допустимых значений для ввода из `data/`; `DrawingPreview` — проверка чертежа до расчёта и предложения по геометрии; `PumpAdvisor` — кандидаты установок для окна подбора | все выше |
-| WaterAuto.App | WPF: быстрый проект, мастер исходных данных с выпадающими списками из `data/` и проверкой чертежа, темы и акценты, настройки, сводка расчёта, график Q–H и подбор насосной установки | Application |
+| WaterAuto.App | WPF: быстрый проект, мастер исходных данных с выпадающими списками из `data/` и проверкой чертежа, темы/акценты/тёмный заголовок окон, настройки, сводка расчёта, график Q–H и подбор насосной установки | Application |
 | Плагины AutoCAD/Revit (позже) | Чтение слоёв из открытого чертежа, вставка результата | Application |
 
 Calc не ссылается на Import, Export, Reports. Это проверяется тестом архитектуры (запрещённые ссылки между сборками).
@@ -46,7 +46,7 @@ WaterAuto/
 │  ├─ WaterAuto.Reports/
 │  ├─ WaterAuto.Application/
 │  │  └─ InputCatalog, DrawingPreview, PumpAdvisor  # списки ввода, проверка чертежа, кандидаты установок
-│  └─ WaterAuto.App/      # WPF: App/Themes (темы, акценты, стили), InputData (мастер), QuickProject, SettingsWindow, MainWindow, PumpSetWindow
+│  └─ WaterAuto.App/      # WPF: App/Themes (темы, акценты, стили), Ui (ThemeManager, WindowChrome), InputData (мастер), QuickProject, SettingsWindow, MainWindow, PumpSetWindow
 ├─ data/
 │  ├─ norms/sp485/        # табл. 6.1–6.4, А.1, Б.1–Б.4, В.1, правила 6.2, 6.7
 │  ├─ catalog/            # sprinklers.json, pumps.json
