@@ -616,10 +616,30 @@ public partial class InputDataWindow : Window
             return;
         }
 
+        RememberTitleProfile();
+
         // Сохранение завершает мастер; при следующем открытии карточка предпроверки построится уже
         // по сохранённым значениям. Пока окно открыто, чертёж перепроверяется по кнопке в карточке.
         DialogResult = true;
         Close();
+    }
+
+    /// <summary>
+    /// Запомнить титульный лист сохранённого проекта в профиле приложения: в следующий раз организация, подписи,
+    /// шифр и стадия подставятся в новый проект вместо заглушек модели. Ошибка записи настроек не влияет на
+    /// результат сохранения проекта — профиль это удобство, а не данные объекта.
+    /// </summary>
+    private void RememberTitleProfile()
+    {
+        try
+        {
+            TitleProfile.Remember(_root, _sources.ModelDefaults);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or JsonException
+            or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            // Проект уже сохранён; неудачное обновление профиля не показываем как ошибку мастера.
+        }
     }
 
     private void OnFieldValueChanged(InputFieldController controller)

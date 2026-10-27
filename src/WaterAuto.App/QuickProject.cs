@@ -101,6 +101,7 @@ public static class QuickProject
             Name = Path.GetFileNameWithoutExtension(drawing),
             Drawing = Path.GetFileName(drawing),
             Design = design,
+            Title = TitleFromProfile(Path.GetFileNameWithoutExtension(drawing)),
         };
 
         var applied = new List<string>();
@@ -249,6 +250,51 @@ public static class QuickProject
         InletRouteElevation = room.InletRouteElevation,
         InletRouteClearance = room.InletRouteClearance,
     };
+
+    /// <summary>
+    /// Титульный лист быстрого проекта: профиль последнего проекта (организация, автор, шифр и т.д.) —
+    /// чтобы не вводить их заново; пустые поля профиля остаются умолчаниями модели.
+    /// </summary>
+    private static ProjectTitle TitleFromProfile(string objectName)
+    {
+        var settings = ThemeManager.Settings;
+        var title = new ProjectTitle();
+        if (settings.TitleOrganization.Length > 0)
+        {
+            title = title with { Organization = settings.TitleOrganization };
+        }
+
+        if (settings.TitleAuthor.Length > 0)
+        {
+            title = title with { Author = settings.TitleAuthor };
+        }
+
+        if (settings.TitleSupervisor.Length > 0)
+        {
+            title = title with { Supervisor = settings.TitleSupervisor };
+        }
+
+        if (settings.TitleCityYear.Length > 0)
+        {
+            title = title with { CityYear = settings.TitleCityYear };
+        }
+
+        if (settings.TitleCode.Length > 0)
+        {
+            title = title with { Code = settings.TitleCode };
+        }
+
+        if (settings.TitleStage.Length > 0)
+        {
+            title = title with { Stage = settings.TitleStage };
+        }
+
+        // Наименование здания: профиль, а в быстром проекте по умолчанию — имя чертежа (обычно это и есть объект).
+        title = settings.TitleBuilding.Length > 0
+            ? title with { Building = settings.TitleBuilding }
+            : title with { Building = objectName };
+        return title;
+    }
 
     /// <summary>
     /// Запись проекта без риска оставить битый файл: сначала временный файл с проверкой чтением модели

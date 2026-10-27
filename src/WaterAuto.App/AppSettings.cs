@@ -63,6 +63,24 @@ public sealed class AppSettings
     /// <summary>Применять оценки по геометрии в «быстром проекте» (по умолчанию да).</summary>
     public bool QuickProjectApplySuggestions { get; set; } = true;
 
+    // Профиль титульного листа: значения прошлого проекта подставляются в новый, чтобы не вводить
+    // организацию, автора и шифр заново на каждом объекте.
+
+    /// <summary>Организация для титульного листа и основной надписи.</summary>
+    public string TitleOrganization { get; set; } = "";
+
+    public string TitleAuthor { get; set; } = "";
+
+    public string TitleSupervisor { get; set; } = "";
+
+    public string TitleCityYear { get; set; } = "";
+
+    public string TitleCode { get; set; } = "";
+
+    public string TitleBuilding { get; set; } = "";
+
+    public string TitleStage { get; set; } = "Р";
+
     /// <summary>Геометрия главного окна (сохраняется при закрытии, восстанавливается при запуске), px.</summary>
     public double? WindowLeft { get; set; }
 

@@ -54,6 +54,7 @@ internal sealed class InputFieldController
     private TextBox? _customStandardBox;
     private string? _hintOverride;
     private string? _error;
+    private string? _profileValue;
     private bool _loading = true;
 
     public InputFieldController(FieldSpec field, JsonObject root, IInputFieldHost host)
@@ -609,6 +610,8 @@ internal sealed class InputFieldController
             return;
         }
 
+        // Пользователь изменил подставленное из профиля значение — подпись «из профиля» больше не актуальна.
+        _profileValue = null;
         ClearError();
         RefreshCaption();
         _host.OnFieldValueChanged(this);
@@ -639,7 +642,16 @@ internal sealed class InputFieldController
 
     private string ReadValueOf(string path, string key) => InputJson.Text(InputJson.Find(_root, path, key));
 
-    private string ReadText() => InputJson.Text(ReadNode());
+    /// <summary>
+    /// Начальное значение контрола. Для титульного листа, где в проекте пусто или стоит заглушка модели,
+    /// показываем значение профиля приложения — но в JSON проекта оно попадёт только при сохранении.
+    /// </summary>
+    private string ReadText()
+    {
+        var text = InputJson.Text(ReadNode());
+        _profileValue = TitleProfile.Prefill(text, _field.Path, _field.Key, _sources.ModelDefaults);
+        return _profileValue ?? text;
+    }
 
     private string CurrentText()
     {
@@ -752,6 +764,13 @@ internal sealed class InputFieldController
     private string BaseCaption()
     {
         var hint = _hintOverride ?? _field.Hint;
+        if (_profileValue is not null)
+        {
+            // Пользователь видит, откуда взялось значение: это данные прошлого проекта из профиля мастера.
+            const string profileNote = "Из профиля мастера (данные прошлого проекта); при сохранении станет значением проекта.";
+            return hint is { Length: > 0 } ? hint + " " + profileNote : profileNote;
+        }
+
         var note = DefaultNote();
         if (hint is { Length: > 0 } && note is { Length: > 0 })
         {
