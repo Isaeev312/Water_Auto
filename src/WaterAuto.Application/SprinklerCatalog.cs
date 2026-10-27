@@ -41,7 +41,11 @@ public static class SprinklerCatalog
         return list;
     }
 
+    /// <summary>Спринклеры общего назначения для воды — общий отбор без учёта положения розетки.</summary>
+    public static IEnumerable<CatalogSprinkler> Water(IEnumerable<CatalogSprinkler> all) =>
+        all.Where(s => s.Kind == "sprinkler" && s.Purpose == "general" && s.Medium is "water" or "universal");
+
     /// <summary>Спринклеры общего назначения для воды с заданным положением розетки (или любым).</summary>
     public static IEnumerable<CatalogSprinkler> ForWater(IEnumerable<CatalogSprinkler> all, string deflector) =>
-        all.Where(s => s.Kind == "sprinkler" && s.Purpose == "general" && s.Medium is "water" or "universal" && (s.Deflector == deflector || s.Deflector == "any"));
+        Water(all).Where(s => s.Deflector == deflector || s.Deflector == "any");
 }
