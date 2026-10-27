@@ -27,8 +27,8 @@
 | WaterAuto.Import | Чтение DWG/DXF по соглашению о слоях (раздел 8) | Core |
 | WaterAuto.Export | DXF, SVG, JSON/CSV обмена, EPANET .inp | Core |
 | WaterAuto.Reports | Записка docx/pdf, спецификация xlsx/pdf (форма 1 ГОСТ 21.110) | Core |
-| WaterAuto.Application | Сценарии: открыть проект, импорт, расчёт, выпуск комплекта | все выше |
-| WaterAuto.App | WPF: ввод, схема с замечаниями, просмотр результатов | Application |
+| WaterAuto.Application | Сценарии: открыть проект, импорт, расчёт, выпуск комплекта; `InputCatalog` — списки допустимых значений для ввода из `data/` | все выше |
+| WaterAuto.App | WPF: мастер исходных данных с выпадающими списками из `data/`, темы и акценты, сводка расчёта и просмотр результатов | Application |
 | Плагины AutoCAD/Revit (позже) | Чтение слоёв из открытого чертежа, вставка результата | Application |
 
 Calc не ссылается на Import, Export, Reports. Это проверяется тестом архитектуры (запрещённые ссылки между сборками).
@@ -45,7 +45,8 @@ WaterAuto/
 │  ├─ WaterAuto.Export/
 │  ├─ WaterAuto.Reports/
 │  ├─ WaterAuto.Application/
-│  └─ WaterAuto.App/
+│  │  └─ InputCatalog.cs  # списки выпадающих списков из data/norms и data/catalog (без чисел в коде)
+│  └─ WaterAuto.App/      # WPF: App/Themes (темы, акценты, стили), InputData (мастер), MainWindow
 ├─ data/
 │  ├─ norms/sp485/        # табл. 6.1–6.4, А.1, Б.1–Б.4, В.1, правила 6.2, 6.7
 │  ├─ catalog/            # sprinklers.json, pumps.json
@@ -162,6 +163,7 @@ WaterAuto/
 - Эталоны GidRaVPT-R2 (`pending` до выяснения множителя 1/0,95²) и GidRaVPT-R2-plain (`compat`) — совместимость с сертифицированной программой; R1 — когда будет отчёт. Эталоны из пособий: Meshman2002-P9-v1/-v2, Volkov2020-Ex1 (`tests/Golden/README.md`).
 - Сравнение с EPANET на наборе сетей (допуск определить).
 - Импорт: набор DXF с намеренными ошибками.
+- Выпадающие списки ввода: `InputCatalog` (Application) возвращает группы табл. 6.1, оросители каталога, стандарты труб, DN, установки насосной и строки табл. Ж.1 — тест проверяет, что значения и подписи берутся из `data/`, а не дублируются в коде.
 - Тест архитектуры: Calc не ссылается на Import/Export/Reports/App.
 - Допуск сходимости с эталоном — открытый вопрос (концепция, раздел 9).
 
