@@ -15,9 +15,23 @@ public sealed record PipelineResult(bool Success, IReadOnlyList<string> Files, I
 
 /// <summary>
 /// Подобранная комплектная насосная установка (автоподбор или выбор вручную из каталога): обозначение, насос,
-/// количество основных и резервных, мощность и напор по кривой каталога при расчётной подаче — для карточки насосной.
+/// количество основных и резервных, мощность, напор по кривой каталога при расчётной подаче, требуемые подача и напор
+/// и кривая Q–H одного насоса — для карточки и графика насосной.
 /// </summary>
-public sealed record PumpSetSummary(string Designation, string Pump, int MainPumps, int StandbyPumps, double PowerKw, double HeadAtDutyMeters, string Maker);
+public sealed record PumpSetSummary(
+    string Designation,
+    string Pump,
+    int MainPumps,
+    int StandbyPumps,
+    double PowerKw,
+    double HeadAtDutyMeters,
+    string Maker,
+    double RequiredFlowM3h,
+    double RequiredHeadMeters,
+    IReadOnlyList<PumpCurvePoint> Curve);
+
+/// <summary>Точка паспортной кривой насоса Q–H, м³/ч и м.</summary>
+public sealed record PumpCurvePoint(double QM3h, double HM);
 
 /// <summary>
 /// Сквозной расчёт по проекту (README §4): импорт чертежа → раскладка → трасса → проектный расчёт → ведомость
@@ -941,7 +955,17 @@ public static class ProjectPipeline
         Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet
-            ? new PumpSetSummary(summarySet.Designation, summarySet.Pump, summarySet.MainPumps, summarySet.StandbyPumps, summarySet.PowerKw, setChoice.HeadAtDuty, summarySet.Maker)
+            ? new PumpSetSummary(
+                summarySet.Designation,
+                summarySet.Pump,
+                summarySet.MainPumps,
+                summarySet.StandbyPumps,
+                summarySet.PowerKw,
+                setChoice.HeadAtDuty,
+                summarySet.Maker,
+                worst.PumpFlow.LitersPerSecond * 3.6,
+                worst.PumpHead.Meters,
+                [.. summarySet.PumpCurve.Select(p => new PumpCurvePoint(p.QM3h, p.HM))])
             : null;
         return new PipelineResult(true, files, issues, worst, pumpSummary);
     }

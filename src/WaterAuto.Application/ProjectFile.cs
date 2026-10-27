@@ -61,6 +61,10 @@ public sealed record ProjectFile
     }
 
     public static string ToJson(ProjectFile project) => JsonSerializer.Serialize(project, Indented);
+
+    /// <summary>Проект из строки JSON (тем же форматом, что и файл проекта) — для проверок без записи на диск.</summary>
+    public static ProjectFile FromJson(string json) =>
+        JsonSerializer.Deserialize<ProjectFile>(json, Options) ?? throw new InvalidDataException("Пустой JSON проекта.");
 }
 
 /// <summary>Исходные данные расчёта.</summary>

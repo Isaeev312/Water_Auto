@@ -144,6 +144,11 @@ public sealed class PumpSetPipelineTests : IDisposable
         PumpCatalog.Sets(RepoPaths.Norms).ShouldContain(s => s.Designation == result.Pump!.Designation);
         result.Pump!.MainPumps.ShouldBeGreaterThan(0);
         result.Pump.HeadAtDutyMeters.ShouldBeGreaterThanOrEqualTo(result.Design!.PumpHead.Meters);
+        // Данные для карточки и графика Q–H: требуемые подача/напор и паспортная кривая насоса.
+        result.Pump.RequiredFlowM3h.ShouldBe(result.Design.PumpFlow.LitersPerSecond * 3.6, 1e-9);
+        result.Pump.RequiredHeadMeters.ShouldBe(result.Design.PumpHead.Meters, 1e-9);
+        result.Pump.Curve.Count.ShouldBeGreaterThan(1);
+        result.Pump.Curve.Select(p => p.QM3h).ShouldBe(result.Pump.Curve.Select(p => p.QM3h).OrderBy(q => q));
         result.Issues.ShouldContain(i => i.Code == "pump.setChosen" && i.Level == Core.IssueLevel.Info, IssueText(result));
     }
 
