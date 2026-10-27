@@ -87,11 +87,22 @@ internal sealed class InputFieldController
     public bool TryWrite(List<string> errors)
     {
         ClearError();
+        return Write(_root, errors, reportErrors: true);
+    }
+
+    /// <summary>
+    /// Записать текущее значение в снимок JSON для предпроверки чертежа: без сообщений об ошибках и без подсветки,
+    /// неверный ввод пропускается — в снимок попадает прежнее значение из файла проекта.
+    /// </summary>
+    public void WriteSnapshot(JsonObject target) => _ = Write(target, null, reportErrors: false);
+
+    private bool Write(JsonObject target, List<string>? errors, bool reportErrors)
+    {
         var value = CurrentText();
         switch (_field.Kind)
         {
             case FieldKind.Bool:
-                SetValue(JsonValue.Create(_control is CheckBox { IsChecked: true }));
+                SetValue(target, JsonValue.Create(_control is CheckBox { IsChecked: true }));
                 return true;
 
             case FieldKind.Sprinkler:
@@ -102,16 +113,16 @@ internal sealed class InputFieldController
             case FieldKind.NullableNumber:
                 if (value.Length == 0)
                 {
-                    RemoveValue();
+                    RemoveValue(target);
                     return true;
                 }
 
                 if (!TryParseDouble(value, out var number))
                 {
-                    return Fail(errors, "ожидается число, введено «" + value + "».");
+                    return reportErrors && Fail(errors!, "ожидается число, введено «" + value + "».");
                 }
 
-                SetValue(JsonValue.Create(number));
+                SetValue(target, JsonValue.Create(number));
                 return true;
 
             case FieldKind.Int:
@@ -120,16 +131,16 @@ internal sealed class InputFieldController
             case FieldKind.ChoiceInt:
                 if (value.Length == 0)
                 {
-                    RemoveValue();
+                    RemoveValue(target);
                     return true;
                 }
 
                 if (!TryParseInt(value, out var integer))
                 {
-                    return Fail(errors, "ожидается целое число, введено «" + value + "».");
+                    return reportErrors && Fail(errors!, "ожидается целое число, введено «" + value + "».");
                 }
 
-                SetValue(JsonValue.Create(integer));
+                SetValue(target, JsonValue.Create(integer));
                 return true;
 
             default:
@@ -137,14 +148,14 @@ internal sealed class InputFieldController
                 {
                     if (_field.Required)
                     {
-                        return Fail(errors, "поле обязательно: без него проект не откроется.");
+                        return !reportErrors || Fail(errors!, "поле обязательно: без него проект не откроется.");
                     }
 
-                    RemoveValue();
+                    RemoveValue(target);
                     return true;
                 }
 
-                SetValue(JsonValue.Create(value));
+                SetValue(target, JsonValue.Create(value));
                 return true;
         }
     }
@@ -658,15 +669,16 @@ internal sealed class InputFieldController
             : (combo.SelectedItem as ComboItem)?.Value ?? "";
     }
 
-    private void SetValue(JsonNode? node) => InputJson.EnsureObject(_root, _field.Path)[_field.Key] = node;
+    private void SetValue(JsonObject target, JsonNode? node) =>
+        InputJson.EnsureObject(target, _field.Path)[_field.Key] = node;
 
-    private void RemoveValue()
+    private void RemoveValue(JsonObject target)
     {
-        var target = InputJson.FindObject(_root, _field.Path);
-        target?.Remove(_field.Key);
-        if (target is { Count: 0 } && _field.Path.Length > 0)
+        var node = InputJson.FindObject(target, _field.Path);
+        node?.Remove(_field.Key);
+        if (node is { Count: 0 } && _field.Path.Length > 0)
         {
-            InputJson.RemovePath(_root, _field.Path);
+            InputJson.RemovePath(target, _field.Path);
         }
     }
 

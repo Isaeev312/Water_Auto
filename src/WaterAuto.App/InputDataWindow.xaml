@@ -33,13 +33,19 @@
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock x:Name="ProjectPathText" Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
                                TextTrimming="CharacterEllipsis" />
-                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Только данные объекта и решения проектировщика: нормы и каталоги программа берёт из data/, пустое поле — значение по умолчанию. Сохранение — в файл *.waproj." />
+                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Только данные объекта и решения проектировщика: нормы и каталоги — из data/, пустое поле — значение по умолчанию." />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Margin="24,0,0,0" VerticalAlignment="Top" HorizontalAlignment="Right">
                     <TextBlock Style="{StaticResource Text.Label}" HorizontalAlignment="Right" Text="Расчёт по нормам" />
                     <TextBlock x:Name="NormsText" Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                               MaxWidth="280" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap" />
+                    <CheckBox x:Name="AdvancedToggle" Margin="0,12,0,0" HorizontalAlignment="Right"
+                              Content="Показывать дополнительные параметры"
+                              ToolTip="Экспертные настройки сортамента, колец и обвязки насосной. По умолчанию мастер спрашивает только стандартные данные объекта."
+                              Checked="OnAdvancedToggled" Unchecked="OnAdvancedToggled" />
+                    <TextBlock x:Name="VisibleCountText" Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
                                MaxWidth="280" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>

@@ -32,6 +32,9 @@ internal sealed class InputSources
     /// <summary>Найдена и прочитана папка data/norms.</summary>
     public bool HasNorms { get; private set; }
 
+    /// <summary>Путь к data/norms для проверки чертежа; null — папка не найдена (проверка работает без каталога).</summary>
+    public string? NormsDirectory { get; private set; }
+
     /// <summary>Часть списков загрузить не удалось (файл повреждён, нет прав); окно показывает предупреждение.</summary>
     public string? LoadError { get; private set; }
 
@@ -85,6 +88,7 @@ internal sealed class InputSources
                 if (Directory.Exists(norms))
                 {
                     sources.HasNorms = true;
+                    sources.NormsDirectory = norms;
                     sources.RoomGroups = TryList(() => InputCatalog.RoomGroups(norms), ref error);
                     sources.Sprinklers = TryList(() => InputCatalog.Sprinklers(norms), ref error);
                     sources.PipeStandards = TryList(() => InputCatalog.PipeStandards(norms), ref error);

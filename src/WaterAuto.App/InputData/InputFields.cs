@@ -26,6 +26,8 @@ internal sealed record ChoiceOption(string Value, string Label);
 /// <summary>
 /// Поле мастера: путь до объекта JSON проекта (например, «design.pumpRoom»; пустая строка — корень файла),
 /// ключ в этом объекте, подпись, тип контрола и подсказка под полем. Ключи и пути повторяют прежнее окно 1:1.
+/// <see cref="Advanced"/> — экспертное/необязательное поле: в режиме «только стандартные данные» скрыто,
+/// но значение из файла проекта сохраняется и не теряется.
 /// </summary>
 internal sealed record FieldSpec(
     string Path,
@@ -34,14 +36,18 @@ internal sealed record FieldSpec(
     FieldKind Kind,
     ChoiceOption[]? Options = null,
     string? Hint = null,
-    bool Required = false)
+    bool Required = false,
+    bool Advanced = false)
 {
     /// <summary>Уникальный идентификатор поля в окне: «путь|ключ».</summary>
     public string Id => Path + "|" + Key;
 }
 
-/// <summary>Карточка раздела: заголовок, поля и необязательная информационная строка внизу.</summary>
-internal sealed record CardSpec(string Title, FieldSpec[] Fields, string? Info = null);
+/// <summary>
+/// Карточка раздела: заголовок, поля и необязательная информационная строка внизу.
+/// <see cref="Advanced"/> — карточка целиком состоит из экспертных параметров и скрыта в простом режиме.
+/// </summary>
+internal sealed record CardSpec(string Title, FieldSpec[] Fields, string? Info = null, bool Advanced = false);
 
 /// <summary>
 /// Раздел мастера: пункт навигации, карточки и — для необязательных объектов (ВПВ, резервуар) —
@@ -57,7 +63,8 @@ internal sealed record SectionSpec(
 
 /// <summary>
 /// Полный список разделов и полей мастера исходных данных. Здесь только структура ввода: величины норм и каталогов
-/// в код не зашиты, их список приходит из data/ через <see cref="InputSources"/>.
+/// в код не зашиты, их список приходит из data/ через <see cref="InputSources"/>. Флаг <see cref="FieldSpec.Advanced"/>
+/// отделяет стандартные данные объекта (их вводит пользователь) от экспертных настроек, которые обычно не трогают.
 /// </summary>
 internal static class InputFields
 {
@@ -138,8 +145,8 @@ internal static class InputFields
                             Hint: "Титульный лист, основная надпись и имена файлов выпуска."),
                         new FieldSpec("", "drawing", "Чертёж плана (DWG/DXF)", FieldKind.DrawingPath, Required: true,
                             Hint: "Путь от папки проекта; слои ПТ_ по соглашению о слоях (README, разд. 7)."),
-                        new FieldSpec("", "font", "Шрифт выпуска", FieldKind.Text,
-                            Hint: "Единый шрифт записки, спецификаций и надписей на чертежах."),
+                        new FieldSpec("", "font", "Шрифт выпуска", FieldKind.Text, Advanced: true,
+                            Hint: "Единый шрифт записки, спецификаций и надписей на чертежах; пусто — шрифт по умолчанию."),
                     ],
                     "Чертёж хранится относительным путём, поэтому папку проекта можно переносить вместе с чертежом. " +
                     "Читаются слои ПТ_КОНТУР, ПТ_КОЛОННЫ, ПТ_БАЛКИ, ПТ_КОРОБА, ПТ_ЗАПРЕТ и ПТ_ВВОД."),
@@ -155,10 +162,13 @@ internal static class InputFields
                             Options: ConstructionClasses,
                             Hint: "Влияет на применимость спринклерной установки (прил. В СП 485)."),
                         new FieldSpec("design", "maxSpacing", "Шаг оросителей строже табл. 6.1, м", FieldKind.NullableNumber,
+                            Advanced: true,
                             Hint: "Требование заказчика строже нормы; пусто — шаг по табл. 6.1."),
                         new FieldSpec("design", "roomHeight", "Высота помещения, м", FieldKind.NullableNumber,
-                            Hint: "Для табл. 6.3 и примечания 3 к табл. 6.2; пусто — до 10 м."),
+                            Hint: "Для табл. 6.3 и примечания 3 к табл. 6.2; пусто — до 10 м. " +
+                                "Можно заполнить по чертежу в карточке «Проверка чертежа»."),
                         new FieldSpec("design", "storageHeight", "Высота складирования, м", FieldKind.NullableNumber,
+                            Advanced: true,
                             Hint: "Только для складов (группы 5–7, табл. 6.2)."),
                         new FieldSpec("design", "floorElevation", "Отметка пола этажа, м", FieldKind.NullableNumber,
                             Hint: "Для условия п. 6.2.14; пусто — условие считается выполненным."),
@@ -169,11 +179,11 @@ internal static class InputFields
                 new CardSpec("Ороситель",
                     [
                         new FieldSpec("design", "sprinkler", "Ороситель из каталога", FieldKind.Sprinkler),
-                        new FieldSpec("design", "sprinklerName", "Наименование оросителя", FieldKind.Text,
+                        new FieldSpec("design", "sprinklerName", "Наименование оросителя", FieldKind.Text, Advanced: true,
                             Hint: "Тип изделия для спецификации, например «Ороситель спринклерный водяной»."),
-                        new FieldSpec("design", "sprinklerModel", "Модель оросителя", FieldKind.Text,
+                        new FieldSpec("design", "sprinklerModel", "Модель оросителя", FieldKind.Text, Advanced: true,
                             Hint: "Обозначение по паспорту изделия; заполняется при выборе модели из каталога."),
-                        new FieldSpec("design", "sprinklerK", "K оросителя, л/(с·МПа^0,5)", FieldKind.Number,
+                        new FieldSpec("design", "sprinklerK", "K оросителя, л/(с·МПа^0,5)", FieldKind.Number, Advanced: true,
                             Hint: "По паспорту изделия; 0 — автоподбор модели из data/catalog/sprinklers.json."),
                         new FieldSpec("design", "sprinklerDeflector", "Положение розетки оросителя", FieldKind.Choice,
                             Options: Deflectors,
@@ -190,35 +200,40 @@ internal static class InputFields
                         new FieldSpec("design", "pipeStandard", "Стандарт труб (до DN из поля ниже)", FieldKind.PipeStandard,
                             Hint: "Список стандартов — из data/catalog/documents.json."),
                         new FieldSpec("design", "pipeStandardLarge", "Стандарт труб начиная с DN", FieldKind.PipeStandard,
+                            Advanced: true,
                             Hint: "Пусто — все трубы по первому стандарту."),
                         new FieldSpec("design", "pipeStandardLargeFromDn", "DN, с которого действует второй стандарт", FieldKind.Dn,
+                            Advanced: true,
                             Hint: "Граница двух стандартов в сортаменте."),
                         new FieldSpec("design", "designVelocity", "Скорость подбора диаметров по Б.5, м/с",
-                            FieldKind.NullableNumber,
+                            FieldKind.NullableNumber, Advanced: true,
                             Hint: "Пусто — значение defaultDesignVelocity из data/catalog/pipe_sizes.json."),
-                        new FieldSpec("design", "hangerRodLength", "Длина шпильки подвеса, мм", FieldKind.Number,
-                            Hint: "От перекрытия до хомута."),
+                        new FieldSpec("design", "hangerRodLength", "Длина шпильки подвеса, мм", FieldKind.Number, Advanced: true,
+                            Hint: "От перекрытия до хомута; по ней карточка проверки чертежа считает отметку трубопроводов."),
                     ],
                     "Диаметры по сортаменту подбираются по скорости из формулы Б.5; стандарты труб и фасонных частей " +
                     "берутся из ведомости документов data/catalog, а не задаются в коде."),
                 new CardSpec("Подводящий трубопровод и сеть",
                     [
                         new FieldSpec("design", "supplyLength", "Длина подводящего трубопровода, м", FieldKind.Number,
-                            Hint: "От насоса до точки ввода ПТ_ВВОД."),
-                        new FieldSpec("design", "supplyDn", "DN подводящего трубопровода", FieldKind.Dn,
+                            Hint: "От насоса до точки ввода ПТ_ВВОД. Можно заполнить по чертежу в карточке «Проверка чертежа»."),
+                        new FieldSpec("design", "supplyDn", "DN подводящего трубопровода", FieldKind.Dn, Advanced: true,
                             Hint: "Проверяется по предельной скорости (п. 6.7.1.37)."),
-                        new FieldSpec("design", "inletReference", "Ссылка в выноске у ввода", FieldKind.Text,
+                        new FieldSpec("design", "inletReference", "Ссылка в выноске у ввода", FieldKind.Text, Advanced: true,
                             Hint: "Текст у точки ввода на плане."),
                         new FieldSpec("design", "pipeElevation", "Отметка трубопроводов, м", FieldKind.Number,
-                            Hint: "Аксонометрия и отметки на плане."),
+                            Hint: "Аксонометрия и отметки на плане. Можно заполнить по чертежу в карточке «Проверка чертежа»."),
                         new FieldSpec("design", "dictatingAboveAxis", "Высота диктующего оросителя над осью насоса H, м",
-                            FieldKind.Number, Hint: "Для требуемого напора насоса (Б.23–Б.30)."),
-                        new FieldSpec("design", "ring", "Кольцевой питающий трубопровод", FieldKind.Bool,
+                            FieldKind.Number,
+                            Hint: "Для требуемого напора насоса (Б.23–Б.30). Можно заполнить по чертежу в карточке «Проверка чертежа»."),
+                        new FieldSpec("design", "ring", "Кольцевой питающий трубопровод", FieldKind.Bool, Advanced: true,
                             Hint: "Расчёт по Б.1.2.16.1: 50 % расхода на полукольцо."),
                         new FieldSpec("design", "ringValvesClosed", "На кольце нормально закрытые разделительные задвижки",
-                            FieldKind.Bool, Hint: "Тогда каждая полуветвь считается на 100 % расхода (Б.1.2.16.1)."),
+                            FieldKind.Bool, Advanced: true,
+                            Hint: "Тогда каждая полуветвь считается на 100 % расхода (Б.1.2.16.1)."),
                         new FieldSpec("design", "maxSprinklersPerBranch", "Предел оросителей на ветви (решение проекта)",
-                            FieldKind.NullableInt, Hint: "СП 485 предела не задаёт; пусто — без проверки."),
+                            FieldKind.NullableInt, Advanced: true,
+                            Hint: "СП 485 предела не задаёт; пусто — без проверки."),
                     ]),
             ]),
         new("Насосная станция",
@@ -238,16 +253,18 @@ internal static class InputFields
                         new FieldSpec("design.pumpRoom", "groundElevation", "Отметка уровня земли (отмостки), м", FieldKind.Number,
                             Hint: "Для патрубков ГМ на фасаде (п. 6.10.18)."),
                         new FieldSpec("design.pumpRoom", "inletDepth", "Заглубление ввода от уровня земли, м", FieldKind.Number),
-                        new FieldSpec("design.pumpRoom", "height", "Высота помещения до низа перекрытия, м", FieldKind.Number),
-                        new FieldSpec("design.pumpRoom", "wallThickness", "Толщина стен, м", FieldKind.Number),
+                        new FieldSpec("design.pumpRoom", "height", "Высота помещения до низа перекрытия, м", FieldKind.Number,
+                            Hint: "Можно заполнить по чертежу в карточке «Проверка чертежа»."),
+                        new FieldSpec("design.pumpRoom", "wallThickness", "Толщина стен, м", FieldKind.Number, Advanced: true),
                         new FieldSpec("design.pumpRoom", "underground", "Помещение подземное или заглублённое", FieldKind.Bool,
                             Hint: "П. 6.10.23: не менее двух дренажных насосов."),
-                        new FieldSpec("design.pumpRoom", "pitSize", "Приямок в плане, м", FieldKind.Number),
-                        new FieldSpec("design.pumpRoom", "pitDepth", "Глубина приямка, м", FieldKind.Number),
+                        new FieldSpec("design.pumpRoom", "pitSize", "Приямок в плане, м", FieldKind.Number, Advanced: true),
+                        new FieldSpec("design.pumpRoom", "pitDepth", "Глубина приямка, м", FieldKind.Number, Advanced: true),
                         new FieldSpec("design.pumpRoom", "inletRouteElevation", "Отметка трассы ввода, м",
-                            FieldKind.NullableNumber, Hint: "Пусто — под перекрытием на отметке трубопроводов АУП."),
+                            FieldKind.NullableNumber, Advanced: true,
+                            Hint: "Пусто — под перекрытием на отметке трубопроводов АУП."),
                         new FieldSpec("design.pumpRoom", "inletRouteClearance", "Отступ трассы ввода от колонн, м",
-                            FieldKind.Number),
+                            FieldKind.Number, Advanced: true),
                     ],
                     "Число вводов и выпусков задаётся точками на чертеже (слои ПТ_НС_ВВОД и ПТ_НС_ВЫПУСК); программа " +
                     "проверит пп. 6.10.27–6.10.28. DN обвязки подбирается по скорости (п. 6.7.1.37)."),
@@ -265,6 +282,10 @@ internal static class InputFields
                             FieldKind.Choice, Options: HazardClasses),
                         new FieldSpec("design.hydrants", "volume", "Объём здания (пожарного отсека), тыс. м³", FieldKind.Number),
                         new FieldSpec("design.hydrants", "buildingHeight", "Высота здания, м", FieldKind.Number),
+                        new FieldSpec("design.hydrants", "isParking", "Отапливаемая автостоянка закрытого типа",
+                            FieldKind.Bool, Hint: "П. 6.4 СНиП 21-02-99* (ADR 0010)."),
+                        new FieldSpec("design.hydrants", "zh1Row", "Строка табл. Ж.1 СН КР 40-04:2025", FieldKind.HydrantRow,
+                            Hint: "Для жилых и общественных зданий; иначе не применяется."),
                     ],
                     "Признаки здания нужны для выбора расхода воды на внутреннее пожаротушение (табл. Ж.2, Ж.3)."),
                 new CardSpec("Пожарные краны и трубопровод",
@@ -281,17 +302,16 @@ internal static class InputFields
                         new FieldSpec("design.hydrants", "pipeLength", "Длина трубопровода до диктующего ПК, м",
                             FieldKind.Number),
                         new FieldSpec("design.hydrants", "pipeDn", "DN трубопровода до диктующего ПК", FieldKind.Dn),
-                        new FieldSpec("design.hydrants", "isParking", "Отапливаемая автостоянка закрытого типа",
-                            FieldKind.Bool, Hint: "П. 6.4 СНиП 21-02-99* (ADR 0010)."),
-                        new FieldSpec("design.hydrants", "zh1Row", "Строка табл. Ж.1 СН КР 40-04:2025", FieldKind.HydrantRow,
-                            Hint: "Для жилых и общественных зданий; иначе не применяется."),
                         new FieldSpec("design.hydrants", "extraJet", "Зал с массовым пребыванием людей (на одну струю больше)",
                             FieldKind.Bool, Hint: "П. 7.7."),
                         new FieldSpec("design.hydrants", "reach", "Радиус действия ПК для расстановки, м",
                             FieldKind.NullableNumber, Hint: "Пусто — рукав плюс радиус компактной струи (В-22)."),
                         new FieldSpec("design.hydrants", "place", "Расставлять краны на плане", FieldKind.Bool,
                             Hint: "Выключено — комплект в спецификации на один кран."),
-                    ]),
+                    ],
+                    "Подробные параметры диктующего крана обычно берутся из типового решения. " +
+                    "Пустое поле — расчёт по принятому пожарному крану и данным здания.",
+                    Advanced: true),
             ],
             OptionalPath: "design.hydrants",
             OptionalLabel: "Учитывать внутренний противопожарный водопровод (совмещённый с АУП)",
