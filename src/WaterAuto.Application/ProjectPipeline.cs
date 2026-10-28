@@ -11,7 +11,56 @@ using WaterAuto.Reports;
 
 namespace WaterAuto.Application;
 
-public sealed record PipelineResult(bool Success, IReadOnlyList<string> Files, IReadOnlyList<Issue> Issues, DesignResult? Design);
+public sealed record PipelineResult(
+    bool Success,
+    IReadOnlyList<string> Files,
+    IReadOnlyList<Issue> Issues,
+    DesignResult? Design,
+    PumpSetSummary? Pump = null,
+    PumpStationSummary? PumpRoom = null);
+
+/// <summary>
+/// Подобранная комплектная насосная установка (автоподбор или выбор вручную из каталога): обозначение, насос,
+/// количество основных и резервных, мощность, напор по кривой каталога при расчётной подаче, требуемые подача и напор
+/// и кривая Q–H одного насоса — для карточки и графика насосной.
+/// </summary>
+public sealed record PumpSetSummary(
+    string Designation,
+    string Pump,
+    int MainPumps,
+    int StandbyPumps,
+    double PowerKw,
+    double HeadAtDutyMeters,
+    string Maker,
+    double RequiredFlowM3h,
+    double RequiredHeadMeters,
+    IReadOnlyList<PumpCurvePoint> Curve);
+
+/// <summary>
+/// Помещение насосной станции из чертежа и габариты подобранной установки — для карточки главного окна:
+/// контур помещения в плане (длина, ширина, площадь), разметка вводов/выпусков/патрубков для мобильной техники
+/// и габариты гидравлической части, прибора управления и коллектора из каталога. Нормативных чисел здесь нет.
+/// Если помещения насосной в чертеже нет, <see cref="RoomId"/> и размеры равны null, счётчики — 0;
+/// если установка не подобрана, <see cref="SetDesignation"/> пуст, а габариты нулевые.
+/// </summary>
+public sealed record PumpStationSummary(
+    string? RoomId,
+    double? RoomLengthM,
+    double? RoomWidthM,
+    double? RoomAreaM2,
+    int Inlets,
+    int Outlets,
+    int TruckInlets,
+    string SetDesignation,
+    int MainPumps,
+    int StandbyPumps,
+    Footprint SetHydraulic,
+    Footprint SetCabinet,
+    int CollectorDn,
+    double CollectorAxisMm);
+
+/// <summary>Точка паспортной кривой насоса Q–H, м³/ч и м.</summary>
+public sealed record PumpCurvePoint(double QM3h, double HM);
 
 /// <summary>
 /// Сквозной расчёт по проекту (README §4): импорт чертежа → раскладка → трасса → проектный расчёт → ведомость
@@ -105,9 +154,12 @@ public static class ProjectPipeline
             new Length(design.SupplyLength),
             design.SupplyDn,
             new Pressure(design.InletPressure),
-            design.DesignVelocity,
+            design.DesignVelocity ?? DesignVelocityDefault(normsDir),
             design.RingValvesClosed,
-            pipeSizes);
+            pipeSizes,
+            // Диаметры по табл. Б.4, но участки со скоростью выше предела 6.7.1.37 увеличиваются автоматически:
+            // иначе на реальном проекте напор доходил до 193 м и насос не подбирался.
+            ResizeOverLimit: true);
         HydrantInput? hydrants = null;
         if (design.Hydrants is { } h)
         {
@@ -195,9 +247,35 @@ public static class ProjectPipeline
             materials.Coating);
 
         // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
-        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), new Pressure(design.InletPressure));
+        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
+
+        // Подбор комплектной установки по каталогу (Q, H) — до спецификации ПТ2.СО: количество насосов в выпуске должно
+        // совпадать с фактической установкой. Обозначение из проекта — выбор вручную; пусто — прежний автоподбор.
+        // Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — эти строки шаблона заменяются строкой установки.
+        var catalogSets = PumpCatalog.Sets(normsDir);
+        var roomData = PumpCatalog.Room(normsDir);
+        if (catalogSets.Count == 0)
+        {
+            issues.Add(new Issue("pump.catalogMissing", IssueLevel.Warning,
+                "Не найден каталог комплектных насосных установок (data/catalog/pump_sets_*.json): установка не подбирается, листы плана/разреза/аксонометрии насосной не выпускаются."));
+        }
+
+        if (roomData is null)
+        {
+            issues.Add(new Issue("pump.roomDataMissing", IssueLevel.Warning,
+                "Не найден data/catalog/pump_room.json: расстановка оборудования и обвязка насосной не строятся."));
+        }
+
+        var setChoice = ChoosePumpSet(design.PumpStation.SetDesignation, catalogSets, worst, File.Exists(stationSet), issues);
+        var pumpCount = setChoice?.Chosen is { } chosenForCount
+            ? chosenForCount.MainPumps + chosenForCount.StandbyPumps
+            : station.WorkingPumps + station.StandbyPumps;
+
+        // Жокей-насос: расход и уставки — решение проектировщика (В-07), норма их не задаёт. Данные не влияют на расчёт
+        // Q/H и спецификацию — только замечания и пояснительная записка; Error jockey.flow выпуск не останавливает.
+        issues.AddRange(JockeyIssues(design.Jockey));
         var stationTakeoff = new MaterialTakeoff([], []);
 
         // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
@@ -206,6 +284,29 @@ public static class ProjectPipeline
                 ? $"точка ввода {found.inlet.Name ?? (found.k + 1).ToString(CultureInfo.InvariantCulture)}"
                 : id)
             .ToList();
+        // Помещение насосной может быть задано зоной ПТ_ЗАПРЕТ с подписью «ПНС» (слой ПТ_НС не обязателен), но без точек
+        // вводов/выпусков: без них не проверяются 6.10.27/6.10.28 и не трассируется обвязка. Ставим условные точки по стенам
+        // с явным Info-замечанием — иначе пользователь получает только Error и неполный комплект.
+        if (plan.PumpRooms.Count > 0 && plan.PumpRooms[0] is { } autoRoom
+            && (autoRoom.Inlets.Count == 0 || autoRoom.Outlets.Count == 0))
+        {
+            var minSuction = (int)Need(norms, "sp485.p6_10_27.suctionLines").Values["minCount"]!.Value;
+            var inlets = autoRoom.Inlets.Count > 0 ? autoRoom.Inlets : AutoWallPoints(autoRoom.Outline, Math.Max(1, minSuction), 0.1);
+            var outlets = autoRoom.Outlets.Count > 0 ? autoRoom.Outlets : AutoWallPoints(autoRoom.Outline, Math.Max(1, sections.Count), 0.5);
+            plan = plan with { PumpRooms = [autoRoom with { Inlets = inlets, Outlets = outlets }, .. plan.PumpRooms.Skip(1)] };
+            if (autoRoom.Inlets.Count == 0)
+            {
+                issues.Add(new Issue("pumpRoom.inletsAuto", IssueLevel.Info,
+                    $"В помещении насосной {autoRoom.Id} нет вводов на слое ПТ_НС_ВВОД — поставлено {inlets.Count} условных точек на стенах; проверьте привязку к сети (п. 6.10.27).", autoRoom.Id));
+            }
+
+            if (autoRoom.Outlets.Count == 0)
+            {
+                issues.Add(new Issue("pumpRoom.outletsAuto", IssueLevel.Info,
+                    $"В помещении насосной {autoRoom.Id} нет выпусков на слое ПТ_НС_ВЫПУСК — поставлено {outlets.Count} условных точек на стенах; проверьте привязку к сети секций (п. 6.10.28).", autoRoom.Id));
+            }
+        }
+
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -225,34 +326,44 @@ public static class ProjectPipeline
                         ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                         ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
                     },
-                    new Dictionary<string, int> { ["pumps"] = station.WorkingPumps + station.StandbyPumps, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = Math.Max(plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0, (int)(norms.Find("sp485.p6_10_27.suctionLines")?.Values["minCount"] ?? 1)) })],
+                    new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 })],
             };
         }
 
-        // Подбор комплектной установки по каталогу (Q, H); насосы, прибор управления, обвязка с арматурой и КИП входят в неё —
-        // эти строки шаблона заменяются строкой установки.
-        var catalogSets = PumpCatalog.Sets(normsDir);
-        var roomData = PumpCatalog.Room(normsDir);
-        PumpSetChoice? setChoice = null;
-        if (catalogSets.Count > 0 && stationTakeoff.Items.Count > 0)
+        // Диагностика неполного выпуска: молча пропускать листы и данные нельзя (аудит PD-14, PS-6/PS-7).
+        if (File.Exists(stationSet) && plan.PumpRooms.Count == 0)
         {
-            setChoice = PumpSetSelection.Choose(catalogSets, worst.PumpFlow.LitersPerSecond * 3.6, worst.PumpHead.Meters);
-            issues.AddRange(setChoice.Issues);
-            if (setChoice.Chosen is { } set)
-            {
-                string[] covered = ["pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD"];
-                var row = new TakeoffItem(
-                    TakeoffGroup.PumpStation,
-                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Установка пожаротушения {set.Designation}: {set.MainPumps} основн. + {set.StandbyPumps} резервн. насос {set.Pump}, P2 = {set.PowerKw:0.##} кВт, прибор управления Control MX-II, обвязка с арматурой и КИП; H = {setChoice.HeadAtDuty:0.0} м при Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч"),
-                    roomData?.SetNote ?? "по каталогу изготовителя",
-                    1,
-                    "компл.",
-                    $"коллекторы DN{set.CollectorDn}; или аналог",
-                    Supplier: set.Maker,
-                    Role: "pumpSet");
-                stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !covered.Contains(i.Role))] };
-                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, $"Подобрана установка {set.Designation}: напор по каталогу {setChoice.HeadAtDuty:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем."));
-            }
+            issues.Add(new Issue("pumpRoom.missing", IssueLevel.Warning,
+                "В чертеже нет помещения насосной (слой ПТ_НС): листы насосной не выпускаются, ПТ2.СО — без труб обвязки, креплений и покрытия."));
+        }
+
+        if (!File.Exists(stationSet))
+        {
+            issues.Add(new Issue("pump.templateMissing", IssueLevel.Warning,
+                "Не найден шаблон спецификации насосной (data/catalog/pump_station.json): ПТ2.СО не выпускается."));
+        }
+
+        if (plan.PumpRooms.Count > 0 && plan.PumpRooms[0].Inlets.Count == 0)
+        {
+            issues.Add(new Issue("pumpRoom.noInlet", IssueLevel.Warning,
+                $"В помещении насосной {plan.PumpRooms[0].Id} нет вводов на слое ПТ_НС_ВВОД: обвязка и трасса ввода не трассируются.", plan.PumpRooms[0].Id));
+        }
+
+        // Строка комплектной установки в ПТ2.СО: насосы, прибор управления и обвязка с арматурой входят в неё — строки
+        // шаблона заменяются (при автоподборе и при выборе вручную из каталога одинаково).
+        if (setChoice?.Chosen is { } chosenSetRow && stationTakeoff.Items.Count > 0)
+        {
+            string[] covered = ["pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD"];
+            var row = new TakeoffItem(
+                TakeoffGroup.PumpStation,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Установка пожаротушения {chosenSetRow.Designation}: {chosenSetRow.MainPumps} основн. + {chosenSetRow.StandbyPumps} резервн. насос {chosenSetRow.Pump}, P2 = {chosenSetRow.PowerKw:0.##} кВт, прибор управления Control MX-II, обвязка с арматурой и КИП; H = {setChoice.HeadAtDuty:0.0} м при Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч"),
+                roomData?.SetNote ?? "по каталогу изготовителя",
+                1,
+                "компл.",
+                $"коллекторы DN{chosenSetRow.CollectorDn}; или аналог",
+                Supplier: chosenSetRow.Maker,
+                Role: "pumpSet");
+            stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !covered.Contains(i.Role))] };
         }
 
         // Расстановка оборудования в помещении насосной (слой ПТ_НС) с проходами п. 6.10.16.
@@ -273,7 +384,7 @@ public static class ProjectPipeline
         PipingResult? piping = null;
         if (roomPlan is { Items.Count: > 0 } && plan.PumpRooms[0] is { Inlet: { } stationInlet } pumpRoom && PumpCatalog.Piping(normsDir) is { } pr && setChoice?.Chosen is { } pipedSet)
         {
-            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var set = roomPlan.Items.First(i => i.Kind == StationItemKind.PumpSet);
             var units = roomPlan.Items.Where(i => i.Kind == StationItemKind.ControlUnit).ToList();
 
@@ -288,7 +399,20 @@ public static class ProjectPipeline
             var pr0 = design.PumpRoom;
             var inletElev = (pr0.GroundElevation - pr0.InletDepth - pr0.FloorElevation) * 1000;
             var pipeElev = design.PipeElevation > 0 ? (design.PipeElevation - pr0.FloorElevation) * 1000 : pr.BracketHeight;
-            var truckElev = Math.Min((pr0.GroundElevation - pr0.FloorElevation + (norms.Find("sp485.p6_10_18.truckInletPlacement")?.Values["height"] ?? 1.2)) * 1000, (pr0.Height * 1000) - 200);
+            var truckRule = Need(norms, "sp485.p6_10_18.truckInletPlacement");
+            var truckHeight = truckRule.Values["height"]!.Value;
+            var truckTolerance = truckRule.Values["heightTolerance"]!.Value;
+            var truckElev = (pr0.GroundElevation - pr0.FloorElevation + truckHeight) * 1000;
+            var truckCeiling = (pr0.Height * 1000) - 200;
+            if (truckElev > truckCeiling)
+            {
+                // Молча урезать высоту нельзя: ось должна быть на нормативной высоте от отмостки (п. 6.10.18).
+                issues.Add(new Issue("pumpRoom.truckElevation", IssueLevel.Error,
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Патрубки ГМ не размещаются на нормативной высоте: ось {truckHeight:0.00} м над отмосткой (допуск ±{truckTolerance:0.00} м) — это {truckElev / 1000:0.00} м от пола насосной, а до низа перекрытия {pr0.Height:0.00} м (программа оставляет 0,2 м). Увеличьте высоту помещения или заглубление (п. 6.10.18)."),
+                    pumpRoom.Id, "6.10.18"));
+                truckElev = truckCeiling;
+            }
+
             var dnS = station.Suction.Pipe.Dn;
             var dnD = design.SupplyDn;
             var outerS = series.Pick(dnS)?.OuterDiameterMm ?? dnS;
@@ -345,6 +469,7 @@ public static class ProjectPipeline
 
             piping = PumpRoomPiping.Route(pumpRoom.Outline, requests, new PipingRules(pr.WallOffset, pr.BracketHeight, pr.LevelGap));
             issues.AddRange(piping.Issues);
+            issues.AddRange(series.Issues);
             var ruP = CultureInfo.GetCultureInfo("ru-RU");
             var elbowStandard = design.FittingStandards.TryGetValue("Отвод", out var es) ? es : null;
             var pipeRows = piping.Runs.GroupBy(r => r.Dn).OrderBy(g => g.Key).SelectMany(g =>
@@ -373,8 +498,9 @@ public static class ProjectPipeline
                     return new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruP, $"Гильза стальная для прохода трубы DN{g.Key} через стену: Ø не менее {outer + sleeveExtra:0} мм, L = {wallT:0} мм"), "по месту", g.Count(), "шт.", "закладная деталь; заделка — эластичным негорючим материалом", Role: "sleeve");
                 });
             var extraRows = new List<TakeoffItem>(sleeveRows);
-            if (design.PumpRoom.Underground && norms.Find("sp485.p6_10_23.drainage")?.Values["drainPumpsUnderground"] is { } drains)
+            if (design.PumpRoom.Underground)
             {
+                var drains = (int)Need(norms, "sp485.p6_10_23.drainage").Values["drainPumpsUnderground"]!.Value;
                 extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStation, "Насос дренажный погружной с поплавковым выключателем", "марка — по каталогу", drains, "шт.", "в приямке; I категория электроснабжения (п. 6.10.23)", Role: "drainPump"));
             }
 
@@ -420,7 +546,7 @@ public static class ProjectPipeline
 
             if (inletRoutes.Count > 0)
             {
-                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
 
                 // Отметка трассы ввода без коллизий с сетью АУП: задана в проекте — проверяется; не задана — ниже сети на
                 // наибольшее нужное расхождение на пересечениях (полусумма наружных диаметров + 20 мм), с округлением вниз до 50 мм.
@@ -443,12 +569,13 @@ public static class ProjectPipeline
                 issues.AddRange(collisions);
                 if (collisions.Count > 0)
                 {
-                    issues.Add(new Issue("inlet.elevation", IssueLevel.Warning, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса ввода на {inletRouteZ:+0.000} пересекает сеть АУП ({collisions.Count} мест): без коллизий — не выше {clear:+0.000} (pumpRoom.inletRouteElevation).")));
+                    issues.Add(new Issue("inlet.elevation", IssueLevel.Warning, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса ввода на {Elev(inletRouteZ)} пересекает сеть АУП ({collisions.Count} мест): без коллизий — не выше {Elev(clear)} (pumpRoom.inletRouteElevation).")));
                 }
 
 
                 var dnI = station.Suction.Pipe.Dn;
                 var spI = seriesI.Pick(dnI);
+                issues.AddRange(seriesI.Issues);
                 var ruI = CultureInfo.GetCultureInfo("ru-RU");
                 // Подъём у ввода в здание и опуск у насосной — вертикали и по два отвода на каждую.
                 var rise = Math.Abs(inletRouteZ - inletWallZ);
@@ -502,6 +629,13 @@ public static class ProjectPipeline
             issues.AddRange(StationLines.Check(norms, checkedRoom.Inlets.Count, checkedRoom.Outlets.Count, sections.Count, hydrantPoints.Count).Issues);
         }
 
+        // Ошибка насосной (нет подходящей установки, нет сортамента труб, не хватает вводов/выпусков) останавливает выпуск:
+        // иначе ПТ2.СО/схема уходят в работу без насоса или с фиктивным DN0 (аудит PC-5/PC-6).
+        if (issues.Any(i => i.Level == IssueLevel.Error && i.Code.StartsWith("pump", StringComparison.Ordinal)))
+        {
+            return Stop();
+        }
+
         var hydrantSet = HydrantEquipment.PathFor(normsDir);
         if (hydrants is not null && File.Exists(hydrantSet))
         {
@@ -540,7 +674,7 @@ public static class ProjectPipeline
             SheetStamp(project, "Аксонометр", "Аксонометрическая схема трубопроводов"),
             new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers)));
         // Принципиальная схема насосной станции (лист основного комплекта).
-        var fromTank = design.InletPressure < (norms.Find("sp485.p6_9_12.minNetworkPressure")?.Values["pressure"] ?? 0);
+        var fromTank = design.InletPressure < Need(norms, "sp485.p6_9_12.minNetworkPressure").Values["pressure"]!.Value;
         Write(outDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
             p,
             new PumpSchemeData(
@@ -563,14 +697,19 @@ public static class ProjectPipeline
                     "Номера позиций — по спецификации насосной станции ПТ2.СО; фланцы и крепёж — по месту (ГОСТ 21.601, п. 9.4).",
                 ],
                 schemePositions,
-                sections),
+                sections,
+                Inlets: plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 1),
             SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
             project.Font));
         // План насосной: оборудование по расстановке, номера позиций ПТ2.СО, принятые проходы и допущения.
         if (roomPlan is { Items.Count: > 0 })
         {
             int? PosOf(string role) => schemePositions.TryGetValue(role, out var n) ? n : null;
-            var board = (norms.Find("sp485.p6_10_16.passages")?.Values["switchboard"] ?? 0) * 1000;
+            if (piping is null)
+            {
+                issues.Add(new Issue("pump.pipingMissing", IssueLevel.Warning, "Трассы обвязки не построены (нет ввода в насосную или правил прокладки в data/catalog/pump_room.json): лист «План обвязки насосной станции» не выпускается.", roomPlan.Room.Id));
+            }
+            var board = Need(norms, "sp485.p6_10_16.passages").Values["switchboard"]!.Value * 1000;
             var equipment = roomPlan.Items.Select(i => new PumpRoomEquipment(
                 i.Label, i.X0, i.Y0, i.X1, i.Y1,
                 i.Kind switch
@@ -593,10 +732,11 @@ public static class ProjectPipeline
             var pr1 = design.PumpRoom;
             var features = PumpRoomFeatures.Build(roomPlan.Room.Outline, roomPlan.Items, roomPlan.Room.Door, pr1.PitSize * 1000, PumpCatalog.PipingExtras(normsDir).FoundationMargin);
             var sleeveExtraD = PumpCatalog.PipingExtras(normsDir).SleeveExtra;
-            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var sleeves = (piping?.Runs ?? [])
                 .SelectMany(r => new[] { r.Path[0], r.Path[^1] }.Where(pt => IsWall(roomPlan.Room.Outline, pt)).Select(pt => (pt, (seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD, $"гильза Ø{(seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD:0}")))
                 .ToList();
+            issues.AddRange(seriesD.Issues);
             var valves = new List<(PlanPoint, double, string, int?)>();
             foreach (var r in piping?.Runs ?? [])
             {
@@ -638,8 +778,8 @@ public static class ProjectPipeline
                 Foundation = features.Foundation,
                 Sleeves = sleeves,
                 WallMarks = [
-                    .. plan.PumpRooms[0].Inlets.Select((wi, k) => (wi, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод {k + 1} DN{station.Suction.Pipe.Dn}, {(pr1.GroundElevation - pr1.InletDepth):+0.000}"))),
-                    .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Выпуск, секция {k + 1}, {design.PipeElevation:+0.000}"))),
+                    .. plan.PumpRooms[0].Inlets.Select((wi, k) => (wi, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод {k + 1} DN{station.Suction.Pipe.Dn}, {Elev(pr1.GroundElevation - pr1.InletDepth)}"))),
+                    .. plan.PumpRooms[0].Outlets.Select((o, k) => (o, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Выпуск, секция {k + 1}, {Elev(design.PipeElevation)}"))),
                     .. (piping?.Runs ?? []).Where(r => r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal)).Select(r => (r.Path[0], $"ГМ-{station.TruckInletDn}")),
                 ],
             };
@@ -651,13 +791,15 @@ public static class ProjectPipeline
                 .. piping is null ? Array.Empty<string>() : [$"Отступы от стен и прокладка на кронштейнах — по рекомендациям: {PumpCatalog.Piping(normsDir)!.Value.Source}"],
                 "Номера позиций — по спецификации ПТ2.СО.",
             ];
-            Write(outDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
-                p,
-                roomDrawing with
-                {
-                    Notes = pipingNotes,
-                    Piping = true,
-                    Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{r.Dn} {(r.RunHeightMm / 1000) + pr1.FloorElevation:+0.000}"), r.Path)
+            if (piping is not null)
+            {
+                Write(outDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
+                    p,
+                    roomDrawing with
+                    {
+                        Notes = pipingNotes,
+                        Piping = true,
+                        Pipes = [.. (piping?.Runs ?? []).Select(r => new PumpRoomPipe(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{r.Dn} {Elev((r.RunHeightMm / 1000) + pr1.FloorElevation)}"), r.Path)
                     {
                         Height = r.RunHeightMm / 1000,
                         // Стояки — где отметка конца отличается от отметки прокладки (подъём к патрубку, опуск у стены).
@@ -666,10 +808,12 @@ public static class ProjectPipeline
                             .. Math.Abs(r.ToHeightMm - r.RunHeightMm) > 1 ? new[] { (r.Path[^1], (Math.Max(r.ToHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation, (Math.Min(r.ToHeightMm, r.RunHeightMm) / 1000) + pr1.FloorElevation) } : [],
                         ],
                     })],
-                    Valves = valves,
-                },
+                        Valves = valves,
+                    },
                 SheetStamp(project, "План обвязки", "План обвязки насосной станции") with { Name = "План обвязки насосной станции" },
                 project.Font));
+            }
+
             // Разрез 1-1 вдоль X: оборудование по высоте (установка — на фундаменте 150 мм), трубы на отметках с подъёмами и опусками.
             const double foundationH = 0.15;
             var rv = roomPlan.Room.Outline.Vertices;
@@ -746,7 +890,7 @@ public static class ProjectPipeline
                     sectionPipes,
                     [
                         "Разрез — вид вдоль помещения насосной; все трубы спроецированы на плоскость разреза, отметки — оси труб.",
-                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод — на отметке {pr1.GroundElevation - pr1.InletDepth:+0.000} ({pr1.InletDepth:0.0} м от уровня земли {pr1.GroundElevation:+0.000}); трубопроводы АУП — на {design.PipeElevation:+0.000}."),
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод — на отметке {Elev(pr1.GroundElevation - pr1.InletDepth)} ({pr1.InletDepth:0.0} м от уровня земли {Elev(pr1.GroundElevation)}); трубопроводы АУП — на {Elev(design.PipeElevation)}."),
                         "Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:200 (п. 6.10.29); переходы — эксцентрические.",
                         "Электродвигатели насосов — не ниже 0,5 м от пола (п. 6.10.22); установка — на фундаменте по паспорту изготовителя (п. 6.10.26).",
                         "Высоты узла управления и жокей-насоса — условные (data/catalog/pump_room.json).",
@@ -772,14 +916,14 @@ public static class ProjectPipeline
                     [.. plan.Rooms.Select(r => r.Contour)],
                     [.. plan.Columns.Select(c => c.Outline)],
                     plan.PumpRooms[0].Outline,
-                    [.. inletRoutes.Select(r => new InletRouteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{station.Suction.Pipe.Dn}, {elevI:+0.000}"), r.Path, r.LengthMm)
+                    [.. inletRoutes.Select(r => new InletRouteLine(string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"DN{station.Suction.Pipe.Dn}, {Elev(elevI)}"), r.Path, r.LengthMm)
                     {
                         Risers = Math.Abs(elevI - inletElevI) > 0.001 ? [(r.Path[0], Math.Max(elevI, inletElevI), Math.Min(elevI, inletElevI)), (r.Path[^1], Math.Max(elevI, inletElevI), Math.Min(elevI, inletElevI))] : [],
                         Vent = Math.Abs(elevI - inletElevI) > 0.001 && elevI > inletElevI ? r.Path[^2] : null,
                     })],
                     [
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Вводов — {inletRoutes.Count}, каждый на полный расчётный расход (п. 6.10.27 СП 485); трубы DN{station.Suction.Pipe.Dn}, стальные на сварке."),
-                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса по стоянке — под перекрытием на отметке {elevI:+0.000} (от пола насосной); у ввода в здание — подъём с {inletElevI:+0.000}, у насосной — опуск до {inletElevI:+0.000}."),
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса по стоянке — под перекрытием на отметке {Elev(elevI)} (от пола насосной); у ввода в здание — подъём с {Elev(inletElevI)}, у насосной — опуск до {Elev(inletElevI)}."),
                         "В верхней точке трассы перед опуском к насосной — автоматический воздухоотводчик (п. 6.10.29); горизонтальные участки — с уклоном не менее 1:200 в сторону подъёма к воздухоотводчику.",
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Трасса — в обход колонн с отступом не менее {prI.InletRouteClearance:0.0} м; привязки поворотов — к ближайшим стенам."),
                         "Проход через наружную стену — в гильзе с сальниковым уплотнением; узел ввода и водомерный узел — по ТУ водоснабжающей организации.",
@@ -832,7 +976,8 @@ public static class ProjectPipeline
                 roomPlan,
                 piping,
                 PumpCatalog.Piping(normsDir)?.Source,
-                userTank),
+                userTank,
+                design.Jockey),
             norms);
         Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
@@ -843,7 +988,165 @@ public static class ProjectPipeline
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
         files.Add(WriteIssues(outDir, issues));
-        return new PipelineResult(true, files, issues, worst);
+        var pumpSummary = setChoice?.Chosen is { } summarySet
+            ? new PumpSetSummary(
+                summarySet.Designation,
+                summarySet.Pump,
+                summarySet.MainPumps,
+                summarySet.StandbyPumps,
+                summarySet.PowerKw,
+                setChoice.HeadAtDuty,
+                summarySet.Maker,
+                worst.PumpFlow.LitersPerSecond * 3.6,
+                worst.PumpHead.Meters,
+                [.. summarySet.PumpCurve.Select(p => new PumpCurvePoint(p.QM3h, p.HM))])
+            : null;
+        var pumpRoomSummary = PumpRoomSummary(plan, setChoice?.Chosen);
+        return new PipelineResult(true, files, issues, worst, pumpSummary, pumpRoomSummary);
+    }
+
+    // Помещение насосной и габариты установки для карточки главного окна: контур в плане (bbox, м и м²),
+    // разметка вводов/выпусков/патрубков ГМ и размеры выбранной установки из каталога. Никаких новых чисел:
+    // всё либо прочитано из чертежа, либо взято из data/catalog/pump_sets_*.json.
+    private static PumpStationSummary PumpRoomSummary(FloorPlan plan, PumpSet? set)
+    {
+        var room = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0] : null;
+        double? length = null;
+        double? width = null;
+        double? area = null;
+        if (room is { Outline.Vertices.Count: > 0 } withRoom)
+        {
+            var vertices = withRoom.Outline.Vertices;
+            var x0 = vertices.Min(p => p.XMm);
+            var y0 = vertices.Min(p => p.YMm);
+            var x1 = vertices.Max(p => p.XMm);
+            var y1 = vertices.Max(p => p.YMm);
+            length = Math.Round((x1 - x0) / 1000, 1);
+            width = Math.Round((y1 - y0) / 1000, 1);
+            area = Math.Round((x1 - x0) * (y1 - y0) / 1_000_000, 2);
+        }
+
+        return new PumpStationSummary(
+            room?.Id,
+            length,
+            width,
+            area,
+            room?.Inlets.Count ?? 0,
+            room?.Outlets.Count ?? 0,
+            room?.TruckInlets.Count ?? 0,
+            set?.Designation ?? "",
+            set?.MainPumps ?? 0,
+            set?.StandbyPumps ?? 0,
+            set?.Hydraulic ?? new Footprint(0, 0, 0),
+            set?.Cabinet ?? new Footprint(0, 0, 0),
+            set?.CollectorDn ?? 0,
+            set?.CollectorAxisMm ?? 0);
+    }
+
+    // Комплектная установка: обозначение из проекта (design.pumpStation.setDesignation) — выбор вручную из каталога с проверкой
+    // напора по кривой; пустое — автоподбор по требуемым Q и H (PumpSetSelection). Неизвестное обозначение — Error и продолжение
+    // автоподбором; недостаточный напор — Error (документы не выпускаются общим Stop по Error насосной). Исключений нет.
+    private static PumpSetChoice? ChoosePumpSet(string designation, IReadOnlyList<PumpSet> sets, DesignResult worst, bool hasTemplate, List<Issue> issues)
+    {
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var qM3h = worst.PumpFlow.LitersPerSecond * 3.6;
+        if (designation.Length > 0)
+        {
+            if (sets.FirstOrDefault(s => string.Equals(s.Designation, designation, StringComparison.Ordinal)) is not { } set)
+            {
+                issues.Add(new Issue("pump.setNotFound", IssueLevel.Error, $"Установка «{designation}» не найдена в каталоге (data/catalog/pump_sets_*.json): выполнен автоподбор по требуемым Q и H. Проверьте обозначение в design.pumpStation.setDesignation."));
+            }
+            else
+            {
+                var headAtDuty = PumpSetSelection.HeadAt(set, qM3h);
+                if (headAtDuty is not { } head || head < worst.PumpHead.Meters)
+                {
+                    var headText = headAtDuty is { } h
+                        ? string.Create(ru, $"напор по кривой H = {h:0.0} м")
+                        : "подача Q вне диапазона кривой установки (напор не определён)";
+                    issues.Add(new Issue("pump.setInsufficient", IssueLevel.Error, string.Create(ru, $"Установка {set.Designation} не обеспечивает требуемый напор: {headText} при Q = {qM3h:0.0} м³/ч, требуется H = {worst.PumpHead.Meters:0.0} м. Выберите другую установку в design.pumpStation.setDesignation.")));
+                    return null;
+                }
+
+                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, string.Create(ru, $"Выбрана вручную из каталога установка {set.Designation}: напор по кривой {head:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем.")));
+                return new PumpSetChoice(set, head, []);
+            }
+        }
+
+        if (sets.Count > 0 && hasTemplate)
+        {
+            var auto = PumpSetSelection.Choose(sets, qM3h, worst.PumpHead.Meters);
+            issues.AddRange(auto.Issues);
+            if (auto.Chosen is { } picked)
+            {
+                issues.Add(new Issue("pump.setChosen", IssueLevel.Info, string.Create(ru, $"Подобрана установка {picked.Designation}: напор по каталогу {auto.HeadAtDuty:0.0} м при требуемом {worst.PumpHead.Meters:0.0} м; потери в обвязке установки каталогом не учтены — сверить с изготовителем.")));
+            }
+
+            return auto;
+        }
+
+        return null;
+    }
+
+    // Жокей-насос — решение проектировщика (В-07): норма расход и уставки не задаёт. Проверяются только заданные данные:
+    // отрицательный расход — Error; уставки включения/отключения несогласованы — Warning; валидные данные — Info.
+    private static IEnumerable<Issue> JockeyIssues(ProjectJockey? jockey)
+    {
+        if (jockey is null)
+        {
+            yield break;
+        }
+
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var valid = true;
+        if (jockey.FlowLitersPerSecond is { } flow && flow <= 0)
+        {
+            valid = false;
+            yield return new Issue("jockey.flow", IssueLevel.Error,
+                "Расход жокей-насоса должен быть больше 0. Расход/уставки норма не задаёт — В-07: уточните по опросному листу изготовителя.");
+        }
+
+        var start = jockey.StartPressureMpa;
+        var stop = jockey.StopPressureMpa;
+        if (start is { } startValue && stop is { } stopValue && startValue >= stopValue)
+        {
+            valid = false;
+            yield return new Issue("jockey.settings", IssueLevel.Warning, string.Create(ru,
+                $"Давление включения жокей-насоса {startValue:0.###} МПа не меньше давления отключения {stopValue:0.###} МПа: уточните уставки — норма их не задаёт (В-07)."));
+        }
+        else if (stop is not null && start is null)
+        {
+            valid = false;
+            yield return new Issue("jockey.settings", IssueLevel.Warning,
+                "Задано давление отключения жокей-насоса без давления включения: уточните уставки — норма их не задаёт (В-07).");
+        }
+
+        if (!valid)
+        {
+            yield break;
+        }
+
+        var parts = new List<string>();
+        if (jockey.FlowLitersPerSecond is { } flowValue)
+        {
+            parts.Add(string.Create(ru, $"расход {flowValue:0.###} л/с"));
+        }
+
+        if (start is { } startText)
+        {
+            parts.Add(string.Create(ru, $"включение при P = {startText:0.###} МПа"));
+        }
+
+        if (stop is { } stopText)
+        {
+            parts.Add(string.Create(ru, $"отключение при P = {stopText:0.###} МПа"));
+        }
+
+        if (parts.Count > 0)
+        {
+            yield return new Issue("jockey.manual", IssueLevel.Info, string.Create(ru,
+                $"Параметры жокей-насоса заданы решением проектировщика: {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07)."));
+        }
     }
 
     // «Отвод» → «отводы» для перечня стандартов фасонных частей в ПЗ.
@@ -865,6 +1168,49 @@ public static class ProjectPipeline
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Условные точки на стенах помещения (вводы/выпуски), когда разметка ПТ_НС_ВВОД/ВЫПУСК не сделана: равномерно по
+    // периметру прямоугольника помещения; start — доля периметра от левого нижнего угла.
+    private static IReadOnlyList<PlanPoint> AutoWallPoints(Polygon room, int count, double start)
+    {
+        var v = room.Vertices;
+        var (x0, y0, x1, y1) = (v.Min(p => p.XMm), v.Min(p => p.YMm), v.Max(p => p.XMm), v.Max(p => p.YMm));
+        var (w, h) = (x1 - x0, y1 - y0);
+        var perimeter = 2 * (w + h);
+        PlanPoint At(double t)
+        {
+            var d = ((t % 1) + 1) % 1 * perimeter;
+            if (d <= w)
+            {
+                return new PlanPoint(x0 + d, y0);
+            }
+
+            d -= w;
+            if (d <= h)
+            {
+                return new PlanPoint(x1, y0 + d);
+            }
+
+            d -= h;
+            if (d <= w)
+            {
+                return new PlanPoint(x1 - d, y1);
+            }
+
+            d -= w;
+            return new PlanPoint(x0, y1 - d);
+        }
+
+        return [.. Enumerable.Range(0, count).Select(k => At(start + (k / (double)Math.Max(1, count))))];
+    }
+
+    // Отметка со знаком по правилам чертежей: +3,300 / −1,600 / ±0,000. Однозначная форма "+0.000" для
+    // отрицательных чисел давала «-+1,600» (культура подставляет минус к литералу «+»).
+    private static string Elev(double m) => m.ToString("+0.000;−0.000;0.000", CultureInfo.GetCultureInfo("ru-RU"));
+
+    // Запись нормы, без которой расчёт насосной не выпускается: молчаливая подстановка (??) скрывает ошибку данных.
+    private static NormRecord Need(JsonNormsProvider norms, string id) =>
+        norms.Find(id) ?? throw new InvalidOperationException($"В данных норм нет записи {id}.");
 
     // Отметки трассы ввода, м от пола насосной: прокладка (под перекрытием — на отметке трубопроводов АУП) и вход в стену.
     private static (double Route, double Inlet) InletRouteLevels(ProjectDesign design)
@@ -916,6 +1262,20 @@ public static class ProjectPipeline
     private static string Feminine(string color) => color.EndsWith("ый", StringComparison.Ordinal) || color.EndsWith("ий", StringComparison.Ordinal) || color.EndsWith("ой", StringComparison.Ordinal)
         ? color[..^2] + (color.EndsWith("ий", StringComparison.Ordinal) && !color.EndsWith("кий", StringComparison.Ordinal) ? "яя" : "ая")
         : color;
+
+    // Скорость подбора диаметров по Б.5, когда в проекте не задана (data/catalog/pipe_sizes.json, defaultDesignVelocity:
+    // практика проектирования, не норма). null — диаметры по табл. Б.4.
+    private static double? DesignVelocityDefault(string normsDir)
+    {
+        var path = Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, "pipe_sizes.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        return doc.RootElement.TryGetProperty("defaultDesignVelocity", out var v) ? v.GetDouble() : null;
+    }
 
     // Принятые размеры труб из data/catalog/pipe_sizes.json (наружный диаметр × стенка по DN).
     private static List<PipeSize> PipeSizes(string normsDir)
@@ -1017,3 +1377,6 @@ public static class ProjectPipeline
         return path;
     }
 }
+
+
+

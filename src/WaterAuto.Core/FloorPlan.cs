@@ -15,6 +15,9 @@ public sealed record Duct(string Id, Polygon Outline, Length Bottom);
 /// <summary>Зона без оросителей (ПТ_ЗАПРЕТ).</summary>
 public sealed record NoSprinklerZone(string Id, Polygon Outline);
 
+/// <summary>Высотная отметка, прочитанная с чертежа текстом (слой ПТ_ОТМЕТКИ): положение на плане и отметка в метрах.</summary>
+public sealed record LevelMark(string Id, PlanPoint Location, Length Elevation);
+
 /// <summary>Точка подключения: стояк или узел управления (ПТ_ВВОД).</summary>
 public sealed record Inlet(string Id, PlanPoint Location, string? Name);
 
@@ -48,4 +51,7 @@ public sealed record FloorPlan(
 
     /// <summary>Насосные станции на этаже (слой ПТ_НС или зона ПТ_ЗАПРЕТ с подписью «ПНС»).</summary>
     public IReadOnlyList<PumpRoom> PumpRooms { get; init; } = [];
+
+    /// <summary>Высотные отметки текстом (слой ПТ_ОТМЕТКИ): по ним проверка чертежа предлагает отметки пола этажа и насосной.</summary>
+    public IReadOnlyList<LevelMark> LevelMarks { get; init; } = [];
 }

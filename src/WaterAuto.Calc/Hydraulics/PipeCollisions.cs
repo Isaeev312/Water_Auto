@@ -1,3 +1,4 @@
+using System.Globalization;
 using WaterAuto.Core;
 
 namespace WaterAuto.Calc.Hydraulics;
@@ -30,7 +31,7 @@ public static class PipeCollisions
                 if (have < need)
                 {
                     issues.Add(new Issue("pipe.collision", IssueLevel.Warning,
-                        $"Коллизия: {what} — оси на {a.Z:+0.000} и {b.Z:+0.000}, по высоте {have:0} мм при нужных не менее {need:0} мм (наружные диаметры и зазор): измените отметку прокладки.",
+                        $"Коллизия: {what} — оси на {Elev(a.Z)} и {Elev(b.Z)}, по высоте {have:0} мм при нужных не менее {need:0} мм (наружные диаметры и зазор): измените отметку прокладки.",
                         null, "6.7.1.23", at));
                 }
             }
@@ -47,6 +48,10 @@ public static class PipeCollisions
         ArgumentNullException.ThrowIfNull(second);
         return first.SelectMany(a => second.Where(b => Cross(a.A, a.B, b.A, b.B) is not null).Select(b => ((a.OuterMm + b.OuterMm) / 2) + gapMm)).DefaultIfEmpty(0).Max();
     }
+
+    // Отметка со знаком по правилам чертежей: +3,300 / −1,600 / 0,000. Формат "+0.000" без секции
+    // отрицательных значений для отрицательного числа давал «-+1,600» (минус перед литералом «+»).
+    private static string Elev(double m) => m.ToString("+0.000;−0.000;0.000", CultureInfo.GetCultureInfo("ru-RU"));
 
     private static PlanPoint? Cross(PlanPoint a, PlanPoint b, PlanPoint c, PlanPoint d)
     {

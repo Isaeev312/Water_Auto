@@ -4,7 +4,13 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <!-- Значок приложения: панель задач, проводник и заголовки окон без своего Icon. -->
+    <ApplicationIcon>Assets\WaterAuto.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\WaterAuto.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\WaterAuto.Application\WaterAuto.Application.csproj" />

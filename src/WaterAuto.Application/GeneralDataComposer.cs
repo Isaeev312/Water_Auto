@@ -56,7 +56,7 @@ public static class GeneralDataComposer
         designations.AddRange(["СП 7.13130.2013", "СП 75.13330.2011", "ГОСТ Р 50680-94", "ГОСТ Р 51043-2002", "ГОСТ Р 51052-2002", i.WeldStandard]);
         // Обозначение может перечислять несколько документов через запятую (покрытие: грунтовка и эмаль).
         designations.AddRange(i.Takeoff.Items.Select(t => t.Designation).Where(x => !string.IsNullOrWhiteSpace(x)).SelectMany(x => x!.Split(", ", StringSplitOptions.TrimEntries)));
-        designations.AddRange(["ГОСТ 21.110-2013", "ГОСТ Р 21.101-2026"]);
+        designations.AddRange(["ГОСТ 21.110-2013", "ГОСТ Р 21.101-2020"]);
         // Только обозначения документов (марки изделий из спецификации, например «СВВ-12», сюда не входят).
         string[] kinds = ["ГОСТ", "СП ", "СН ", "СНиП", "ТУ ", "DIN", "ISO", "РД ", "ОСТ"];
         var references = designations

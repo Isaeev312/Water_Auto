@@ -1,0 +1,57 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!--
+        Токены тёмной темы. Набор ключей ОБЯЗАН совпадать с Tokens.Light.xaml.
+        На эти ключи ссылаются Controls.xaml, окна и ThemeManager — имена не менять.
+    -->
+
+    <!-- Бренд -->
+    <SolidColorBrush x:Key="Brush.Brand" Color="#22324F" />
+    <SolidColorBrush x:Key="Brush.Text.OnBrand" Color="#F8FAFC" />
+
+    <!-- Фон и поверхности -->
+    <SolidColorBrush x:Key="Brush.Bg.App" Color="#0B1220" />
+    <SolidColorBrush x:Key="Brush.Bg.Surface" Color="#111C2E" />
+    <SolidColorBrush x:Key="Brush.Bg.SurfaceAlt" Color="#16233A" />
+    <SolidColorBrush x:Key="Brush.Bg.SurfaceHover" Color="#1B2B44" />
+
+    <!-- Рамки -->
+    <SolidColorBrush x:Key="Brush.Border" Color="#26344C" />
+    <SolidColorBrush x:Key="Brush.Border.Strong" Color="#334A6B" />
+
+    <!-- Текст -->
+    <SolidColorBrush x:Key="Brush.Text.Primary" Color="#E6EDF7" />
+    <SolidColorBrush x:Key="Brush.Text.Secondary" Color="#A7B7CC" />
+    <SolidColorBrush x:Key="Brush.Text.Tertiary" Color="#7C8FA8" />
+    <SolidColorBrush x:Key="Brush.Text.Disabled" Color="#5B6B82" />
+
+    <!-- Выделение и фокус -->
+    <SolidColorBrush x:Key="Brush.Selection" Color="#1E3A5F" />
+    <SolidColorBrush x:Key="Brush.Focus" Color="#60A5FA" />
+
+    <!-- Семантика -->
+    <SolidColorBrush x:Key="Brush.Success" Color="#34D399" />
+    <SolidColorBrush x:Key="Brush.Success.Soft" Color="#123028" />
+    <SolidColorBrush x:Key="Brush.Warning" Color="#FBBF24" />
+    <SolidColorBrush x:Key="Brush.Warning.Soft" Color="#352A10" />
+    <SolidColorBrush x:Key="Brush.Error" Color="#F87171" />
+    <SolidColorBrush x:Key="Brush.Error.Soft" Color="#381A1D" />
+    <SolidColorBrush x:Key="Brush.Info" Color="#38BDF8" />
+    <SolidColorBrush x:Key="Brush.Info.Soft" Color="#0F2B3E" />
+
+    <!-- Прокрутка и оверлеи -->
+    <SolidColorBrush x:Key="Brush.Scroll.Thumb" Color="#334A6B" />
+    <SolidColorBrush x:Key="Brush.Scroll.Thumb.Hover" Color="#46618A" />
+    <SolidColorBrush x:Key="Brush.Overlay" Color="#80000000" />
+
+    <!-- Размеры (8px ритм) -->
+    <sys:Double x:Key="Size.Radius.Small">4</sys:Double>
+    <sys:Double x:Key="Size.Radius.Medium">8</sys:Double>
+    <sys:Double x:Key="Size.Radius.Large">12</sys:Double>
+    <sys:Double x:Key="Size.Control.Height">34</sys:Double>
+    <sys:Double x:Key="Size.Control.Height.Small">28</sys:Double>
+    <sys:Double x:Key="Size.Gap">8</sys:Double>
+
+</ResourceDictionary>

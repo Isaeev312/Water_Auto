@@ -17,7 +17,8 @@ public sealed record DesignSettings(
     Pressure InletPressure,
     double? DesignVelocity = null,
     bool RingValvesClosed = false,
-    IReadOnlyList<PipeSize>? PipeSizes = null);
+    IReadOnlyList<PipeSize>? PipeSizes = null,
+    bool ResizeOverLimit = false);
 
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
@@ -121,10 +122,35 @@ public static class DesignCalculation
         var feeding = route.Segments.Select(x => x.From).ToHashSet();
         var sprinklers = route.Nodes.Where(n => n.Kind == RouteNodeKind.Sprinkler).ToList();
         var ends = sprinklers.Where(n => !feeding.Contains(n.Id)).ToList();
-        var results = (ends.Count > 0 ? ends : sprinklers)
-            .OrderByDescending(n => PathLength(n.Id))
-            .Select(n => RunFor(route, norms, rules, settings, parameters, hydrants, n.Id))
-            .ToList();
+        var results = new List<DesignResult>();
+        var tried = new HashSet<string>((ends.Count > 0 ? ends : sprinklers).Select(n => n.Id), StringComparer.Ordinal);
+        void RunOne(string id) => results.Add(RunFor(route, norms, rules, settings, parameters, hydrants, id));
+        foreach (var id in tried.OrderByDescending(PathLength).ToList())
+        {
+            RunOne(id);
+        }
+
+        // Диктующий — ороситель с наименьшим давлением (Б.1.2.1). Если в зоне выбранного кандидата давление другого
+        // оросителя ниже, диктующим должен быть он: добавляем такие узлы в кандидаты и повторяем, пока расчёт не сойдётся
+        // или пока кандидаты не исчерпаются (ограничение — защита от зацикливания).
+        for (var iteration = 0; iteration < 10; iteration++)
+        {
+            var currentWorst = results.Aggregate((a, x) => x.PumpPressure.Mpa > a.PumpPressure.Mpa + 1e-12 ? x : a);
+            var missing = currentWorst.Issues
+                .Where(i => i.Code == "dictating.notMinimum" && i.ElementId is not null && tried.Add(i.ElementId))
+                .Select(i => i.ElementId!)
+                .ToList();
+            if (missing.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var id in missing)
+            {
+                RunOne(id);
+            }
+        }
+
         var worst = results.Aggregate((a, x) => x.PumpPressure.Mpa > a.PumpPressure.Mpa + 1e-12 ? x : a);
         var candidates = results.Select(x => new ZoneCandidate(x.DictatingSprinklerId, x.PumpPressure)).OrderByDescending(x => x.PumpPressure.Mpa).ToList();
         candidates.Remove(candidates.First(x => x.SprinklerId == worst.DictatingSprinklerId));
@@ -214,9 +240,16 @@ public static class DesignCalculation
         // Б.5: диаметры участков, по которым идёт расход, — по принятой скорости V; повтор до установления диаметров.
         var current = route;
         var solution = Solve(current, p1);
-        for (var iteration = 0; settings.DesignVelocity is { } v && iteration < 20; iteration++)
+        for (var iteration = 0; iteration < 20; iteration++)
         {
-            var resized = Resize(current, solution, series, mu, Math.Min(v, diameter.Values["velocityMax"]!.Value), issues);
+            // Задана проектная скорость — диаметры по Б.5. Не задана — диаметры по табл. Б.4, но участки, где скорость
+            // выше предела 6.7.1.37, увеличиваются: иначе расчёт даёт нереальный напор и неподбираемый насос
+            // (на реальном проекте «Пробный» было H = 193 м при Q = 33,6 л/с из-за DN50 и 11,9 м/с).
+            var resized = settings.DesignVelocity is { } v
+                ? Resize(current, solution, series, mu, Math.Min(v, diameter.Values["velocityMax"]!.Value), issues)
+                : settings.ResizeOverLimit
+                    ? ResizeOverLimit(current, solution, series, diameter.Values["velocityMax"]!.Value, issues)
+                    : null;
             if (resized is null)
             {
                 break;
@@ -456,6 +489,56 @@ public static class DesignCalculation
                 Closures = route.Closures?.Select(s => s with { Dn = dn[s.Id] }).ToList(),
             }
             : null;
+    }
+
+    // Увеличение DN только на участках, где скорость выше предела 6.7.1.37, при незаданной проектной скорости:
+    // остальные диаметры (табл. Б.4) сохраняются; для участка берётся минимальный DN с внутренним диаметром,
+    // при котором скорость не превышает предел. Выше по течению DN не меньше, чем ниже.
+    private static PipeRoute? ResizeOverLimit(PipeRoute route, TreeSolution solution, PipeSeries series, double vMax, List<Issue> issues)
+    {
+        var dn = route.Segments.Concat(route.Closures ?? []).ToDictionary(s => s.Id, s => series.Pick(s.Dn)?.Dn ?? s.Dn);
+        var changed = false;
+        foreach (var s in route.Segments.Concat(route.Closures ?? []))
+        {
+            if (!solution.PipeFlows.TryGetValue(s.Id, out var flow) || series.Pick(s.Dn) is not { } pipe)
+            {
+                continue;
+            }
+
+            var q = Math.Abs(flow.LitersPerSecond);
+            if (q <= 1e-9 || Velocity(q, pipe) <= vMax + 1e-9)
+            {
+                continue;
+            }
+
+            var bigger = series.WithInnerAtLeast(DiameterMm(q, 1, vMax), s.Dn + 1);
+            if (bigger is null)
+            {
+                issues.Add(new Issue("design.noDiameter", IssueLevel.Error, $"Участок {s.Id}: в сортаменте нет трубы больше DN {s.Dn} на расход {q:0.00} л/с при предельной скорости {vMax} м/с (п. 6.7.1.37).", s.Id, "6.7.1.37"));
+                continue;
+            }
+
+            dn[s.Id] = bigger.Dn;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return null;
+        }
+
+        var children = route.Segments.ToLookup(s => s.From);
+        int Up(RouteSegment s) => dn[s.Id] = Math.Max(dn[s.Id], children[s.To].Select(Up).DefaultIfEmpty(0).Max());
+        foreach (var root in route.Segments.Where(s => s.From == route.InletId))
+        {
+            Up(root);
+        }
+
+        return route with
+        {
+            Segments = route.Segments.Select(s => s with { Dn = dn[s.Id] }).ToList(),
+            Closures = route.Closures?.Select(s => s with { Dn = dn[s.Id] }).ToList(),
+        };
     }
 
     // Шаг вдоль ряда l и между рядами b у оросителя: ближайший сосед и ближайший в перпендикулярном направлении, м.

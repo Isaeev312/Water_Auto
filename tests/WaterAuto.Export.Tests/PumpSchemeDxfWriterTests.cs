@@ -46,4 +46,22 @@ public class PumpSchemeDxfWriterTests
         // Всё — внутри рамки A3 (правый край рамки — 415 мм).
         doc.Entities.OfType<Line>().Where(l => l.Layer.Name != GostSheet.Layer).ShouldAllBe(l => l.StartPoint.X <= 415 && l.EndPoint.X <= 415);
     }
+
+    [Fact]
+    public void Each_inlet_has_its_own_branch_and_valve_on_the_scheme()
+    {
+        // Inlets=2 (п. 6.10.27): на всасывающем коллекторе две ветви ввода, у каждой — своя задвижка с номером позиции.
+        var positions = new Dictionary<string, int> { ["inletValve"] = 5 };
+        var two = PumpSchemeDxfWriter.Build(Data with { Inlets = 2, Positions = positions }, Stamp);
+        var twoTexts = two.Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
+        twoTexts.Count(t => t == "5").ShouldBe(2); // по выноске на каждый ввод
+        twoTexts.ShouldContain("Ввод 2");
+        twoTexts.ShouldContain(t => t.Contains("Из наружной сети", StringComparison.Ordinal)); // подпись источника остаётся
+
+        // По умолчанию (Inlets=1) — один ввод и одна задвижка.
+        var one = PumpSchemeDxfWriter.Build(Data with { Positions = positions }, Stamp);
+        var oneTexts = one.Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
+        oneTexts.Count(t => t == "5").ShouldBe(1);
+        oneTexts.ShouldNotContain("Ввод 2");
+    }
 }

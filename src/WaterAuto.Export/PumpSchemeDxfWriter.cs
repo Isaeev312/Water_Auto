@@ -7,10 +7,11 @@ using WaterAuto.Core;
 namespace WaterAuto.Export;
 
 /// <summary>
-/// Данные принципиальной схемы насосной станции: число агрегатов, DN обвязки, патрубки для пожарной техники, подписи.
+/// Данные принципиальной схемы насосной станции: число агрегатов и вводов, DN обвязки, патрубки для пожарной техники, подписи.
 /// Собирается из расчёта (Application): Export не знает про Calc. Positions — номер позиции спецификации по роли элемента
 /// (pump, valveS, teeS…); у элемента без номера выноска не ставится. Outlets — выходы гребёнки к сети секций (подпись точки
-/// ввода на плане); по одному узлу управления на выход.
+/// ввода на плане); по одному узлу управления на выход. Inlets — число входных всасывающих вводов (п. 6.10.27): каждый
+/// рисуется отдельной линией со своей задвижкой; по умолчанию 1.
 /// </summary>
 public sealed record PumpSchemeData(
     int Pumps,
@@ -24,7 +25,8 @@ public sealed record PumpSchemeData(
     string SourceText,
     IReadOnlyList<string> Notes,
     IReadOnlyDictionary<string, int>? Positions = null,
-    IReadOnlyList<string>? Outlets = null);
+    IReadOnlyList<string>? Outlets = null,
+    int Inlets = 1);
 
 /// <summary>
 /// Принципиальная схема насосной станции пожаротушения на листе A3 с рамкой и основной надписью по форме 3:
@@ -68,6 +70,7 @@ public static class PumpSchemeDxfWriter
             }
         }
 
+        // Вводы (п. 6.10.27): всасывающий коллектор; каждый ввод — отдельная линия со своей задвижкой до коллектора.
         d.Pipe(25, yS, xJ + 8, yS);
         d.Cap(xJ + 8, yS, horizontal: true);
         Pos(xJ + 8, yS, "capS");
@@ -78,6 +81,17 @@ public static class PumpSchemeDxfWriter
         d.Arrow(40, yS, 1, 0);
         d.Valve(85, yS, vertical: false, sensor: true);
         Pos(85, yS, "inletValve", -1);
+        for (var k = 1; k < Math.Max(1, data.Inlets); k++)
+        {
+            // Второй и следующие вводы — отдельными ветвями слева; задвижка — на ветви до общего коллектора.
+            var yIn = yS + (12 * k);
+            d.Pipe(25, yIn, 95, yIn);
+            d.Pipe(95, yIn, 95, yS);
+            d.Arrow(34, yIn, 1, 0);
+            d.Valve(45, yIn, vertical: false, sensor: true);
+            d.Text(27, yIn + 3, $"Ввод {k + 1}", 2.5);
+            Pos(45, yIn, "inletValve");
+        }
 
         for (var k = 0; k < branches.Count; k++)
         {
