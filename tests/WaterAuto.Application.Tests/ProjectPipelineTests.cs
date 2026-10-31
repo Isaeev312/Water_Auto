@@ -101,6 +101,17 @@ public sealed class ProjectPipelineTests : IDisposable
         Path.GetFileName(Path.GetDirectoryName(result.Files.Single(f => f.EndsWith(ProjectPipeline.IssuesFile, StringComparison.Ordinal)))).ShouldNotBe(ProjectPipeline.AlarmVolume);
         var doc = DxfReader.Read(plan);
         doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
+        // Лист в рамке со штампом и общие данные тома АПС.
+        doc.Entities.ShouldContain(e => e.Layer.Name == GostSheet.Layer);
+        var general = result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmGeneralDataFile, StringComparison.Ordinal));
+        using (var gd = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(general, false))
+        {
+            var text = gd.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("Ведомость рабочих чертежей");
+            text.ShouldContain("Извещатели пожарные автоматические");
+            text.ShouldContain("12");
+        }
+
         result.Issues.ShouldNotContain(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
         // ИПР на стенах и спецификация АПС с извещателями, ИПР, изоляторами и приборами питания.
         doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.ManualLayer).ShouldBeGreaterThanOrEqualTo(1);

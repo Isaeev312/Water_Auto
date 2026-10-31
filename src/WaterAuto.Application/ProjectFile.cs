@@ -360,6 +360,13 @@ public sealed class ProjectAlarm
 
     /// <summary>Точка установки приборов (пожарный пост: контроллеры, РИП) на плане, мм; null — кабельный журнал не выпускается.</summary>
     public ProjectPoint? Panel { get; init; }
+
+    /// <summary>Ведомость рабочих чертежей тома АПС (лист «Общие данные»).</summary>
+    public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
+    [
+        new("1", "Общие данные"),
+        new("2", "План расстановки извещателей и ручных извещателей"),
+    ];
 }
 
 /// <summary>Точка плана в координатах чертежа, мм.</summary>

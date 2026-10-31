@@ -95,6 +95,7 @@ public static class ProjectPipeline
     public const string AlarmNoteFile = "aps_pz.docx";
     public const string AlarmSpecFile = "aps_spec.xlsx";
     public const string CableJournalFile = "aps_cables.xlsx";
+    public const string AlarmGeneralDataFile = "aps_general_data.docx";
     public const string IssuesFile = "issues.txt";
 
     /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
@@ -363,6 +364,7 @@ public static class ProjectPipeline
         IReadOnlyList<AddressRow> addressRows = [];
         IReadOnlyList<AlarmSpecItem> alarmSpec = [];
         IReadOnlyList<CableLine> cableLines = [];
+        AlarmPowerSet? alarmSetForDocs = null;
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -451,6 +453,7 @@ public static class ProjectPipeline
 
                     var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0);
                     powerBudget = power.Budget;
+                    alarmSetForDocs = alarmSet;
                     issues.AddRange(power.Issues);
                     addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module, addressDevices).Rows;
                     alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0);
@@ -821,7 +824,9 @@ public static class ProjectPipeline
         Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
         if (detectorLayout is not null)
         {
-            Write(alarmDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf));
+            var planSheet = project.Alarm?.Sheets.FirstOrDefault(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase));
+            var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
+            Write(alarmDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf, stamp: planStamp));
         }
 
         Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
@@ -1141,6 +1146,12 @@ public static class ProjectPipeline
             var ti = project.Title;
             var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
             Write(alarmDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "АПС.ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
+        }
+
+        if (detectorLayout is not null && project.Alarm is not null)
+        {
+            var alarmGeneral = AlarmGeneralData.Build(project.Name, project.Alarm.Sheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code);
+            Write(alarmDir, AlarmGeneralDataFile, files, p => GeneralDataDocx.Write(p, alarmGeneral, Stamp(project, "АПС", "Общие данные") with { SheetCount = project.Alarm.Sheets.Count, Sheet = project.Alarm.Sheets.Count > 0 ? project.Alarm.Sheets[0].Sheet : null }, project.Font));
         }
 
         if (detectorLayout is not null || controlPoints.Count > 0)
