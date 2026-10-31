@@ -5,6 +5,8 @@ using ACadSharp.Tables;
 using ACadSharp.Types.Units;
 using CSMath;
 using DocumentFormat.OpenXml.Packaging;
+using WaterAuto.Core;
+using WaterAuto.Export;
 using WaterAuto.Import;
 
 namespace WaterAuto.Application.Tests;
@@ -50,11 +52,12 @@ public sealed class ProjectPipelineTests : IDisposable
         return path;
     }
 
-    private string Project(double k = 0.47, ProjectHydrants? hydrants = null, bool ring = false) =>
+    private string Project(double k = 0.47, ProjectHydrants? hydrants = null, bool ring = false, ProjectAlarm? alarm = null) =>
         Write("project.waproj", ProjectFile.ToJson(new ProjectFile
         {
             Name = "Тестовая автостоянка",
             Drawing = "floor.dxf",
+            Alarm = alarm,
             Design = new ProjectDesign
             {
                 RoomGroup = "2",
@@ -80,6 +83,27 @@ public sealed class ProjectPipelineTests : IDisposable
 
     private PipelineResult Run(string project) =>
         ProjectPipeline.Run(project, Path.Combine(_dir, "out"), RepoPaths.Norms, RepoPaths.Registry);
+
+    [Fact]
+    public void Alarm_zones_in_the_project_produce_the_detector_plan()
+    {
+        Drawing();
+        // Стоянка 30 × 20 м, H = 3 м, дымовые адресные, алгоритм A: шаг 9,05 м → 4 × 3 = 12 ИП.
+        var alarm = new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }] };
+        var result = Run(Project(alarm: alarm));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+
+        var plan = result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+        var doc = DxfReader.Read(plan);
+        doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
+        result.Issues.ShouldNotContain(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
+
+        // Без раздела alarm листа АПС нет; имя не с чертежа — предупреждение и нет листа.
+        Run(Project()).Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+        var missing = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Склад", CeilingHeight = 3 }] }));
+        missing.Issues.ShouldContain(i => i.Code == "aps.layout.noRoom");
+        missing.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+    }
 
     [Fact]
     public void Drawing_project_produces_the_whole_package()

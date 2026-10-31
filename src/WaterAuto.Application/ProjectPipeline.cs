@@ -91,6 +91,7 @@ public static class ProjectPipeline
     public const string BatteryFile = "aps_battery.xlsx";
     public const string InteractionFile = "aps_interaction.docx";
     public const string AddressTableFile = "aps_addresses.xlsx";
+    public const string AlarmPlanFile = "aps_plan.dxf";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -138,6 +139,14 @@ public static class ProjectPipeline
 
         var layout = SprinklerLayouter.Layout(plan, rules, design.FloorElevation is { } floor ? new Length(floor) : null);
         issues.AddRange(layout.Issues);
+
+        // АПС, этап 2 (ADR 0012): извещатели — только в помещениях и с параметрами, заданными проектировщиком.
+        var detectorZones = AlarmZones(project, plan, design, issues);
+        var detectorLayout = detectorZones.Count > 0 ? DetectorLayouter.Layout(detectorZones, norms) : null;
+        if (detectorLayout is not null)
+        {
+            issues.AddRange(detectorLayout.Issues);
+        }
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
         var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero, design.Ring);
@@ -718,6 +727,11 @@ public static class ProjectPipeline
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
         Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        if (detectorLayout is not null)
+        {
+            Write(outDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font));
+        }
+
         Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
         Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(
             p,
@@ -1433,6 +1447,42 @@ public static class ProjectPipeline
         var path = Path.Combine(dir, name);
         write(path);
         files.Add(path);
+    }
+
+
+    /// <summary>Зоны раскладки ИП из раздела alarm проекта: помещение по имени с чертежа («*» — все), высота — из зоны или design.roomHeight.</summary>
+    private static List<DetectorZone> AlarmZones(ProjectFile project, FloorPlan plan, ProjectDesign design, List<Issue> issues)
+    {
+        var zones = new List<DetectorZone>();
+        foreach (var z in project.Alarm?.Zones ?? [])
+        {
+            var rooms = z.Room == "*" ? plan.Rooms : plan.Rooms.Where(r => string.Equals(r.Name, z.Room, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (rooms.Count == 0)
+            {
+                issues.Add(new Issue("aps.layout.noRoom", IssueLevel.Warning, $"АПС: помещение «{z.Room}» на чертеже не найдено (слой ПТ_КОНТУР, имя — текст внутри контура)."));
+                continue;
+            }
+
+            var height = z.CeilingHeight ?? design.RoomHeight;
+            if (height is null)
+            {
+                issues.Add(new Issue("aps.layout.noHeight", IssueLevel.Error, $"АПС: для помещения «{z.Room}» не задана высота до перекрытия (alarm.zones[].ceilingHeight или design.roomHeight) — тип ИП и радиус зоны контроля зависят от неё."));
+                continue;
+            }
+
+            foreach (var room in rooms)
+            {
+                if (zones.Any(existing => existing.RoomId == room.Id))
+                {
+                    issues.Add(new Issue("aps.layout.duplicateRoom", IssueLevel.Warning, $"АПС: помещение «{room.Name}» задано в разделе alarm дважды — взята первая зона.", room.Id));
+                    continue;
+                }
+
+                zones.Add(new DetectorZone(room.Id, room.Name, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable));
+            }
+        }
+
+        return zones;
     }
 
     private static string WriteIssues(string dir, List<Issue> issues)

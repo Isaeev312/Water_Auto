@@ -37,6 +37,9 @@ public sealed record ProjectFile
     /// <summary>ID реестра литературы для списка источников; пусто — действующие нормы реестра.</summary>
     public IReadOnlyList<string> Literature { get; init; } = [];
 
+    /// <summary>Пожарная сигнализация (ADR 0012, этап 2); null — раскладка ИП не выполняется.</summary>
+    public ProjectAlarm? Alarm { get; init; }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -346,3 +349,24 @@ public sealed record ProjectSignature(string Role, string Name);
 
 /// <summary>Лист основного комплекта: номер, наименование, примечание.</summary>
 public sealed record ProjectSheet(string Sheet, string Name, string Note = "");
+
+/// <summary>Исходные данные АПС: где ставить извещатели и какие — решения проектировщика (ADR 0012, п. 6; вопрос А-02 программа не решает).</summary>
+public sealed class ProjectAlarm
+{
+    public IReadOnlyList<ProjectAlarmZone> Zones { get; init; } = [];
+}
+
+/// <summary>Зона раскладки ИП: помещение по имени с чертежа («*» — все помещения), тип ИП, алгоритм, адресность, высота до перекрытия.</summary>
+public sealed class ProjectAlarmZone
+{
+    public string Room { get; init; } = "*";
+
+    public Core.DetectorKind Detector { get; init; } = Core.DetectorKind.Smoke;
+
+    public Core.DetectionAlgorithm Algorithm { get; init; } = Core.DetectionAlgorithm.A;
+
+    public bool Addressable { get; init; } = true;
+
+    /// <summary>Высота до перекрытия, м; null — design.roomHeight.</summary>
+    public double? CeilingHeight { get; init; }
+}
