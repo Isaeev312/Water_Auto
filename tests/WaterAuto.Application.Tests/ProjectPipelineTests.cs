@@ -300,6 +300,89 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Alarm_only_project_without_water_suppression_produces_the_whole_alarm_volume()
+    {
+        // Объект только с АПС (как садик): на чертеже нет ПТ_ВВОД и не будет трубопроводов; "aupt": false — том АПС целиком,
+        // папки АУПТ нет; без сигналов АУПТ расчёт АКБ, таблица адресов, спецификация и журнал — по приборам АПС.
+        Drawing(withInlet: false);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Детский сад (пример)",
+            Drawing = "floor.dxf",
+            Aupt = false,
+            Alarm = new ProjectAlarm
+            {
+                Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+                Panel = new ProjectPoint { X = 1000, Y = 1000 },
+                Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40 },
+            },
+        });
+        var result = Run(Write("ops.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        result.Files.ShouldNotContain(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.AuptVolume);
+        var names = result.Files.Select(Path.GetFileName).ToList();
+        names.ShouldContain(ProjectPipeline.AlarmPlanFile);
+        names.ShouldContain(ProjectPipeline.BatteryFile);
+        names.ShouldContain(ProjectPipeline.AddressTableFile);
+        names.ShouldContain(ProjectPipeline.AlarmSpecFile);
+        names.ShouldContain(ProjectPipeline.CableJournalFile);
+        names.ShouldContain(ProjectPipeline.AlarmSchemeFile);
+        names.ShouldContain(ProjectPipeline.AlarmGeneralDataFile);
+        names.ShouldContain(ProjectPipeline.AlarmNoteFile);
+        names.ShouldNotContain(ProjectPipeline.SignalListFile);
+        names.ShouldNotContain(ProjectPipeline.InteractionFile);
+        result.Issues.ShouldNotContain(i => i.Code == "import.noInlet" || i.Code == "project.noRoute");
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Single(r => r[2] == "ДИП-34А-03")[5].ShouldBe("12");
+        spec.Select(r => r[2]).ShouldContain("С2000-КДЛ");
+        // Модулей сигналов АУПТ нет — С2000-АР8 в спецификации не появляется.
+        spec.Select(r => r[2]).ShouldNotContain("С2000-АР8");
+        result.Design.ShouldBeNull();
+
+        // Без раздела alarm и без АУПТ выпускать нечего — ошибка, а не пустой комплект.
+        var nothing = Run(Write("empty.waproj", ProjectFile.ToJson(new ProjectFile { Name = "x", Drawing = "floor.dxf", Aupt = false })));
+        nothing.Success.ShouldBeFalse();
+        nothing.Issues.ShouldContain(i => i.Code == "project.nothingToDo");
+    }
+
+    [Fact]
+    public void Powder_section_produces_the_powder_volume_with_module_count_by_appendix_I()
+    {
+        // Стоянка 30 × 20 м = 600 м², Буран-8У на 4 м (класс В: 28 → 20 м² на 3,5…5,5 м, на 4 м — 26 м²), бензин (k3 = 1,0),
+        // k1 = 1,0 и k4 = 1,0 по паспорту, Sз = 0: N = 600 / 26 = 23,08 → 24; запас 24.
+        Drawing(withInlet: false);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Склад (пример)",
+            Drawing = "floor.dxf",
+            Aupt = false,
+            Powder = new ProjectPowder
+            {
+                Module = "epotos.buran_8u",
+                Rooms = [new ProjectPowderRoom { Room = "Автостоянка", Method = PowderMethod.Area, FireClass = "B", Substance = "sp485.tI_1.petrol", CeilingHeight = 4, ShadedArea = 0 }],
+            },
+        });
+        var result = Run(Write("powder.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        var names = result.Files.Select(Path.GetFileName).ToList();
+        names.ShouldContain(ProjectPipeline.PowderNoteFile);
+        names.ShouldContain(ProjectPipeline.PowderSpecFile);
+        result.Files.Where(f => Path.GetFileName(f).StartsWith("apt_", StringComparison.Ordinal)).ShouldAllBe(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.PowderVolume);
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Single(r => r[2] == "Буран-8У")[5].ShouldBe("48");
+        using (var doc = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderNoteFile, StringComparison.Ordinal)), false))
+        {
+            doc.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("600/26·1·1·1·1 = 23,08 → 24");
+        }
+
+        // Модуль без k2 в паспорте (Гарант) — ошибка с объяснением, записки нет.
+        var garant = Run(Write("garant.waproj", json.Replace("epotos.buran_8u", "eternis.garant_7", StringComparison.Ordinal)));
+        garant.Issues.ShouldContain(i => i.Code == "powder.k2.missing");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();

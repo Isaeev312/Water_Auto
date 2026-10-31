@@ -89,7 +89,7 @@ public static class PowerBudgets
         }
 
         issues.Add(new Issue("aps.power.defaultSet", IssueLevel.Info,
-            $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Name}), только приборы автоматики АУПТ; пульт и приборы АПС, СОУЭ (этапы 2–3) не учтены."));
+            $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Name}): контроллеры с адресными устройствами, модули сигналов АУПТ, оповещатели и релейные блоки с питанием от РИП; пульт (ППКП) и блок речевого оповещения со своими АКБ в расчёт не входят."));
         if (controllers > 1)
         {
             issues.Add(new Issue("aps.power.controllers", IssueLevel.Info,

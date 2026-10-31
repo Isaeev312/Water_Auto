@@ -16,6 +16,12 @@ public sealed record ProjectFile
     /// <summary>Чертёж плана; путь относительно файла проекта.</summary>
     public string Drawing { get; init; } = "";
 
+    /// <summary>
+    /// Водяная АУПТ в проекте (по умолчанию — да, как во всех прежних проектах). false — только другие разделы (АПС, СОУЭ…):
+    /// раздел design не используется, ввод ПТ_ВВОД на чертеже не нужен, тома АУПТ нет.
+    /// </summary>
+    public bool Aupt { get; init; } = true;
+
     public ProjectDesign Design { get; init; } = new();
 
     public ProjectTitle Title { get; init; } = new();
@@ -36,6 +42,9 @@ public sealed record ProjectFile
 
     /// <summary>ID реестра литературы для списка источников; пусто — действующие нормы реестра.</summary>
     public IReadOnlyList<string> Literature { get; init; } = [];
+
+    /// <summary>Порошковое пожаротушение модульного типа (СП 485, разд. 10, прил. И); null — не проектируется.</summary>
+    public ProjectPowder? Powder { get; init; }
 
     /// <summary>Пожарная сигнализация (ADR 0012, этап 2); null — раскладка ИП не выполняется.</summary>
     public ProjectAlarm? Alarm { get; init; }
@@ -474,4 +483,46 @@ public sealed class ProjectAlarmZone
 
     /// <summary>Имя уровня из alarm.levels, к которому относится зона; null — ко всем уровням.</summary>
     public string? Level { get; init; }
+}
+
+/// <summary>Порошковое пожаротушение: модель модуля из data/catalog/powder_modules.json и защищаемые помещения — решение проектировщика.</summary>
+public sealed class ProjectPowder
+{
+    /// <summary>ID модуля из каталога; null — первый в каталоге (с замечанием).</summary>
+    public string? Module { get; init; }
+
+    public IReadOnlyList<ProjectPowderRoom> Rooms { get; init; } = [];
+}
+
+/// <summary>Защищаемое помещение АУПП: имя с чертежа, способ, класс пожара, горючее вещество (строка табл. И.1), высоты, доля проёмов.</summary>
+public sealed class ProjectPowderRoom
+{
+    public string Room { get; init; } = "";
+
+    public Core.PowderMethod Method { get; init; } = Core.PowderMethod.Area;
+
+    /// <summary>Класс пожара для выбора защищаемой площади модуля: "A" или "B".</summary>
+    public string FireClass { get; init; } = "B";
+
+    /// <summary>ID строки табл. И.1 (data/norms/sp485/table_I_1.json), например sp485.tI_1.petrol; null — задать k3.</summary>
+    public string? Substance { get; init; }
+
+    public double? K3 { get; init; }
+
+    /// <summary>k1 по решению проектировщика (1…1,2); null — из паспорта или 1,2 на предельной высоте.</summary>
+    public double? K1 { get; init; }
+
+    /// <summary>Высота помещения, м — для объёма.</summary>
+    public double CeilingHeight { get; init; }
+
+    /// <summary>Высота установки модулей, м; null — высота помещения.</summary>
+    public double? MountHeight { get; init; }
+
+    /// <summary>Доля постоянно открытых проёмов в общей поверхности помещения (И.2).</summary>
+    public double OpenFraction { get; init; }
+
+    public bool ManualOnly { get; init; }
+
+    /// <summary>Затенённая площадь Sз, м², для k2 по формуле паспорта модуля; 0 — затенений нет (решение проектировщика), null — не задана.</summary>
+    public double? ShadedArea { get; init; }
 }
