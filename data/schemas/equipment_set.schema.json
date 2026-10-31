@@ -80,6 +80,11 @@
             "type": "string",
             "description": "Роль элемента на принципиальной схеме — по ней схема ставит номер позиции спецификации."
           },
+          "mark": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Буквенная часть обозначения устройства в перечне сигналов АПС (например «ЗД»): номер — сквозной в серии этой буквенной части. Условное обозначение проекта, не норма."
+          },
           "signals": {
             "type": "array",
             "description": "Сигналы позиции в систему пожарной сигнализации (ADR 0012): по одному на каждое устройство позиции.",
@@ -94,9 +99,12 @@
                   "type": "string",
                   "enum": [
                     "valvePosition",
-                    "pressureSwitch"
+                    "pressureSwitch",
+                    "pumpStart",
+                    "pumpFault",
+                    "automaticsOff"
                   ],
-                  "description": "valvePosition — положение запорного устройства, pressureSwitch — срабатывание сигнализатора давления."
+                  "description": "valvePosition — положение запорного устройства, pressureSwitch — срабатывание сигнализатора давления, pumpStart и pumpFault — обобщённые выходы прибора управления насосами «Пуск» и «Неисправность», automaticsOff — автоматический пуск отключён."
                 },
                 "clause": {
                   "type": "string",

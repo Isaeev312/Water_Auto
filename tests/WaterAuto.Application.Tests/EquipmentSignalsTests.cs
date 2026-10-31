@@ -21,13 +21,34 @@ public class EquipmentSignalsTests
         cuValves.Count.ShouldBe(6);
         cuValves.Equipment.ShouldContain("DN100");
         cuValves.Clause.ShouldBe("СП 485.1311500.2020, п. 6.8.7");
+        cuValves.Mark.ShouldBe("ЗД");
+        cuValves.PerSection.ShouldBe(2);
 
         var cu = signals.Single(s => s.Role == "cu");
         cu.Kind.ShouldBe(SignalKind.PressureSwitch);
         cu.Count.ShouldBe(3);
+        cu.Mark.ShouldBe("УУ");
+        cu.PerSection.ShouldBe(1);
+        signals.Single(s => s.Role == "inletValve").PerSection.ShouldBe(0);
 
         // Манометры, обратные клапаны и вставки сигналов не дают.
         signals.ShouldNotContain(s => s.Role == "gauge" || s.Role == "checkD" || s.Role == "insertS");
+    }
+
+    [Fact]
+    public void Pump_cabinet_gives_generic_start_fault_and_automatics_off_signals()
+    {
+        var counts = new Dictionary<string, int> { ["pumps"] = 2, ["sections"] = 1, ["inlets"] = 1 };
+
+        var cabinet = EquipmentSet.Signals(Catalog(EquipmentSet.PumpStationFile), new Dictionary<string, string>(), counts)
+            .Where(s => s.Role == "cabinet").ToList();
+
+        cabinet.Select(s => s.Kind).ShouldBe([SignalKind.PumpStart, SignalKind.PumpFault, SignalKind.AutomaticsOff]);
+        cabinet.ShouldAllBe(s => s.Count == 1);
+        // Выходы «Пуск» и «Неисправность» — ГОСТ Р 53325-2012, п. 7.4.5; для «Автоматика отключена» пункт о передаче не найден.
+        cabinet[0].Clause!.ShouldContain("7.4.5");
+        cabinet[1].Clause!.ShouldContain("7.4.5");
+        cabinet[2].Clause.ShouldBeNull();
     }
 
     [Fact]

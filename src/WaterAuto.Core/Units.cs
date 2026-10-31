@@ -78,6 +78,12 @@ public readonly record struct Current(double Amperes)
     public override string ToString() => Amperes.ToString("0.####", CultureInfo.InvariantCulture) + " А";
 }
 
+/// <summary>Напряжение питания, В.</summary>
+public readonly record struct Voltage(double Volts)
+{
+    public override string ToString() => Volts.ToString("0.##", CultureInfo.InvariantCulture) + " В";
+}
+
 /// <summary>Ёмкость аккумуляторной батареи, А·ч.</summary>
 public readonly record struct Charge(double AmpereHours)
 {

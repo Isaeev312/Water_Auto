@@ -87,6 +87,7 @@ public static class ProjectPipeline
     public const string PumpRoomAxonometryFile = "pump_room_axonometry.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string SignalListFile = "aps_signals.xlsx";
+    public const string BatteryFile = "aps_battery.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -310,6 +311,7 @@ public static class ProjectPipeline
         }
 
         IReadOnlyList<ControlPoint> controlPoints = [];
+        PowerBudget? powerBudget = null;
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -327,14 +329,31 @@ public static class ProjectPipeline
             var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 };
             stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
 
-            // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают.
-            var points = ControlPoints.Build(EquipmentSet.Signals(stationSet, stationTokens, stationCounts, setChoice?.Chosen is not null ? EquipmentSet.PumpSetRoles : null));
+            // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,
+            // кроме шкафа: прибор управления есть и в установке, его выходы в АПС нужны так же (ГОСТ Р 53325-2012, п. 7.4.5).
+            var signalSources = EquipmentSet.Signals(stationSet, stationTokens, stationCounts,
+                setChoice?.Chosen is not null ? EquipmentSet.PumpSetRoles.Where(r => r != "cabinet").ToHashSet() : null);
+            if (setChoice?.Chosen is { } setForSignals)
+            {
+                signalSources = [.. signalSources.Select(s => s.Role == "cabinet" ? s with { Equipment = $"Прибор управления установки {setForSignals.Designation}" } : s)];
+            }
+
+            var points = ControlPoints.Build(signalSources);
             controlPoints = points.Points;
             issues.AddRange(points.Issues);
             if (controlPoints.Count > 0)
             {
                 issues.Add(new Issue("aps.signals.incomplete", IssueLevel.Info,
-                    "Перечень сигналов АУПТ в АПС неполный: сигналов шкафа управления насосами, жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+                    "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; сигналов жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+            }
+
+            // АКБ приборов автоматики АУПТ (ADR 0012, этап 1): по одному входу модуля на точку управления.
+            var powerSet = EquipmentSet.PathFor(normsDir, AlarmPowerCatalog.File);
+            if (controlPoints.Count > 0 && File.Exists(powerSet))
+            {
+                var power = PowerBudgets.Build(controlPoints.Count, AlarmPowerCatalog.Load(powerSet), norms);
+                powerBudget = power.Budget;
+                issues.AddRange(power.Issues);
             }
         }
 
@@ -948,7 +967,19 @@ public static class ProjectPipeline
 
         if (controlPoints.Count > 0)
         {
-            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font));
+            // Поз. — как на схеме насосной; шкаф комплектной установки — строка установки (роль pumpSet).
+            var signalPositions = new Dictionary<string, int>(schemePositions);
+            if (!signalPositions.ContainsKey("cabinet") && schemePositions.TryGetValue("pumpSet", out var setPosition))
+            {
+                signalPositions["cabinet"] = setPosition;
+            }
+
+            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
+        }
+
+        if (powerBudget is not null)
+        {
+            Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
         }
 
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));

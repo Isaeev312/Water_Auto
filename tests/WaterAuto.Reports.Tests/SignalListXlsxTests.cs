@@ -13,11 +13,12 @@ public class SignalListXlsxTests
         {
             ControlPoint[] points =
             [
-                new("cuValve.1", "Затвор DN100", SignalKind.ValvePosition, "СП 485.1311500.2020, п. 6.8.7"),
-                new("cu.1", "Узел управления DN100", SignalKind.PressureSwitch, null),
+                new("cuValve.1", "Затвор DN100", SignalKind.ValvePosition, "СП 485.1311500.2020, п. 6.8.7", "cuValve", "ЗД3", 1),
+                new("cu.1", "Узел управления DN100", SignalKind.PressureSwitch, null, "cu", "УУ1", 1),
+                new("inletValve.1", "Задвижка DN150", SignalKind.ValvePosition, null, "inletValve", "ЗД1", null),
             ];
 
-            SignalListXlsx.Write(path, points, "Объект. Перечень сигналов АУПТ в АПС");
+            SignalListXlsx.Write(path, points, "Объект. Перечень сигналов АУПТ в АПС", positions: new Dictionary<string, int> { ["cuValve"] = 14 });
 
             var rows = XlsxPreview.ReadFirstSheet(path);
             rows[0][0].ShouldBe("Объект. Перечень сигналов АУПТ в АПС");
@@ -25,14 +26,20 @@ public class SignalListXlsxTests
 
             var first = rows[SignalListXlsx.HeaderRow];
             first[0].ShouldBe("1");
-            first[1].ShouldBe("cuValve.1");
-            first[2].ShouldBe("Затвор DN100");
-            first[3].ShouldBe("Положение запорного устройства");
-            first[4].ShouldBe("СП 485.1311500.2020, п. 6.8.7");
+            first[1].ShouldBe("ЗД3");
+            first[2].ShouldBe("14");
+            first[3].ShouldBe("1");
+            first[4].ShouldBe("Затвор DN100");
+            first[5].ShouldBe("Положение запорного устройства");
+            first[6].ShouldBe("СП 485.1311500.2020, п. 6.8.7");
 
             var second = rows[SignalListXlsx.HeaderRow + 1];
-            second[3].ShouldBe("Срабатывание сигнализатора давления");
-            second[4].ShouldBe("не указано");
+            second[2].ShouldBe("");
+            second[5].ShouldBe("Срабатывание сигнализатора давления");
+            second[6].ShouldBe("не указано");
+
+            // Позиция вне секций — насосная.
+            rows[SignalListXlsx.HeaderRow + 2][3].ShouldBe("насосная");
         }
         finally
         {

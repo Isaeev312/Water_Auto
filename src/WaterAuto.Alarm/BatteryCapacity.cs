@@ -100,7 +100,7 @@ public static class BatteryCapacity
         }
     }
 
-    private static double? Hours(INormsProvider norms, string id, List<Issue> issues)
+    internal static double? Hours(INormsProvider norms, string id, List<Issue> issues)
     {
         if (norms.Find(id)?.Values.GetValueOrDefault("t") is { } hours)
         {

@@ -119,6 +119,8 @@ public static class EquipmentSet
 
             var name = tokens.Aggregate(t.GetProperty("name").GetString()!, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
             var count = (int)Math.Round(t.GetProperty("per").GetDouble() * times);
+            var mark = t.TryGetProperty("mark", out var m) ? m.GetString() : null;
+            var perSection = c.ValueKind == JsonValueKind.String && c.GetString() == "sections" ? (int)Math.Round(t.GetProperty("per").GetDouble()) : 0;
             foreach (var s in list.EnumerateArray())
             {
                 signals.Add(new SignalSource(
@@ -128,10 +130,15 @@ public static class EquipmentSet
                     {
                         "valvePosition" => SignalKind.ValvePosition,
                         "pressureSwitch" => SignalKind.PressureSwitch,
+                        "pumpStart" => SignalKind.PumpStart,
+                        "pumpFault" => SignalKind.PumpFault,
+                        "automaticsOff" => SignalKind.AutomaticsOff,
                         var kind => throw new InvalidDataException($"{path}: неизвестный вид сигнала «{kind}»."),
                     },
                     count,
-                    s.TryGetProperty("clause", out var cl) ? cl.GetString() : null));
+                    s.TryGetProperty("clause", out var cl) ? cl.GetString() : null,
+                    mark,
+                    perSection));
             }
         }
 

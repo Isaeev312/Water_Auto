@@ -143,13 +143,25 @@ public sealed class PumpSetPipelineTests : IDisposable
         result.Pump.ShouldNotBeNull();
 
         var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.SignalListFile));
-        var ids = rows.Skip(WaterAuto.Reports.SignalListXlsx.HeaderRow).Select(r => r[1]).ToList();
+        var body = rows.Skip(WaterAuto.Reports.SignalListXlsx.HeaderRow).ToList();
+        var marks = body.Select(r => r[1]).ToList();
 
         // Два ввода в насосную — две задвижки; одна секция — затворы до и после узла и его сигнализатор давления.
-        ids.ShouldBe(["inletValve.1", "inletValve.2", "cu.1", "cuValve.1", "cuValve.2"], ignoreOrder: true);
-        // Затворы обвязки входят в комплектную установку и в перечень не попадают, как и в ПТ2.СО.
-        ids.ShouldNotContain(id => id.StartsWith("valveS", StringComparison.Ordinal) || id.StartsWith("valveD", StringComparison.Ordinal));
+        // Шкаф входит в комплектную установку, но его выходы в АПС нужны и у неё (ГОСТ Р 53325-2012, п. 7.4.5).
+        // Затворы обвязки входят в установку и в перечень не попадают, как и в ПТ2.СО, — номера ЗД на них не тратятся.
+        marks.ShouldBe(["ШУН", "ШУН", "ШУН", "УУ1", "ЗД1", "ЗД2", "ЗД3", "ЗД4"]);
+        body.Where(r => r[1] == "ШУН").ShouldAllBe(r => r[4].StartsWith("Прибор управления установки " + result.Pump!.Designation, StringComparison.Ordinal));
+        body.Where(r => r[1] is "УУ1" or "ЗД3" or "ЗД4").ShouldAllBe(r => r[3] == "1");
+        body.Where(r => r[1] is "ЗД1" or "ЗД2" or "ШУН").ShouldAllBe(r => r[3] == "насосная");
+        // Поз. — номер строки ПТ2.СО, как на схеме насосной; у шкафа — строка установки.
+        body.ShouldAllBe(r => r[2] != "");
         result.Issues.ShouldContain(i => i.Code == "aps.signals.incomplete");
+
+        // АКБ — по числу сигналов: 8 входов — один АР8; набор из каталога назван в замечании, ошибок расчёта нет.
+        result.Issues.ShouldContain(i => i.Code == "aps.power.defaultSet");
+        result.Issues.ShouldNotContain(i => (i.Code.StartsWith("aps.power", StringComparison.Ordinal) || i.Code.StartsWith("aps.battery", StringComparison.Ordinal)) && i.Level == IssueLevel.Error);
+        var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.BatteryFile)).SelectMany(r => r).ToList();
+        battery.ShouldContain("Требуемая ёмкость АКБ, А·ч");
     }
 
     [Fact]
