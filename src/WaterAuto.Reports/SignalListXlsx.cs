@@ -4,16 +4,16 @@ using WaterAuto.Core;
 namespace WaterAuto.Reports;
 
 /// <summary>
-/// Перечень сигналов АУПТ в АПС (ADR 0012, этап 1) в xlsx: одна строка на точку управления — обозначение, оборудование,
-/// вид сигнала и пункт нормы. Рабочая таблица для ТЗ на взаимодействие и таблицы адресов; приборы и шлейфы назначает проектировщик АПС.
+/// Перечень сигналов АУПТ в АПС (ADR 0012, этап 1) в xlsx: одна строка на точку управления — обозначение устройства,
+/// номер позиции спецификации (как на схеме насосной), секция, оборудование, вид сигнала и пункт нормы. Рабочая таблица для ТЗ на взаимодействие и таблицы адресов; приборы и шлейфы назначает проектировщик АПС.
 /// </summary>
 public static class SignalListXlsx
 {
     public const int HeaderRow = 3;
 
-    public static readonly IReadOnlyList<string> Columns = ["№ п/п", "Обозначение", "Оборудование", "Сигнал", "Основание"];
+    public static readonly IReadOnlyList<string> Columns = ["№ п/п", "Обозначение", "Поз.", "Секция", "Оборудование", "Сигнал", "Основание"];
 
-    private static readonly double[] Widths = [7, 16, 60, 36, 34];
+    private static readonly double[] Widths = [7, 14, 7, 11, 56, 36, 34];
 
     public static string KindText(SignalKind kind) => kind switch
     {
@@ -25,7 +25,8 @@ public static class SignalListXlsx
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    public static void Write(string path, IReadOnlyList<ControlPoint> points, string title, string font = DocumentStyle.DefaultFont)
+    /// <param name="positions">Номера позиций спецификации по роли; без номера ячейка «Поз.» пустая.</param>
+    public static void Write(string path, IReadOnlyList<ControlPoint> points, string title, string font = DocumentStyle.DefaultFont, IReadOnlyDictionary<string, int>? positions = null)
     {
         ArgumentNullException.ThrowIfNull(points);
         using var book = new XLWorkbook();
@@ -47,10 +48,16 @@ public static class SignalListXlsx
         {
             var p = points[i];
             ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = p.Id;
-            ws.Cell(row, 3).Value = p.Equipment;
-            ws.Cell(row, 4).Value = KindText(p.Kind);
-            ws.Cell(row, 5).Value = p.Clause ?? "не указано";
+            ws.Cell(row, 2).Value = p.Designation;
+            if (p.Role is not null && positions?.TryGetValue(p.Role, out var pos) == true)
+            {
+                ws.Cell(row, 3).Value = pos;
+            }
+
+            ws.Cell(row, 4).Value = p.Section is { } section ? section : "насосная";
+            ws.Cell(row, 5).Value = p.Equipment;
+            ws.Cell(row, 6).Value = KindText(p.Kind);
+            ws.Cell(row, 7).Value = p.Clause ?? "не указано";
         }
 
         var table = ws.Range(HeaderRow, 1, Math.Max(HeaderRow, row - 1), Columns.Count);

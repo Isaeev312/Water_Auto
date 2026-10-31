@@ -956,7 +956,14 @@ public static class ProjectPipeline
 
         if (controlPoints.Count > 0)
         {
-            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font));
+            // Поз. — как на схеме насосной; шкаф комплектной установки — строка установки (роль pumpSet).
+            var signalPositions = new Dictionary<string, int>(schemePositions);
+            if (!signalPositions.ContainsKey("cabinet") && schemePositions.TryGetValue("pumpSet", out var setPosition))
+            {
+                signalPositions["cabinet"] = setPosition;
+            }
+
+            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
         }
 
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));

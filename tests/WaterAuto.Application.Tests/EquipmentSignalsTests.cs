@@ -21,10 +21,15 @@ public class EquipmentSignalsTests
         cuValves.Count.ShouldBe(6);
         cuValves.Equipment.ShouldContain("DN100");
         cuValves.Clause.ShouldBe("СП 485.1311500.2020, п. 6.8.7");
+        cuValves.Mark.ShouldBe("ЗД");
+        cuValves.PerSection.ShouldBe(2);
 
         var cu = signals.Single(s => s.Role == "cu");
         cu.Kind.ShouldBe(SignalKind.PressureSwitch);
         cu.Count.ShouldBe(3);
+        cu.Mark.ShouldBe("УУ");
+        cu.PerSection.ShouldBe(1);
+        signals.Single(s => s.Role == "inletValve").PerSection.ShouldBe(0);
 
         // Манометры, обратные клапаны и вставки сигналов не дают.
         signals.ShouldNotContain(s => s.Role == "gauge" || s.Role == "checkD" || s.Role == "insertS");

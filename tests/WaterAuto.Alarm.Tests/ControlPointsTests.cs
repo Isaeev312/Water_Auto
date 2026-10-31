@@ -78,6 +78,59 @@ public class ControlPointsTests
     }
 
     [Fact]
+    public void Designations_run_through_one_series_per_mark()
+    {
+        var result = ControlPoints.Build(
+        [
+            new SignalSource("inletValve", "Задвижка DN150", SignalKind.ValvePosition, 2, "п. 1", Mark: "ЗД"),
+            new SignalSource("cuValve", "Затвор DN100", SignalKind.ValvePosition, 2, "п. 2", Mark: "ЗД"),
+        ]);
+
+        result.Points.Select(p => p.Designation).ShouldBe(["ЗД1", "ЗД2", "ЗД3", "ЗД4"]);
+        result.Points.Select(p => p.Role).ShouldBe(["inletValve", "inletValve", "cuValve", "cuValve"]);
+    }
+
+    [Fact]
+    public void Single_device_has_no_number_and_its_signals_share_the_designation()
+    {
+        var result = ControlPoints.Build(
+        [
+            new SignalSource("cabinet", "Шкаф", SignalKind.PumpStart, 1, "п. 1", Mark: "ШУН"),
+            new SignalSource("cabinet", "Шкаф", SignalKind.PumpFault, 1, "п. 1", Mark: "ШУН"),
+        ]);
+
+        result.Points.Select(p => p.Designation).ShouldBe(["ШУН", "ШУН"]);
+    }
+
+    [Fact]
+    public void Section_bound_devices_get_the_section_number_in_plan_order()
+    {
+        // Две секции: на секцию узел управления и два затвора (до и после узла), как на схеме насосной.
+        var result = ControlPoints.Build(
+        [
+            new SignalSource("cu", "Узел управления DN100", SignalKind.PressureSwitch, 2, "п. 1", Mark: "УУ", PerSection: 1),
+            new SignalSource("cuValve", "Затвор DN100", SignalKind.ValvePosition, 4, "п. 2", Mark: "ЗД", PerSection: 2),
+            new SignalSource("inletValve", "Задвижка DN150", SignalKind.ValvePosition, 1, "п. 3", Mark: "ЗД"),
+        ]);
+
+        result.Points.Select(p => (p.Designation, p.Section)).ShouldBe(
+        [
+            ("УУ1", (int?)1), ("УУ2", 2),
+            ("ЗД1", 1), ("ЗД2", 1), ("ЗД3", 2), ("ЗД4", 2),
+            ("ЗД5", null),
+        ]);
+    }
+
+    [Fact]
+    public void Source_without_mark_keeps_the_id_as_designation()
+    {
+        var point = ControlPoints.Build([new SignalSource("cu", "Узел", SignalKind.PressureSwitch, 1, "п. 1")]).Points.ShouldHaveSingleItem();
+
+        point.Designation.ShouldBe("cu.1");
+        point.Section.ShouldBeNull();
+    }
+
+    [Fact]
     public void No_sources_give_no_points_and_no_issues()
     {
         var result = ControlPoints.Build([]);
