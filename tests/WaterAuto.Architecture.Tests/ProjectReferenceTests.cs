@@ -8,12 +8,13 @@ namespace WaterAuto.Architecture.Tests;
 // на пустом скелете проверка сборок ничего бы не ловила.
 public class ProjectReferenceTests
 {
-    private static readonly string[] Libraries = ["Calc", "Norms", "Catalog", "Import", "Export", "Reports"];
+    private static readonly string[] Libraries = ["Calc", "Alarm", "Norms", "Catalog", "Import", "Export", "Reports"];
 
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
         ["WaterAuto.Core"] = [],
         ["WaterAuto.Calc"] = ["WaterAuto.Core"],
+        ["WaterAuto.Alarm"] = ["WaterAuto.Core"],
         ["WaterAuto.Norms"] = ["WaterAuto.Core"],
         ["WaterAuto.Catalog"] = ["WaterAuto.Core"],
         ["WaterAuto.Import"] = ["WaterAuto.Core"],
@@ -54,7 +55,7 @@ public class ProjectReferenceTests
     [Fact]
     public void Calc_does_not_reference_io_or_ui()
     {
-        string[] forbidden = ["WaterAuto.Import", "WaterAuto.Export", "WaterAuto.Reports", "WaterAuto.App"];
+        string[] forbidden = ["WaterAuto.Alarm", "WaterAuto.Import", "WaterAuto.Export", "WaterAuto.Reports", "WaterAuto.App"];
         References("WaterAuto.Calc").Intersect(forbidden).ShouldBeEmpty();
     }
 
