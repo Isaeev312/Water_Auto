@@ -202,6 +202,7 @@ static void CheckRequiredKeys(string rel, JsonNode doc, List<string> errors)
     //   «Б.1.3.13» — localLossFactor, доля местных потерь (appendix_B_clauses.json; README §6.1, ADR 0002);
     //   «табл. 6.1» — параметры АУП по группе помещения (README §6.1): i, Q, S, t, шаг и attrs.group.
     //     В текущем срезе Calc эти две записи ещё не читает: списки закрепляют их формат заранее.
+    //   «прил. Б, п. Б.2» — t, время работы от АКБ (sp6/appendix_B.json; WaterAuto.Alarm/BatteryCapacity.cs).
     // Строка «табл. Б.3» с quantity == "A" (формула Б.7) сюда не входит: Calc её не использует.
     (string Clause, string? SelectAttr, string? SelectValue, string[] Values, string[] Attrs)[] requirements =
     [
@@ -209,6 +210,7 @@ static void CheckRequiredKeys(string rel, JsonNode doc, List<string> errors)
         ("табл. Б.3", "quantity", "Kt", ["psi", "theta", "dnMin", "dnMax"], ["standard", "formula", "quantity"]),
         ("Б.1.3.13", null, null, ["localLossFactor"], []),
         ("табл. 6.1", null, null, ["i_water", "i_foam", "Q_water", "Q_foam", "S", "t_min", "maxSpacing"], ["group"]),
+        ("прил. Б, п. Б.2", null, null, ["t"], []),
     ];
 
     foreach (var node in doc["records"]!.AsArray())
