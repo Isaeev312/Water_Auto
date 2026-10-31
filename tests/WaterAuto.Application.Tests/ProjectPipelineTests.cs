@@ -312,6 +312,37 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Upper_level_is_fed_by_the_riser_and_governs_the_pump_head()
+    {
+        // Тот же этаж на отметке +3,3 м: диктующий выше на 3,3 м, подводящий длиннее на стояк — напор больше более чем на 3,3 м;
+        // оросители обоих этажей — в спецификации, план этажа — отдельным листом, основной план — только свой этаж.
+        // Прогоны пишут в одну папку — числа одноэтажного снимаются до второго.
+        static int Count(string path) => DxfReader.Read(path).Entities.Count(e => e.Layer.Name == "ПТ_ОРОСИТЕЛИ");
+        static int Installed(PipelineResult r) => int.Parse(WaterAuto.Reports.XlsxPreview.ReadFirstSheet(r.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)))
+            .First(x => x.Any(c => c.StartsWith("Ороситель спринклерный", StringComparison.Ordinal) && !c.Contains("запас", StringComparison.Ordinal)))[6], System.Globalization.CultureInfo.InvariantCulture);
+        Drawing();
+        var single = Run(Project());
+        single.Success.ShouldBeTrue();
+        var singleHead = single.Design!.PumpHead.Meters;
+        var singlePlan = Count(single.Files.Single(f => f.EndsWith(ProjectPipeline.PlanDxfFile, StringComparison.Ordinal)));
+        var singleInstalled = Installed(single);
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var json = ProjectFile.ToJson(project with
+        {
+            Design = project.Design with { Levels = [new ProjectAuptLevel { Name = "2 этаж", Drawing = "floor.dxf", Elevation = 3.3 }] },
+        });
+        var result = Run(Write("levels.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        result.Design!.PumpHead.Meters.ShouldBeGreaterThan(singleHead + 3.3);
+        result.Design.Route.RoomId.ShouldStartWith("L1.");
+        result.Issues.ShouldContain(i => i.Code == "design.levels.governing");
+        Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.PlanDxfFile, StringComparison.Ordinal))).ShouldBe(singlePlan);
+        Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.LevelPlanFile(1), StringComparison.Ordinal))).ShouldBe(singlePlan);
+        Installed(result).ShouldBe(2 * singleInstalled);
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();

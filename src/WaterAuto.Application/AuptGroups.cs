@@ -13,6 +13,12 @@ public sealed record AuptGroupZone(string Group, LayoutRules Rules, FireParamete
 public sealed record AuptGroupsResult(IReadOnlyList<AuptGroupZone> Zones, SprinklerLayout Layout, RoutingResult Routing)
 {
     public AuptGroupZone ZoneOf(string roomId) => Zones.First(z => z.RoomIds.Contains(roomId));
+
+    /// <summary>Объединение результатов этажей (ID помещений этажей различаются префиксом).</summary>
+    public static AuptGroupsResult Merge(IReadOnlyList<AuptGroupsResult> parts) => new(
+        [.. parts.SelectMany(p => p.Zones)],
+        new SprinklerLayout([.. parts.SelectMany(p => p.Layout.Sprinklers)], [.. parts.SelectMany(p => p.Layout.Zones)], [.. parts.SelectMany(p => p.Layout.Issues)]),
+        new RoutingResult([.. parts.SelectMany(p => p.Routing.Routes)], [.. parts.SelectMany(p => p.Routing.Issues)]));
 }
 
 /// <summary>
