@@ -4,22 +4,48 @@ namespace WaterAuto.Core;
 /// Контроллер адресной линии (ДПЛС) по паспорту: ток от источника питания без адресных устройств, при известной
 /// нагрузке линии <paramref name="LoadOfLoaded"/>, максимальный; допустимая нагрузка линии и число адресов.
 /// </summary>
-public sealed record LoopController(string Name, Current Idle, Current Loaded, Current LoadOfLoaded, Current Max, Current MaxLoopLoad, int MaxAddresses, string Source);
+public sealed record LoopController(string Name, Current Idle, Current Loaded, Current LoadOfLoaded, Current Max, Current MaxLoopLoad, int MaxAddresses, string Source) : ICertified
+{
+    public string? Certificate { get; init; }
+}
+
+/// <summary>
+/// Изделие с сертификатом соответствия, действующим на объекте (в КР — вопрос А-12): номер, орган, срок. Null — в каталоге
+/// не указан; расчёт об этом предупреждает, но не останавливается.
+/// </summary>
+public interface ICertified
+{
+    string Name { get; }
+
+    string? Certificate { get; }
+}
 
 /// <summary>Адресный модуль входов: питается от линии контроллера, ток — нагрузка линии.</summary>
-public sealed record LoopModule(string Name, int Inputs, Current LoopCurrent, int MaxPerLoop, string Source);
+public sealed record LoopModule(string Name, int Inputs, Current LoopCurrent, int MaxPerLoop, string Source) : ICertified
+{
+    public string? Certificate { get; init; }
+}
 
 /// <summary>Адресное устройство линии контроллера без своего питания (извещатель): ток от линии, один адрес.</summary>
-public sealed record LoopDevice(string Name, Current LoopCurrent, string Source);
+public sealed record LoopDevice(string Name, Current LoopCurrent, string Source) : ICertified
+{
+    public string? Certificate { get; init; }
+}
 
 /// <summary>Резервированный источник питания: собственный ток от АКБ при отсутствии сети (Iибэ).</summary>
-public sealed record PowerSupply(string Name, Current OwnCurrent, string Source);
+public sealed record PowerSupply(string Name, Current OwnCurrent, string Source) : ICertified
+{
+    public string? Certificate { get; init; }
+}
 
 /// <summary>
 /// АКБ по паспорту: номинальная ёмкость C20, ёмкость в конце срока службы S (% от начальной) и токи разряда
 /// по таблице разряда — ключ — время разряда.
 /// </summary>
-public sealed record BatteryModel(string Name, Charge Nominal, double EndOfLifePercent, IReadOnlyDictionary<TimeSpan, Current> Discharge, string Source);
+public sealed record BatteryModel(string Name, Charge Nominal, double EndOfLifePercent, IReadOnlyDictionary<TimeSpan, Current> Discharge, string Source) : ICertified
+{
+    public string? Certificate { get; init; }
+}
 
 /// <summary>Набор приборов питания автоматики АУПТ в АПС из каталога; все токи — при напряжении <paramref name="Voltage"/>, В.</summary>
 public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, LoopModule Module, PowerSupply Supply, BatteryModel Battery)

@@ -50,6 +50,15 @@ public static class PowerBudgets
         var modules = layout.Modules;
         var controllers = Math.Max(1, layout.Controllers);
 
+        // Сертификаты соответствия, действующие на объекте (А-12): без них изделие в проект не попадает — предупреждение одно на набор.
+        var uncertified = new ICertified[] { c, m, set.Supply, set.Battery }.Concat(set.Detectors.Where(kv => detectors.GetValueOrDefault(kv.Key) > 0).Select(kv => (ICertified)kv.Value))
+            .Where(d => string.IsNullOrWhiteSpace(d.Certificate)).Select(d => d.Name).Distinct().ToList();
+        if (uncertified.Count > 0)
+        {
+            issues.Add(new Issue("aps.power.noCertificate", IssueLevel.Warning,
+                $"В каталоге не указан сертификат соответствия для: {string.Join(", ", uncertified)}. Для применения в КР нужен действующий сертификат (вопрос А-12) — проверить и внести в alarm_power.json."));
+        }
+
         issues.Add(new Issue("aps.power.defaultSet", IssueLevel.Info,
             $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Name}), только приборы автоматики АУПТ; пульт и приборы АПС, СОУЭ (этапы 2–3) не учтены."));
         if (controllers > 1)

@@ -12,10 +12,10 @@ public class PowerBudgetsTests
 
     private static readonly AlarmPowerSet Set = new(
         new Voltage(12),
-        new LoopController("С2000-КДЛ", new Current(0.08), new Current(0.16), new Current(0.0635), new Current(0.4), new Current(0.064), 127, "РЭ КДЛ"),
-        new LoopModule("С2000-АР8", 8, new Current(0.004), 15, "РЭ АР8"),
-        new PowerSupply("РИП-12 исп.01", new Current(0.04), "РЭ РИП"),
-        new BatteryModel("АБ 1217С", new Charge(17), 80, Table(10.41, 0.727), "РЭ АБ"));
+        new LoopController("С2000-КДЛ", new Current(0.08), new Current(0.16), new Current(0.0635), new Current(0.4), new Current(0.064), 127, "РЭ КДЛ") { Certificate = "тест" },
+        new LoopModule("С2000-АР8", 8, new Current(0.004), 15, "РЭ АР8") { Certificate = "тест" },
+        new PowerSupply("РИП-12 исп.01", new Current(0.04), "РЭ РИП") { Certificate = "тест" },
+        new BatteryModel("АБ 1217С", new Charge(17), 80, Table(10.41, 0.727), "РЭ АБ") { Certificate = "тест" });
 
     private static Dictionary<TimeSpan, Current> Table(double oneHour, double day) =>
         new() { [TimeSpan.FromHours(1)] = new(oneHour), [TimeSpan.FromHours(24)] = new(day) };
@@ -66,6 +66,21 @@ public class PowerBudgetsTests
         var l1 = 0.004 + 0.036; var l2 = 0.036;
         b.Standby.Amperes.ShouldBe(0.16 + (0.08 * (l1 + l2) / 0.0635), 1e-12);
         result.Issues.ShouldContain(i => i.Code == "aps.power.controllers");
+    }
+
+    [Fact]
+    public void Missing_certificates_are_one_warning_naming_the_devices()
+    {
+        // Приборы набора сертифицированы, извещатели — нет: предупреждение называет только применённый ДИП.
+        var warn = PowerBudgets.Build(8, WithDetectors, Norms, new Dictionary<string, int> { ["smoke"] = 12 }).Issues.Single(i => i.Code == "aps.power.noCertificate");
+        warn.Level.ShouldBe(IssueLevel.Warning);
+        warn.Message.ShouldContain("ДИП-34А-03");
+        warn.Message.ShouldNotContain("С2000-КДЛ");
+        warn.Message.ShouldNotContain("С2000-ИП-03"); // не применён — не требуется
+
+        var bare = Set with { Controller = Set.Controller with { Certificate = null } };
+        PowerBudgets.Build(8, bare, Norms).Issues.Single(i => i.Code == "aps.power.noCertificate").Message.ShouldContain("С2000-КДЛ");
+        PowerBudgets.Build(8, Set, Norms).Issues.ShouldNotContain(i => i.Code == "aps.power.noCertificate");
     }
 
     [Fact]

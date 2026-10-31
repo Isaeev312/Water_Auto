@@ -15,6 +15,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "voltage", "idle", "loaded", "loadOfLoaded", "max", "maxLoopLoad", "maxAddresses", "source"],
+      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "voltage": { "type": "number", "description": "Напряжение, при котором заданы токи, В." },
@@ -31,6 +32,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "inputs", "loopCurrent", "maxPerLoop", "source"],
+      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "inputs": { "type": "integer", "minimum": 1, "description": "Входов (контролируемых цепей) на модуль." },
@@ -43,6 +45,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "voltage", "ownCurrent", "source"],
+      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "voltage": { "type": "number", "description": "Номинальное напряжение выхода, В." },
@@ -60,6 +63,7 @@
         "properties": {
           "name": { "type": "string", "minLength": 1 },
           "loopCurrent": { "type": "number", "minimum": 0, "description": "Ток от линии контроллера, А (паспорт: «не более»)." },
+          "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
           "source": { "type": "string", "minLength": 1 }
         }
       }
@@ -68,6 +72,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "nominal", "endOfLifePercent", "discharge", "source"],
+      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
       "properties": {
         "name": { "type": "string", "minLength": 1 },
         "nominal": { "type": "number", "exclusiveMinimum": 0, "description": "Номинальная ёмкость C20, А·ч." },
