@@ -92,6 +92,7 @@ public static class ProjectPipeline
     public const string InteractionFile = "aps_interaction.docx";
     public const string AddressTableFile = "aps_addresses.xlsx";
     public const string AlarmPlanFile = "aps_plan.dxf";
+    public const string AlarmNoteFile = "aps_pz.docx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -1045,6 +1046,15 @@ public static class ProjectPipeline
             var ti = project.Title;
             var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
             Write(outDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
+        }
+
+        if (detectorLayout is not null || controlPoints.Count > 0)
+        {
+            // Записка АПС — объяснение хода расчёта для проектировщика: исходные данные, выбор ИП, размещение, ЗКСПС, сигналы, АКБ.
+            var tn = project.Title;
+            var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
+                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms);
+            Write(outDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
         }
 
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
