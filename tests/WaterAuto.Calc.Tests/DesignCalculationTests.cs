@@ -135,6 +135,20 @@ public class DesignCalculationTests
     }
 
     [Fact]
+    public void Dictating_sprinkler_is_the_lowest_pressure_one_of_its_zone()
+    {
+        // Б.1.2.1: диктующий — ороситель зоны с наименьшим давлением. Если у оросителя зоны давление ниже, чем у принятого
+        // диктующего, та же зона пересчитывается с ним диктующим — замечания «диктующий выбран неверно» в результате нет,
+        // а давление насоса не меньше, чем при неверном диктующем.
+        foreach (var velocity in new double?[] { null, 5 })
+        {
+            var r = Calculate(velocity);
+            r.Issues.ShouldNotContain(i => i.Code == "dictating.notMinimum", string.Join("; ", r.Issues.Where(i => i.Code == "dictating.notMinimum").Select(i => i.Message)));
+            r.ZoneSprinklers.ShouldContain(r.DictatingSprinklerId);
+        }
+    }
+
+    [Fact]
     public void Dictating_flow_and_pressure_follow_B1_with_the_upper_factor()
     {
         // q = 1,5 · 0,12 · 12 = 2,16 л/с; p = (q / 10K)² = (2,16 / 4,7)² = 0,2112 МПа.
