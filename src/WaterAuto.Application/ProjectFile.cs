@@ -16,6 +16,12 @@ public sealed record ProjectFile
     /// <summary>Чертёж плана; путь относительно файла проекта.</summary>
     public string Drawing { get; init; } = "";
 
+    /// <summary>
+    /// Водяная АУПТ в проекте (по умолчанию — да, как во всех прежних проектах). false — только другие разделы (АПС, СОУЭ…):
+    /// раздел design не используется, ввод ПТ_ВВОД на чертеже не нужен, тома АУПТ нет.
+    /// </summary>
+    public bool Aupt { get; init; } = true;
+
     public ProjectDesign Design { get; init; } = new();
 
     public ProjectTitle Title { get; init; } = new();
