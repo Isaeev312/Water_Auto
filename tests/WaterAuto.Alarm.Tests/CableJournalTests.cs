@@ -23,6 +23,27 @@ public class CableJournalTests
     }
 
     [Fact]
+    public void Ring_visits_each_level_as_one_block_and_adds_the_riser_at_every_transition()
+    {
+        // Пост на отм. 0; два устройства на уровне 0 и два на −6 м в тех же точках плана. Кольцо обходит уровень 0, затем
+        // спускается один раз на 6 м, обходит −6 и поднимается: план 10+0+10 на каждом уровне… по осям 40 м + стояки 2 × 6 м.
+        var points = new List<PlanPoint> { new(10000, 0), new(10000, 0), new(10000, 10000), new(10000, 10000) };
+        var levels = new List<double> { 0, -6000, 0, -6000 };
+        var segments = CableJournal.Segments(new PlanPoint(0, 0), points, levels);
+
+        // Уровни подряд: после первого устройства уровня −6 м возврата на уровень 0 нет.
+        var order = segments.Where(s => s.To >= 0).Select(s => levels[s.To]).ToList();
+        order.ShouldBe([0, 0, -6000, -6000]);
+        segments.Sum(s => s.Mm).ShouldBe(10000 + 10000 + 6000 + 10000 + 6000 + 10000, 1e-9);
+
+        // В журнале длина кольца по плану — та же сумма; запас 1,1.
+        var loop = new LoopLine(1, points, new Current(0.02), false, DeviceIds: ["A", "B", "C", "D"], DeviceLevelsMm: levels);
+        var result = CableJournal.Build(new PlanPoint(0, 0), [loop], Cables, null, 0, "С2000-КДЛ", "РИП-12", "С2000-АР8");
+        result.Lines.Single(l => l.Id == "ДПЛС1").BaseLengthM.ShouldBe(52);
+        result.Lines.Count(l => l.Id.StartsWith("ДПЛС1.", StringComparison.Ordinal)).ShouldBe(5);
+    }
+
+    [Fact]
     public void Loop_section_is_the_smallest_whose_passport_length_covers_the_ring()
     {
         // Кольцо 40 м × 1,1 = 44 м при 20 мА → столбец 32 мА: 0,2 мм² даёт 330 м — хватает.

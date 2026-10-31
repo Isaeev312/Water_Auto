@@ -5,9 +5,11 @@ namespace WaterAuto.Alarm;
 
 /// <summary>
 /// Линия контроллера для журнала: устройства на ней (точки плана) и суммарный ток адресных устройств.
-/// <paramref name="RiserMm"/> — длина вертикальных участков (стояков) между уровнями, туда и обратно по кольцу, мм.
+/// <paramref name="RiserMm"/> — дополнительная длина вертикальных участков, мм (задаётся вручную, когда уровни устройств не известны).
+/// <paramref name="DeviceLevelsMm"/> — отметка уровня каждого устройства относительно поста, мм: кольцо обходит уровни
+/// подряд, на каждом переходе прибавляется разность отметок.
 /// </summary>
-public sealed record LoopLine(int Number, IReadOnlyList<PlanPoint> Devices, Current Load, bool HasPumpModules, double RiserMm = 0, IReadOnlyList<string>? DeviceIds = null);
+public sealed record LoopLine(int Number, IReadOnlyList<PlanPoint> Devices, Current Load, bool HasPumpModules, double RiserMm = 0, IReadOnlyList<string>? DeviceIds = null, IReadOnlyList<double>? DeviceLevelsMm = null);
 
 public sealed record CableJournalResult(IReadOnlyList<CableLine> Lines, IReadOnlyList<Issue> Issues);
 
@@ -31,12 +33,16 @@ public static class CableJournal
         foreach (var loop in loops)
         {
             var points = loop.Devices.ToList();
+            var levels = loop.DeviceLevelsMm is { } dl && dl.Count == loop.Devices.Count ? dl.ToList() : null;
             if (loop.HasPumpModules && pumpRoom is not null)
             {
                 points.Add(pumpRoom.Centroid);
+                levels?.Add(0);
             }
 
-            var lengthM = (Tour(panel, points) + loop.RiserMm) / 1000 * cables.Reserve;
+            var segments = Segments(panel, points, levels);
+            var risersMm = segments.Sum(x => x.RiserMm) + loop.RiserMm;
+            var lengthM = (segments.Sum(x => x.Mm) + loop.RiserMm) / 1000 * cables.Reserve;
             var loadMa = loop.Load.Amperes * 1000;
             var section = cables.LoopSectionFor(lengthM, loadMa);
             var mark = cables.LoopName.Replace("{section}", (section ?? cables.MaxLoopSection).ToString("0.##", Ru), StringComparison.Ordinal);
@@ -48,7 +54,7 @@ public static class CableJournal
             }
 
             lines.Add(new CableLine($"ДПЛС{loop.Number}", $"{controllerName} №{loop.Number}", $"{loop.Devices.Count} адресных устройств{(loop.HasPumpModules ? $", {moduleName} в насосной" : "")}", "адресная линия связи (кольцо)", mark, Math.Round(lengthM, 0),
-                string.Create(Ru, $"ток линии {loadMa:0.#} мА; длина кольца по плану{(loop.RiserMm > 0 ? $" и стояков {loop.RiserMm / 1000:0.#} м" : "")} с запасом {cables.Reserve:0.##}; сечение по табл. длин ДПЛС"),
+                string.Create(Ru, $"ток линии {loadMa:0.#} мА; длина кольца по плану{(risersMm > 0 ? $" и стояков {risersMm / 1000:0.#} м" : "")} с запасом {cables.Reserve:0.##}; сечение по табл. длин ДПЛС"),
                 Math.Round(lengthM / cables.Reserve, 0)));
 
             // Сегменты кольца от устройства к устройству (как в таблице прокладки): порядок — тот же обход ближайшего соседа.
@@ -56,14 +62,15 @@ public static class CableJournal
             {
                 var controller = $"{controllerName} №{loop.Number}";
                 var k = 0;
-                foreach (var (fromIndex, toIndex, segmentMm) in Segments(panel, loop.Devices))
+                string Name(int index) => index < 0 ? controller : index < ids.Count ? ids[index] : $"{moduleName} (насосная)";
+                foreach (var seg in segments)
                 {
                     k++;
-                    var from = fromIndex < 0 ? controller : ids[fromIndex];
-                    var to = toIndex < 0 ? controller : ids[toIndex];
-                    var extra = fromIndex < 0 || toIndex < 0 ? loop.RiserMm / 2 : 0; // стояк — на участках от поста и к посту
-                    var baseM = (segmentMm + extra) / 1000;
-                    lines.Add(new CableLine($"ДПЛС{loop.Number}.{k}", from, to, "", mark, Math.Round(baseM * cables.Reserve, 0), extra > 0 ? "со стояком между уровнями" : "", Math.Round(baseM, 0)));
+                    // Ручной стояк (без уровней устройств) — пополам на участки от поста и к посту.
+                    var extra = seg.From < 0 || seg.To < 0 ? loop.RiserMm / 2 : 0;
+                    var baseM = (seg.Mm + extra) / 1000;
+                    lines.Add(new CableLine($"ДПЛС{loop.Number}.{k}", Name(seg.From), Name(seg.To), "", mark, Math.Round(baseM * cables.Reserve, 0),
+                        seg.RiserMm > 0 || extra > 0 ? string.Create(Ru, $"со стояком {(seg.RiserMm + extra) / 1000:0.#} м") : "", Math.Round(baseM, 0)));
                 }
             }
 
@@ -109,26 +116,39 @@ public static class CableJournal
         return total + (points.Count > 0 ? Manhattan(at, start) : 0);
     }
 
-    /// <summary>Участки того же обхода: индексы устройств (−1 — пост) и длина участка по осям, мм; последний — возврат к посту.</summary>
-    public static IReadOnlyList<(int From, int To, double Mm)> Segments(PlanPoint start, IReadOnlyList<PlanPoint> points)
+    /// <summary>
+    /// Участки обхода: индексы устройств (−1 — пост), длина участка по осям с вертикалью, мм, и вертикальная часть (стояк), мм;
+    /// последний — возврат к посту. С уровнями устройств (<paramref name="levelsMm"/>, отметка относительно поста) кольцо
+    /// обходит уровни подряд — от ближнего к посту к дальнему, внутри уровня — ближайший сосед; на переходе — разность отметок.
+    /// </summary>
+    public static IReadOnlyList<(int From, int To, double Mm, double RiserMm)> Segments(PlanPoint start, IReadOnlyList<PlanPoint> points, IReadOnlyList<double>? levelsMm = null)
     {
         ArgumentNullException.ThrowIfNull(points);
-        var left = Enumerable.Range(0, points.Count).ToList();
+        double Level(int i) => levelsMm is not null && i >= 0 && i < levelsMm.Count ? levelsMm[i] : 0;
+        var groups = Enumerable.Range(0, points.Count).GroupBy(Level).OrderBy(g => Math.Abs(g.Key)).ThenByDescending(g => g.Key).ToList();
         var at = start;
         var atIndex = -1;
-        var result = new List<(int, int, double)>();
-        while (left.Count > 0)
+        var atLevel = 0.0;
+        var result = new List<(int, int, double, double)>();
+        foreach (var group in groups)
         {
-            var next = left.MinBy(i => Manhattan(at, points[i]));
-            result.Add((atIndex, next, Manhattan(at, points[next])));
-            left.Remove(next);
-            at = points[next];
-            atIndex = next;
+            var left = group.ToList();
+            while (left.Count > 0)
+            {
+                var next = left.MinBy(i => Manhattan(at, points[i]));
+                var riser = Math.Abs(Level(next) - atLevel);
+                result.Add((atIndex, next, Manhattan(at, points[next]) + riser, riser));
+                left.Remove(next);
+                at = points[next];
+                atIndex = next;
+                atLevel = Level(next);
+            }
         }
 
         if (points.Count > 0)
         {
-            result.Add((atIndex, -1, Manhattan(at, start)));
+            var riser = Math.Abs(atLevel);
+            result.Add((atIndex, -1, Manhattan(at, start) + riser, riser));
         }
 
         return result;

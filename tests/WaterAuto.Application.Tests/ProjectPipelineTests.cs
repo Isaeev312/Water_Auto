@@ -267,6 +267,30 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Sample_parking_loops_keep_levels_in_blocks_and_match_the_address_table()
+    {
+        // Образец parking60x30: два уровня, три контроллера. Устройство в журнале — на той же линии, что в таблице адресов;
+        // на каждой линии уровни идут одним блоком (не больше одного перехода между уровнями в каждую сторону).
+        var sample = Path.Combine(RepoPaths.Root, "tests", "Samples", "parking60x30", "sample.waproj");
+        var result = ProjectPipeline.Run(sample, Path.Combine(_dir, "sample"), RepoPaths.Norms, RepoPaths.Registry);
+        var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
+        var controllerOf = addresses.Where(r => r[4].Length > 0).GroupBy(r => r[4]).ToDictionary(g => g.Key, g => g.First()[1]);
+        var journal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        var segments = journal.Where(r => System.Text.RegularExpressions.Regex.IsMatch(r[1], @"^ДПЛС\d+\.\d+$")).ToList();
+        segments.Count.ShouldBeGreaterThan(200);
+        foreach (var line in segments.GroupBy(r => r[1].Split('.')[0]))
+        {
+            var number = line.Key["ДПЛС".Length..];
+            var devices = line.Select(r => r[3]).Where(controllerOf.ContainsKey).ToList();
+            devices.ShouldAllBe(d => controllerOf[d].EndsWith($"№{number}", StringComparison.Ordinal));
+            var levelsInOrder = devices.Select(d => d.StartsWith("L2-", StringComparison.Ordinal) ? 2 : 1).ToList();
+            levelsInOrder.Zip(levelsInOrder.Skip(1)).Count(p => p.First != p.Second).ShouldBeLessThanOrEqualTo(1, $"{line.Key}: уровни вперемешку");
+        }
+
+        result.Issues.ShouldContain(i => i.Code == "aps.loop.levels");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();
