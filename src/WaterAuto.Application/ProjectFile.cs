@@ -367,12 +367,29 @@ public sealed class ProjectAlarm
     /// <summary>СОУЭ: способ оповещения и модели оповещателей для помещений из zones; null — СОУЭ не проектируется.</summary>
     public ProjectWarning? Warning { get; init; }
 
-    /// <summary>Ведомость рабочих чертежей тома АПС (лист «Общие данные»).</summary>
+    /// <summary>
+    /// Уровни (этажи) объекта для АПС: у каждого свой чертёж и отметка пола; пусто — один уровень на основном чертеже проекта.
+    /// Раскладка и лист плана — по каждому уровню, питание, адреса, спецификация и кабельный журнал — общие.
+    /// </summary>
+    public IReadOnlyList<ProjectAlarmLevel> Levels { get; init; } = [];
+
+    /// <summary>Ведомость рабочих чертежей тома АПС (лист «Общие данные»); при нескольких уровнях лист плана повторяется на каждый.</summary>
     public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
     [
         new("1", "Общие данные"),
         new("2", "План расстановки извещателей и ручных извещателей"),
     ];
+}
+
+/// <summary>Уровень (этаж) для АПС: имя для листа и ведомости, чертёж (null — основной чертёж проекта), отметка пола, м.</summary>
+public sealed class ProjectAlarmLevel
+{
+    public string Name { get; init; } = "";
+
+    public string? Drawing { get; init; }
+
+    /// <summary>Отметка пола уровня, м — длина стояков ДПЛС между уровнями в кабельном журнале; null — стояк не учтён (замечание).</summary>
+    public double? Elevation { get; init; }
 }
 
 /// <summary>Исходные данные АППЗ от раздела ОВ: общеобменные системы, дымовые зоны, нормально открытые клапаны.</summary>
@@ -447,4 +464,7 @@ public sealed class ProjectAlarmZone
 
     /// <summary>ID модели извещателя из data/catalog/alarm_detectors.json; null — первая модель нужного типа (с замечанием).</summary>
     public string? Model { get; init; }
+
+    /// <summary>Имя уровня из alarm.levels, к которому относится зона; null — ко всем уровням.</summary>
+    public string? Level { get; init; }
 }

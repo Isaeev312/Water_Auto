@@ -45,6 +45,10 @@
       }
     ],
     "manualModel": "bolid.ipr513_3am",
+    "levels": [
+      { "name": "−1 этаж", "elevation": -3.0 },
+      { "name": "−2 этаж", "drawing": "floor_m2.dxf", "elevation": -6.0 }
+    ],
     "panel": {
       "x": 14000,
       "y": 2000

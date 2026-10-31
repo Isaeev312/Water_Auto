@@ -92,6 +92,9 @@ public static class ProjectPipeline
     public const string InteractionFile = "aps_interaction.docx";
     public const string AddressTableFile = "aps_addresses.xlsx";
     public const string AlarmPlanFile = "aps_plan.dxf";
+
+    /// <summary>План АПС уровня n при нескольких уровнях (alarm.levels): aps_plan_1.dxf, aps_plan_2.dxf…</summary>
+    public static string AlarmPlanLevelFile(int level) => string.Create(CultureInfo.InvariantCulture, $"aps_plan_{level}.dxf");
     public const string AlarmNoteFile = "aps_pz.docx";
     public const string AlarmSpecFile = "aps_spec.xlsx";
     public const string CableJournalFile = "aps_cables.xlsx";
@@ -154,7 +157,17 @@ public static class ProjectPipeline
         issues.AddRange(layout.Issues);
 
         // АПС, этап 2 (ADR 0012): извещатели — только в помещениях и с параметрами, заданными проектировщиком.
-        var detectorZones = AlarmZones(project, plan, design, normsDir, issues);
+        // Уровни (alarm.levels): зоны собираются по чертежу каждого уровня с уникальными ID помещений; раскладка, ЗКСПС, СОУЭ,
+        // питание и спецификация считаются по всем зонам разом, лист плана — на каждый уровень, стояки — в кабельный журнал.
+        var levels = AlarmLevels(project, plan, projectPath, issues);
+        var detectorZones = new List<DetectorZone>();
+        foreach (var level in levels)
+        {
+            level.Zones.AddRange(AlarmZones(project, level, design, normsDir, issues, levels.Count > 1));
+            detectorZones.AddRange(level.Zones);
+        }
+
+        var alarmSheets = AlarmSheets(project, levels);
         var detectorLayout = detectorZones.Count > 0 ? DetectorLayouter.Layout(detectorZones, norms) : null;
         AlarmZoningResult? zoning = null;
         SoueLayout? soue = null;
@@ -568,16 +581,27 @@ public static class ProjectPipeline
                     {
                         var loopPlan = LoopLayout.Plan(controlPoints.Count, alarmSet.Controller, alarmSet.Module,
                             addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
-                        var devicePoints = (detectorLayout?.Detectors.Select(d => d.Location) ?? []).Concat(zoning?.Manuals.Select(m => m.Location) ?? [])
-                            .Concat(soue?.Sounders.Select(s => s.Location) ?? []).Concat(soue?.Lights.Select(l => l.Location) ?? []).ToList();
+                        // Устройства с уровнем: кольцо на другом уровне идёт стояком от поста и обратно — к длине по плану прибавляется 2·Δотм.
+                        var levelOf = levels.SelectMany(l => l.Zones.Select(z => (z.RoomId, l))).ToDictionary(x => x.RoomId, x => x.l);
+                        var devicePoints = (detectorLayout?.Detectors.Select(d => (d.Location, d.RoomId)) ?? []).Concat(zoning?.Manuals.Select(m => (m.Location, m.RoomId)) ?? [])
+                            .Concat(soue?.Sounders.Select(s => (s.Location, s.RoomId)) ?? []).Concat(soue?.Lights.Select(l => (l.Location, l.RoomId)) ?? []).ToList();
                         var loops = new List<LoopLine>();
                         var offset = 0;
+                        var baseElevation = levels[0].Elevation;
                         for (var k = 0; k < Math.Max(1, loopPlan.Controllers); k++)
                         {
                             var take = k < loopPlan.DevicesByController.Count ? loopPlan.DevicesByController[k] : 0;
                             var load = k < loopPlan.LoadByController.Count ? loopPlan.LoadByController[k] : Current.Zero;
-                            loops.Add(new LoopLine(k + 1, devicePoints.Skip(offset).Take(take).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0));
+                            var onLoop = devicePoints.Skip(offset).Take(take).ToList();
+                            var riserMm = onLoop.Select(d => levelOf.GetValueOrDefault(d.RoomId)).Where(l => l is not null && l.Index > 0).Distinct()
+                                .Sum(l => l!.Elevation is { } e && baseElevation is { } b ? 2 * Math.Abs(e - b) * 1000 : 0);
+                            loops.Add(new LoopLine(k + 1, onLoop.Select(d => d.Location).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0, riserMm));
                             offset += take;
+                        }
+
+                        if (levels.Count > 1 && (baseElevation is null || levels.Any(l => l.Elevation is null)))
+                        {
+                            issues.Add(new Issue("aps.cable.noElevation", IssueLevel.Warning, "Кабельный журнал: у уровней не заданы отметки (alarm.levels[].elevation) — стояки ДПЛС между уровнями в длинах линий не учтены."));
                         }
 
                         var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
@@ -929,9 +953,19 @@ public static class ProjectPipeline
         Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
         if (detectorLayout is not null)
         {
-            var planSheet = project.Alarm?.Sheets.FirstOrDefault(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase));
-            var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
-            Write(alarmDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf, stamp: planStamp, notifiers: soue is null ? null : [.. soue.Sounders, .. soue.Lights]));
+            // Лист плана на каждый уровень: извещатели, ИПР и оповещатели уровня — по ID его помещений; один уровень — aps_plan.dxf.
+            var planSheets = alarmSheets.Where(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var level in levels.Where(l => l.Zones.Count > 0))
+            {
+                var rooms = level.Zones.Select(z => z.RoomId).ToHashSet(StringComparer.Ordinal);
+                var planSheet = level.Index < planSheets.Count ? planSheets[level.Index] : planSheets.LastOrDefault();
+                var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
+                var levelLayout = new DetectorLayout([.. detectorLayout.Detectors.Where(d => rooms.Contains(d.RoomId))], detectorLayout.CountByRoom.Where(kv => rooms.Contains(kv.Key)).ToDictionary(), []);
+                var levelIssues = outIssues.Where(i => i.ElementId is null || rooms.Contains(i.ElementId)).ToList();
+                var levelNotifiers = soue is null ? null : soue.Sounders.Concat(soue.Lights).Where(n => rooms.Contains(n.RoomId)).ToList();
+                Write(alarmDir, levels.Count > 1 ? AlarmPlanLevelFile(level.Index + 1) : AlarmPlanFile, files,
+                    p => AlarmPlanDxfWriter.Write(p, levelLayout, level.Zones, levelIssues, project.Font, manuals: zoning?.Manuals.Where(m => rooms.Contains(m.RoomId)).ToList(), zoneOf: zoning?.ZoneOf, stamp: planStamp, notifiers: levelNotifiers));
+            }
         }
 
         Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
@@ -1256,8 +1290,8 @@ public static class ProjectPipeline
 
         if (detectorLayout is not null && project.Alarm is not null)
         {
-            var alarmGeneral = AlarmGeneralData.Build(project.Name, project.Alarm.Sheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code);
-            Write(alarmDir, AlarmGeneralDataFile, files, p => GeneralDataDocx.Write(p, alarmGeneral, Stamp(project, "АПС", "Общие данные") with { SheetCount = project.Alarm.Sheets.Count, Sheet = project.Alarm.Sheets.Count > 0 ? project.Alarm.Sheets[0].Sheet : null }, project.Font));
+            var alarmGeneral = AlarmGeneralData.Build(project.Name, alarmSheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code);
+            Write(alarmDir, AlarmGeneralDataFile, files, p => GeneralDataDocx.Write(p, alarmGeneral, Stamp(project, "АПС", "Общие данные") with { SheetCount = alarmSheets.Count, Sheet = alarmSheets.Count > 0 ? alarmSheets[0].Sheet : null }, project.Font));
         }
 
         if (detectorLayout is not null || controlPoints.Count > 0)
@@ -1681,22 +1715,114 @@ public static class ProjectPipeline
 
 
     /// <summary>Зоны раскладки ИП из раздела alarm проекта: помещение по имени с чертежа («*» — все), высота — из зоны или design.roomHeight.</summary>
-    private static List<DetectorZone> AlarmZones(ProjectFile project, FloorPlan plan, ProjectDesign design, string normsDir, List<Issue> issues)
+    /// <summary>Уровень АПС в прогоне: чертёж уровня, его зоны (ID помещений с префиксом уровня, кроме первого) и отметка.</summary>
+    private sealed class AlarmLevel
     {
+        public required int Index { get; init; }
+
+        public required string Name { get; init; }
+
+        public double? Elevation { get; init; }
+
+        public required FloorPlan Plan { get; init; }
+
+        public List<DetectorZone> Zones { get; } = [];
+    }
+
+    /// <summary>
+    /// Уровни по alarm.levels: первый без своего чертежа — основной план проекта; остальные чертежи читаются тем же импортом.
+    /// Без списка — один уровень на основном чертеже. Нечитаемый чертёж уровня — ошибка, уровень пропускается.
+    /// </summary>
+    private static List<AlarmLevel> AlarmLevels(ProjectFile project, FloorPlan plan, string projectPath, List<Issue> issues)
+    {
+        var declared = project.Alarm?.Levels ?? [];
+        if (declared.Count == 0)
+        {
+            return [new AlarmLevel { Index = 0, Name = "", Plan = plan }];
+        }
+
+        var levels = new List<AlarmLevel>();
+        var dir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
+        foreach (var (l, i) in declared.Select((l, i) => (l, i)))
+        {
+            FloorPlan? levelPlan = plan;
+            if (l.Drawing is { Length: > 0 } file && !string.Equals(file, project.Drawing, StringComparison.OrdinalIgnoreCase))
+            {
+                var import = FloorPlanImporter.Import(Path.GetFullPath(Path.Combine(dir, file)), requireInlet: false);
+                issues.AddRange(import.Issues.Select(x => x with { Message = $"Уровень «{l.Name}»: {x.Message}" }));
+                levelPlan = import.Plan;
+            }
+
+            if (levelPlan is null)
+            {
+                issues.Add(new Issue("aps.level.noDrawing", IssueLevel.Error, $"АПС: чертёж уровня «{l.Name}» ({l.Drawing}) не прочитан — уровень пропущен."));
+                continue;
+            }
+
+            levels.Add(new AlarmLevel { Index = levels.Count, Name = l.Name.Length > 0 ? l.Name : string.Create(CultureInfo.InvariantCulture, $"уровень {i + 1}"), Elevation = l.Elevation, Plan = levelPlan });
+        }
+
+        if (levels.Count == 0)
+        {
+            levels.Add(new AlarmLevel { Index = 0, Name = "", Plan = plan });
+        }
+
+        return levels;
+    }
+
+    /// <summary>
+    /// Ведомость чертежей тома АПС: при нескольких уровнях лист «План…» повторяется на каждый уровень с его именем,
+    /// номера следующих листов сдвигаются. Один уровень — ведомость проекта как есть.
+    /// </summary>
+    private static IReadOnlyList<ProjectSheet> AlarmSheets(ProjectFile project, List<AlarmLevel> levels)
+    {
+        var sheets = project.Alarm?.Sheets ?? [];
+        if (levels.Count <= 1 || sheets.Count(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase)) != 1)
+        {
+            return sheets;
+        }
+
+        var result = new List<ProjectSheet>();
+        var shift = 0;
+        foreach (var s in sheets)
+        {
+            var number = int.TryParse(s.Sheet, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : (int?)null;
+            if (s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var level in levels)
+                {
+                    result.Add(new ProjectSheet(number is { } p ? (p + level.Index).ToString(CultureInfo.InvariantCulture) : s.Sheet, $"{s.Name}. {level.Name}", s.Note));
+                }
+
+                shift = levels.Count - 1;
+            }
+            else
+            {
+                result.Add(number is { } p ? s with { Sheet = (p + shift).ToString(CultureInfo.InvariantCulture) } : s);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<DetectorZone> AlarmZones(ProjectFile project, AlarmLevel level, ProjectDesign design, string normsDir, List<Issue> issues, bool multiLevel)
+    {
+        var plan = level.Plan;
         var zones = new List<DetectorZone>();
         var catalogPath = EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File);
         var catalog = (project.Alarm?.Zones.Count ?? 0) > 0 && File.Exists(catalogPath) ? AlarmDetectorCatalog.Load(catalogPath) : [];
-        if ((project.Alarm?.Zones.Count ?? 0) > 0 && catalog.Count == 0)
+        if ((project.Alarm?.Zones.Count ?? 0) > 0 && catalog.Count == 0 && level.Index == 0)
         {
             issues.Add(new Issue("aps.detector.noCatalog", IssueLevel.Warning, $"Нет каталога извещателей {AlarmDetectorCatalog.File}: модели ИП не выбраны, их ток в расчёте АКБ не учтён."));
         }
 
-        foreach (var z in project.Alarm?.Zones ?? [])
+        var levelTag = multiLevel ? $" ({level.Name})" : "";
+        foreach (var z in (project.Alarm?.Zones ?? []).Where(z => z.Level is null || string.Equals(z.Level, level.Name, StringComparison.OrdinalIgnoreCase)))
         {
             var rooms = z.Room == "*" ? plan.Rooms : plan.Rooms.Where(r => string.Equals(r.Name, z.Room, StringComparison.OrdinalIgnoreCase)).ToList();
             if (rooms.Count == 0)
             {
-                issues.Add(new Issue("aps.layout.noRoom", IssueLevel.Warning, $"АПС: помещение «{z.Room}» на чертеже не найдено (слой ПТ_КОНТУР, имя — текст внутри контура)."));
+                issues.Add(new Issue("aps.layout.noRoom", IssueLevel.Warning, $"АПС: помещение «{z.Room}» на чертеже{levelTag} не найдено (слой ПТ_КОНТУР, имя — текст внутри контура)."));
                 continue;
             }
 
@@ -1709,16 +1835,18 @@ public static class ProjectPipeline
 
             foreach (var room in rooms)
             {
-                if (zones.Any(existing => existing.RoomId == room.Id))
+                // ID помещения уникален по всем уровням: на втором и дальше — с префиксом уровня (L2-R1), имя — с именем уровня.
+                var roomId = level.Index == 0 ? room.Id : string.Create(CultureInfo.InvariantCulture, $"L{level.Index + 1}-{room.Id}");
+                if (zones.Any(existing => existing.RoomId == roomId))
                 {
-                    issues.Add(new Issue("aps.layout.duplicateRoom", IssueLevel.Warning, $"АПС: помещение «{room.Name}» задано в разделе alarm дважды — взята первая зона.", room.Id));
+                    issues.Add(new Issue("aps.layout.duplicateRoom", IssueLevel.Warning, $"АПС: помещение «{room.Name}»{levelTag} задано в разделе alarm дважды — взята первая зона.", roomId));
                     continue;
                 }
 
                 // Модель ИП — выбор проектировщика; без выбора — первая в каталоге, об этом Info. Паспорт модели идёт в расчёт АКБ.
-                var model = catalog.Count > 0 ? AlarmDetectorCatalog.Choose(catalog, z.Detector, z.Model, room.Name, issues) : null;
+                var model = catalog.Count > 0 ? AlarmDetectorCatalog.Choose(catalog, z.Detector, z.Model, room.Name + levelTag, issues) : null;
                 var beams = plan.Beams.Where(b => b.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint).ToList();
-                zones.Add(new DetectorZone(room.Id, room.Name, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable)
+                zones.Add(new DetectorZone(roomId, room.Name + levelTag, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable)
                 {
                     Beams = beams,
                     ModelId = model?.Id,

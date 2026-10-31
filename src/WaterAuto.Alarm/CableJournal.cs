@@ -3,8 +3,11 @@ using WaterAuto.Core;
 
 namespace WaterAuto.Alarm;
 
-/// <summary>Линия контроллера для журнала: устройства на ней (точки плана) и суммарный ток адресных устройств.</summary>
-public sealed record LoopLine(int Number, IReadOnlyList<PlanPoint> Devices, Current Load, bool HasPumpModules);
+/// <summary>
+/// Линия контроллера для журнала: устройства на ней (точки плана) и суммарный ток адресных устройств.
+/// <paramref name="RiserMm"/> — длина вертикальных участков (стояков) между уровнями, туда и обратно по кольцу, мм.
+/// </summary>
+public sealed record LoopLine(int Number, IReadOnlyList<PlanPoint> Devices, Current Load, bool HasPumpModules, double RiserMm = 0);
 
 public sealed record CableJournalResult(IReadOnlyList<CableLine> Lines, IReadOnlyList<Issue> Issues);
 
@@ -33,7 +36,7 @@ public static class CableJournal
                 points.Add(pumpRoom.Centroid);
             }
 
-            var lengthM = Tour(panel, points) / 1000 * cables.Reserve;
+            var lengthM = (Tour(panel, points) + loop.RiserMm) / 1000 * cables.Reserve;
             var loadMa = loop.Load.Amperes * 1000;
             var section = cables.LoopSectionFor(lengthM, loadMa);
             var mark = cables.LoopName.Replace("{section}", (section ?? cables.MaxLoopSection).ToString("0.##", Ru), StringComparison.Ordinal);
@@ -45,7 +48,7 @@ public static class CableJournal
             }
 
             lines.Add(new CableLine($"ДПЛС{loop.Number}", $"{controllerName} №{loop.Number}", $"{loop.Devices.Count} адресных устройств{(loop.HasPumpModules ? $", {moduleName} в насосной" : "")}", "адресная линия связи (кольцо)", mark, Math.Round(lengthM, 0),
-                string.Create(Ru, $"ток линии {loadMa:0.#} мА; длина кольца по плану с запасом {cables.Reserve:0.##}; сечение по табл. длин ДПЛС")));
+                string.Create(Ru, $"ток линии {loadMa:0.#} мА; длина кольца по плану{(loop.RiserMm > 0 ? $" и стояков {loop.RiserMm / 1000:0.#} м" : "")} с запасом {cables.Reserve:0.##}; сечение по табл. длин ДПЛС")));
             n++;
         }
 

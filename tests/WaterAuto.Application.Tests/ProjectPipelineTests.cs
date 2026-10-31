@@ -18,7 +18,7 @@ public sealed class ProjectPipelineTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, true);
 
     // Этаж 30 × 20 м: помещение с именем, колонна, ввод — по соглашению о слоях (README §7).
-    private string Drawing(bool withInlet = true)
+    private string Drawing(bool withInlet = true, string name = "floor.dxf", double width = 30000, double depth = 20000)
     {
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
@@ -35,10 +35,10 @@ public sealed class ProjectPipelineTests : IDisposable
 
         LwPolyline Rect(double x0, double y0, double x1, double y1) =>
             new([new XY(x0, y0), new XY(x1, y0), new XY(x1, y1), new XY(x0, y1)]) { IsClosed = true };
-        var room = Rect(0, 0, 30000, 20000);
+        var room = Rect(0, 0, width, depth);
         room.Layer = L(FloorPlanImporter.ContourLayer);
         doc.Entities.Add(room);
-        doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(15000, 10000, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(width / 2, depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
         var column = Rect(7300, 7300, 7700, 7700);
         column.Layer = L(FloorPlanImporter.ColumnLayer);
         doc.Entities.Add(column);
@@ -47,7 +47,7 @@ public sealed class ProjectPipelineTests : IDisposable
             doc.Entities.Add(new Point(new XYZ(500, 500, 0)) { Layer = L(FloorPlanImporter.InletLayer) });
         }
 
-        var path = Path.Combine(_dir, "floor.dxf");
+        var path = Path.Combine(_dir, name);
         DxfWriter.Write(path, doc, false);
         return path;
     }
@@ -181,6 +181,59 @@ public sealed class ProjectPipelineTests : IDisposable
         var missing = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Склад", CeilingHeight = 3 }] }));
         missing.Issues.ShouldContain(i => i.Code == "aps.layout.noRoom");
         missing.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Alarm_levels_give_a_plan_sheet_per_level_and_risers_in_the_cable_journal()
+    {
+        // Уровень −1 — основной чертёж 30 × 20 м (12 ИП), уровень −2 — свой чертёж 20 × 20 м (3 × 3 = 9 ИП), отметки −3 и −6 м.
+        Drawing();
+        Drawing(withInlet: false, name: "floor2.dxf", width: 20000, depth: 20000);
+        var alarm = new ProjectAlarm
+        {
+            Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+            Levels = [new ProjectAlarmLevel { Name = "−1 этаж", Elevation = -3 }, new ProjectAlarmLevel { Name = "−2 этаж", Drawing = "floor2.dxf", Elevation = -6 }],
+            Panel = new ProjectPoint { X = 1000, Y = 1000 },
+        };
+        var result = Run(Project(alarm: alarm));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+
+        // Лист плана на каждый уровень, общего aps_plan.dxf нет; на листах — только извещатели своего уровня.
+        result.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal), string.Join("; ", result.Issues.Select(i => i.Code + " " + i.Message)));
+        var plan1 = DxfReader.Read(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanLevelFile(1), StringComparison.Ordinal)));
+        var plan2 = DxfReader.Read(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanLevelFile(2), StringComparison.Ordinal)));
+        plan1.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
+        plan2.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(9);
+        plan2.Entities.OfType<Insert>().Where(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldAllBe(i => i.Attributes.Any(a => a.Value.StartsWith("L2-", StringComparison.Ordinal)));
+
+        // Спецификация и таблица адресов — по обоим уровням; имя помещения — с уровнем; ЗКСПС нумеруются сквозь.
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Single(r => r[2] == "ДИП-34А-03")[5].ShouldBe("21");
+        var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
+        addresses.Count(r => r[5].Contains("(−2 этаж)", StringComparison.Ordinal)).ShouldBeGreaterThanOrEqualTo(9);
+        addresses.Select(r => r[7]).Where(z => z.StartsWith("ЗКСПС", StringComparison.Ordinal)).Distinct().Count().ShouldBe(2);
+
+        // Ведомость чертежей: лист плана на каждый уровень с его именем.
+        using (var gd = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmGeneralDataFile, StringComparison.Ordinal)), false))
+        {
+            var text = gd.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("−1 этаж");
+            text.ShouldContain("−2 этаж");
+        }
+
+        // Кабельный журнал: кольцо через второй уровень длиннее на стояки 2 × 3 м — в примечании «стояков 6 м».
+        var journal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        journal.Where(r => r[1].StartsWith("ДПЛС", StringComparison.Ordinal)).ShouldContain(r => r[7].Contains("стояков 6 м", StringComparison.Ordinal));
+        result.Issues.ShouldNotContain(i => i.Code == "aps.cable.noElevation");
+
+        // Без отметок — предупреждение, что стояки не учтены.
+        var noElevation = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = alarm.Zones,
+            Levels = [new ProjectAlarmLevel { Name = "−1 этаж" }, new ProjectAlarmLevel { Name = "−2 этаж", Drawing = "floor2.dxf" }],
+            Panel = alarm.Panel,
+        }));
+        noElevation.Issues.ShouldContain(i => i.Code == "aps.cable.noElevation");
     }
 
     [Fact]

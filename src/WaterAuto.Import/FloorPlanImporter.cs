@@ -55,7 +55,8 @@ public static class FloorPlanImporter
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public static ImportResult Import(string path)
+    /// <param name="requireInlet">Нужна ли точка подключения АУПТ (слой ПТ_ВВОД): для плана этажа под АУПТ — да, для уровня только с АПС — нет.</param>
+    public static ImportResult Import(string path, bool requireInlet = true)
     {
         ArgumentNullException.ThrowIfNull(path);
         CadDocument doc;
@@ -70,10 +71,10 @@ public static class FloorPlanImporter
             return new ImportResult(null, [new Issue("import.read", IssueLevel.Error, $"Файл не прочитан: {ex.Message}")]);
         }
 
-        return Import(doc);
+        return Import(doc, requireInlet);
     }
 
-    public static ImportResult Import(CadDocument doc)
+    public static ImportResult Import(CadDocument doc, bool requireInlet = true)
     {
         ArgumentNullException.ThrowIfNull(doc);
         var issues = new List<Issue>();
@@ -258,7 +259,7 @@ public static class FloorPlanImporter
             issues.Add(new Issue("import.noContour", IssueLevel.Error, $"На слое {ContourLayer} нет ни одного замкнутого контура помещения."));
         }
 
-        if (inlets.Count == 0)
+        if (inlets.Count == 0 && requireInlet)
         {
             issues.Add(new Issue("import.noInlet", IssueLevel.Error,
                 $"Нет точки подключения: поставьте точку или блок на слое {InletLayer} в месте стояка или узла управления."));
