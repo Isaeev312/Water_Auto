@@ -393,6 +393,45 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Gas_section_produces_the_gas_volume_with_mass_by_appendix_D()
+    {
+        // Помещение 30 × 20 м, h = 3 м (1800 м³), хладон 227еа, н-гептан 7,2 %, 0,5 м² проёмов, Tм = 20 °С, 800 м:
+        // δ = 2,8e-4 ≤ 0,0023 (табл. Г.16, 1500–2000 м³); K2 = 0,4·δ·10·√3 = 0,0019; Mр = 1800·7,28·1,0019·7,2/92,8 = 1018,6 кг; Mг = 1,05·Mр = 1069,6 → 1070 кг.
+        Drawing(withInlet: false);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Архив (пример)",
+            Drawing = "floor.dxf",
+            Aupt = false,
+            Gas = new ProjectGas
+            {
+                Altitude = 800,
+                Rooms = [new ProjectGasRoom { Room = "Автостоянка", Agent = "hfc227ea", Material = "heptane", CeilingHeight = 3, OpenArea = 0.5, MinTemperature = 20, MaxOverpressure = 0.002 }],
+            },
+        });
+        var result = Run(Write("gas.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        var note = result.Files.Single(f => f.EndsWith(ProjectPipeline.GasNoteFile, StringComparison.Ordinal));
+        Path.GetFileName(Path.GetDirectoryName(note)).ShouldBe(ProjectPipeline.GasVolume);
+        using (var doc = WordprocessingDocument.Open(note, false))
+        {
+            var text = doc.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("хладон 227еа");
+            text.ShouldContain("Mг = 1,05");
+            text.ShouldContain("= 1070 кг");
+            text.ShouldContain("Г.17");
+        }
+
+        result.Issues.ShouldContain(i => i.Code == "gas.pipeResidue");
+        result.Issues.ShouldContain(i => i.Code == "gas.relief");
+
+        // CO₂ в помещении более чем на 50 человек — ошибка 9.1.2.
+        var co2 = Run(Write("co2.waproj", json.Replace("\"hfc227ea\"", "\"co2\"", StringComparison.Ordinal).Replace("\"people\": 0", "\"people\": 60", StringComparison.Ordinal)));
+        co2.Issues.ShouldContain(i => i.Code == "gas.co2.people" && i.Level == IssueLevel.Error);
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();

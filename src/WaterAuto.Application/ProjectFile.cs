@@ -43,6 +43,9 @@ public sealed record ProjectFile
     /// <summary>ID реестра литературы для списка источников; пусто — действующие нормы реестра.</summary>
     public IReadOnlyList<string> Literature { get; init; } = [];
 
+    /// <summary>Газовое пожаротушение объёмным способом (СП 485, разд. 9); null — не проектируется.</summary>
+    public ProjectGas? Gas { get; init; }
+
     /// <summary>Порошковое пожаротушение модульного типа (СП 485, разд. 10, прил. И); null — не проектируется.</summary>
     public ProjectPowder? Powder { get; init; }
 
@@ -525,4 +528,58 @@ public sealed class ProjectPowderRoom
 
     /// <summary>Затенённая площадь Sз, м², для k2 по формуле паспорта модуля; 0 — затенений нет (решение проектировщика), null — не задана.</summary>
     public double? ShadedArea { get; init; }
+}
+
+/// <summary>Газовое пожаротушение объёмным способом (СП 485 разд. 9, прил. Г, Д, Ж): высота объекта над уровнем моря и помещения.</summary>
+public sealed class ProjectGas
+{
+    /// <summary>Высота объекта над уровнем моря, м — поправка K3 по табл. Г.17.</summary>
+    public double Altitude { get; init; }
+
+    /// <summary>Установка модульная (true) или централизованная (false) — нормативное время подачи по 9.7.4.</summary>
+    public bool Modular { get; init; } = true;
+
+    public IReadOnlyList<ProjectGasRoom> Rooms { get; init; } = [];
+}
+
+/// <summary>Помещение АУГП — исходные данные проектировщика (СП 485, 9.5).</summary>
+public sealed class ProjectGasRoom
+{
+    /// <summary>Имя помещения с чертежа (слой ПТ_КОНТУР).</summary>
+    public string Room { get; init; } = "";
+
+    /// <summary>ГОТВ — ключ записи табл. Г (hfc227ea, hfc125, hfc23, co2, nitrogen, argon, inergen, argonite, fk5112, sf6, hfc218, hfc318c, tfm18i, hfc217j1).</summary>
+    public string Agent { get; init; } = "hfc227ea";
+
+    /// <summary>Горючий материал — ключ концентрации (heptane, ethanol, petrolA76, machineOil, acetone, toluene, …); не-ЛВЖ и А2 — heptane.</summary>
+    public string Material { get; init; } = "heptane";
+
+    public double CeilingHeight { get; init; }
+
+    /// <summary>Суммарная площадь постоянно открытых проёмов, м².</summary>
+    public double OpenArea { get; init; }
+
+    public Core.GasOpenings Openings { get; init; } = Core.GasOpenings.Other;
+
+    /// <summary>Минимальная температура воздуха в помещении, °С.</summary>
+    public double MinTemperature { get; init; } = 20;
+
+    public Core.GasClassA1 ClassA1 { get; init; } = Core.GasClassA1.None;
+
+    /// <summary>Время подачи по гидравлическому расчёту, с; null — нормативное (9.7.4).</summary>
+    public double? DischargeTime { get; init; }
+
+    /// <summary>Остаток ГОТВ в трубопроводах по гидравлическому расчёту, кг; null — не учтён (замечание).</summary>
+    public double? PipeResidue { get; init; }
+
+    /// <summary>Остаток в одном модуле по ТД, кг, и число модулей.</summary>
+    public double ModuleResidue { get; init; }
+
+    public int Modules { get; init; }
+
+    /// <summary>Предельно допустимое избыточное давление, МПа (ГОСТ Р 12.3.047); null — проём сброса не считается.</summary>
+    public double? MaxOverpressure { get; init; }
+
+    /// <summary>Наибольшее число людей в помещении (для CO₂ — 9.1.2).</summary>
+    public int People { get; init; }
 }

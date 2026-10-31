@@ -109,6 +109,10 @@ public static class ProjectPipeline
     public const string AuptVolume = "АУПТ";
     public const string AlarmVolume = "АПС";
 
+    /// <summary>Том газового пожаротушения (АУГП, СП 485 разд. 9).</summary>
+    public const string GasVolume = "АГП";
+    public const string GasNoteFile = "agp_pz.docx";
+
     /// <summary>Том порошкового пожаротушения (АУПП, СП 485 разд. 10).</summary>
     public const string PowderVolume = "АПТ";
     public const string PowderNoteFile = "apt_pz.docx";
@@ -709,13 +713,61 @@ public static class ProjectPipeline
             Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
         }
 
+        // Газовое пожаротушение (СП 485 разд. 9, прил. Г, Д, Ж): масса ГОТВ и проём сброса по помещениям, том АГП.
+        void BuildGas()
+        {
+            if (project.Gas is not { } gas)
+            {
+                return;
+            }
+
+            var results = new List<(GasRoom Room, string Agent, GasMassResult Result)>();
+            foreach (var r in gas.Rooms)
+            {
+                var found = plan.Rooms.FirstOrDefault(x => string.Equals(x.Name, r.Room, StringComparison.OrdinalIgnoreCase));
+                if (found is null)
+                {
+                    issues.Add(new Issue("gas.noRoom", IssueLevel.Warning, $"АУГП: помещение «{r.Room}» на чертеже не найдено (слой ПТ_КОНТУР)."));
+                    continue;
+                }
+
+                var agentId = $"sp485.tG.{r.Agent}";
+                var agentName = norms.Find(agentId)?.Attributes.GetValueOrDefault("agent") ?? r.Agent;
+                if (r.Agent == "co2" && norms.Find("sp485.p9_1_2.co2People") is { } co2 && r.People > co2.Values["maxPeople"]!.Value)
+                {
+                    issues.Add(new Issue("gas.co2.people", IssueLevel.Error,
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"«{found.Name}»: объёмное углекислотное тушение запрещено в помещениях с пребыванием более {co2.Values["maxPeople"]:0} человек (задано {r.People}) — выбрать другое ГОТВ."),
+                        found.Id, "СП 485.1311500.2020, п. 9.1.2"));
+                }
+
+                var room = new GasRoom(found.Id, found.Name, found.Contour.AreaMm2 / 1e6 * r.CeilingHeight, r.CeilingHeight, agentId, r.Material, r.OpenArea, r.Openings, r.MinTemperature, gas.Altitude,
+                    gas.Modular, r.ClassA1, r.DischargeTime, r.ModuleResidue, r.Modules, r.PipeResidue, r.MaxOverpressure);
+                var result = WaterAuto.Calc.Gas.GasMass.Calculate(room, norms);
+                issues.AddRange(result.Issues);
+                if (result.TotalMass > 0)
+                {
+                    results.Add((room, agentName, result));
+                }
+            }
+
+            if (results.Count == 0)
+            {
+                return;
+            }
+
+            var tg = project.Title;
+            var gasNote = GasNote.Build(new NoteTitle(tg.Organization, tg.Subject, tg.Document, tg.Author, tg.Supervisor, tg.CityYear, project.Name), results, gas.Altitude, issues);
+            Write(Path.Combine(outDir, GasVolume), GasNoteFile, files, p => NoteDocx.Write(p, gasNote, Stamp(project, "АГП.ПЗ", "Газовое пожаротушение. Пояснительная записка"), project.Font));
+        }
+
         // Порошок считается до питания АПС: блоки пуска модулей входят в расчёт АКБ.
         BuildPowder();
+        BuildGas();
 
         // Проект без водяной АУПТ: только том АПС и (или) АПТ, раздел design не нужен.
         if (!project.Aupt)
         {
-            if (detectorLayout is null && project.Powder is null)
+            if (detectorLayout is null && project.Powder is null && project.Gas is null)
             {
                 issues.Add(new Issue("project.nothingToDo", IssueLevel.Error, "В проекте нет водяной АУПТ (aupt: false) и нет разделов alarm или powder с помещениями — выпускать нечего."));
                 return Stop();
@@ -725,7 +777,7 @@ public static class ProjectPipeline
             WriteAlarmPlans([.. issues]);
             WriteAlarmDocs();
             files.Add(WriteIssues(outDir, issues));
-            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal))), files, issues, null);
+            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal) || i.Code.StartsWith("gas.", StringComparison.Ordinal))), files, issues, null);
         }
 
         var resolved = LayoutRules.Resolve(norms, design.RoomGroup, design.ConstructionClass, design.MaxSpacing is { } m ? new Length(m) : null);
