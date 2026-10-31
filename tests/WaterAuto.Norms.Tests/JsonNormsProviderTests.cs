@@ -194,6 +194,18 @@ public class JsonNormsProviderTests
 
         norms.Find("sp485.tB_2.gost10704.dn15.18x2").ShouldNotBeNull();
     }
+
+    [Fact]
+    public void Repository_norms_hold_sp484_detector_placement()
+    {
+        // Этап 2 АПС (ADR 0012): радиусы зон контроля и таблицы балок — из data/norms/sp484, не из кода.
+        var norms = JsonNormsProvider.Load(RepoPaths.Norms);
+
+        norms.Find("sp484.p6_6_16.smokePoint").ShouldNotBeNull().Values["radius"].ShouldBe(6.4);
+        norms.Find("sp484.p6_6_15.heatPoint").ShouldNotBeNull().Values["radius"].ShouldBe(3.5);
+        norms.ByClause("табл. 6.2").Where(r => r.Doc == "СП 484.1311500.2020").Count().ShouldBe(5);
+        norms.Find("sp484.t6_2.lowBeam").ShouldNotBeNull().Values["hMin"].ShouldBeNull();
+    }
 }
 
 /// <summary>Временная папка с файлами норм минимального формата data/schemas/norms.schema.json.</summary>

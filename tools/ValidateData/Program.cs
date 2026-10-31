@@ -204,14 +204,18 @@ static void CheckRequiredKeys(string rel, JsonNode doc, List<string> errors)
     //     В текущем срезе Calc эти две записи ещё не читает: списки закрепляют их формат заранее.
     //   «прил. Б, п. Б.2» — t, время работы от АКБ (sp6/appendix_B.json; WaterAuto.Alarm/BatteryCapacity.cs).
     // Строка «табл. Б.3» с quantity == "A" (формула Б.7) сюда не входит: Calc её не использует.
-    (string Clause, string? SelectAttr, string? SelectValue, string[] Values, string[] Attrs)[] requirements =
+    // Пункт сам по себе документ не определяет («табл. 6.1» есть и в СП 485, и в СП 484), поэтому требование привязано к doc.
+    const string Sp485 = "СП 485.1311500.2020";
+    (string Doc, string Clause, string? SelectAttr, string? SelectValue, string[] Values, string[] Attrs)[] requirements =
     [
-        ("табл. Б.2", null, null, ["dn", "D_out", "wall", "Kt"], ["standard"]),
-        ("табл. Б.3", "quantity", "Kt", ["psi", "theta", "dnMin", "dnMax"], ["standard", "formula", "quantity"]),
-        ("Б.1.3.13", null, null, ["localLossFactor"], []),
-        ("табл. 6.1", null, null, ["i_water", "i_foam", "Q_water", "Q_foam", "S", "t_min", "maxSpacing"], ["group"]),
-        ("прил. Б, п. Б.2", null, null, ["t"], []),
+        (Sp485, "табл. Б.2", null, null, ["dn", "D_out", "wall", "Kt"], ["standard"]),
+        (Sp485, "табл. Б.3", "quantity", "Kt", ["psi", "theta", "dnMin", "dnMax"], ["standard", "formula", "quantity"]),
+        (Sp485, "Б.1.3.13", null, null, ["localLossFactor"], []),
+        (Sp485, "табл. 6.1", null, null, ["i_water", "i_foam", "Q_water", "Q_foam", "S", "t_min", "maxSpacing"], ["group"]),
+        ("СП 6.13130.2025", "прил. Б, п. Б.2", null, null, ["t"], []),
     ];
+
+    var docName = doc["doc"]!.GetValue<string>();
 
     foreach (var node in doc["records"]!.AsArray())
     {
@@ -221,7 +225,7 @@ static void CheckRequiredKeys(string rel, JsonNode doc, List<string> errors)
         var attrs = record["attrs"] as JsonObject;
         foreach (var requirement in requirements)
         {
-            if (requirement.Clause != clause)
+            if (requirement.Doc != docName || requirement.Clause != clause)
             {
                 continue;
             }

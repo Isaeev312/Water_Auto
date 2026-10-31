@@ -51,6 +51,8 @@ WaterAuto/
 │  └─ WaterAuto.App/      # WPF: App/Themes (темы, акценты, стили), Ui (ThemeManager, WindowChrome), InputData (мастер: поля, проверка чертежа, статусы разделов), QuickProject, SettingsWindow, MainWindow, PumpSetWindow
 ├─ data/
 │  ├─ norms/sp485/        # табл. 6.1–6.4, А.1, Б.1–Б.4, В.1, правила 6.2, 6.7
+│  ├─ norms/sp484/        # АПС: зоны контроля ИП, табл. 6.1–6.3, ЗКСПС, ёмкость ППКП (этап 2 ADR 0012)
+│  ├─ norms/sp6/          # прил. Б: время работы от АКБ
 │  ├─ catalog/            # sprinklers.json, pumps.json
 │  └─ templates/          # docx записки, A3 спецификации, DWG-шаблон слоёв
 ├─ tests/

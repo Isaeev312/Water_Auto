@@ -1,0 +1,30 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 484.1311500.2020",
+  "edition": "с изм. № 1 (утв. приказом МЧС России от 27.03.2025)",
+  "clause": "табл. 6.2",
+  "title": "Точечные ИП на перекрытии с линейными балками: расстояние поперёк балок",
+  "source": "sp4841311500-izm1.pdf, табл. 6.2 (вёрстка строк в PDF сбита, строки восстановлены по порядку высот).",
+  "verified": false,
+  "columns": {
+    "hMin": "высота перекрытия H (округлённая до целого), м, «более» — не включая; null — любая",
+    "hMax": "высота перекрытия H, м, включительно; null — любая",
+    "smoke": "дымовые: максимальное расстояние поперёк балок между ИП в разных отсеках, м",
+    "smokeToWall": "дымовые: то же между ИП и стеной, м",
+    "heat": "тепловые: между ИП, м",
+    "heatToWall": "тепловые: до стены, м"
+  },
+  "footnotes": {
+    "beam": "attrs.beam: lt10 — высота балки D менее 10 % H (любая H), gt10 — более 10 % H.",
+    "Вдоль балок": "расстояние между ИП вдоль линейных балок — по радиусам зон контроля (6.6.15, 6.6.16).",
+    "А-06": "строка H ≤ 3 м, тепловые: 1,50 (1,25) — расстояние до стены больше половины шага, в остальных строках ровно половина; похоже на опечатку, сверить с официальной публикацией."
+  },
+  "records": [
+    { "id": "sp484.t6_2.lowBeam", "clause": "табл. 6.2", "values": { "hMin": null, "hMax": null, "smoke": 5.00, "smokeToWall": 2.50, "heat": 3.80, "heatToWall": 1.90 }, "units": { "hMin": "м", "hMax": "м", "smoke": "м", "smokeToWall": "м", "heat": "м", "heatToWall": "м" }, "attrs": { "beam": "lt10" }, "refs": { "hMin": "любая высота", "hMax": "любая высота" } },
+    { "id": "sp484.t6_2.h3", "clause": "табл. 6.2", "values": { "hMin": null, "hMax": 3, "smoke": 2.30, "smokeToWall": 1.15, "heat": 1.50, "heatToWall": 1.25 }, "units": { "hMin": "м", "hMax": "м", "smoke": "м", "smokeToWall": "м", "heat": "м", "heatToWall": "м" }, "attrs": { "beam": "gt10" }, "refs": { "hMin": "3,00 и менее" }, "note": "heatToWall 1,25 — вопрос А-06." },
+    { "id": "sp484.t6_2.h4", "clause": "табл. 6.2", "values": { "hMin": 3, "hMax": 4, "smoke": 2.80, "smokeToWall": 1.40, "heat": 2.00, "heatToWall": 1.00 }, "units": { "hMin": "м", "hMax": "м", "smoke": "м", "smokeToWall": "м", "heat": "м", "heatToWall": "м" }, "attrs": { "beam": "gt10" } },
+    { "id": "sp484.t6_2.h5", "clause": "табл. 6.2", "values": { "hMin": 4, "hMax": 5, "smoke": 3.00, "smokeToWall": 1.50, "heat": 2.30, "heatToWall": 1.15 }, "units": { "hMin": "м", "hMax": "м", "smoke": "м", "smokeToWall": "м", "heat": "м", "heatToWall": "м" }, "attrs": { "beam": "gt10" } },
+    { "id": "sp484.t6_2.h6", "clause": "табл. 6.2", "values": { "hMin": 5, "hMax": null, "smoke": 3.30, "smokeToWall": 1.65, "heat": 2.50, "heatToWall": 1.25 }, "units": { "hMin": "м", "hMax": "м", "smoke": "м", "smokeToWall": "м", "heat": "м", "heatToWall": "м" }, "attrs": { "beam": "gt10" }, "refs": { "hMax": "6,00 и более" } }
+  ]
+}
