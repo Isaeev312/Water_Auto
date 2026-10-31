@@ -48,6 +48,33 @@ public class PumpSchemeDxfWriterTests
     }
 
     [Fact]
+    public void Signal_marks_of_the_aps_list_are_written_at_their_devices()
+    {
+        // Обозначения — как в перечне сигналов АПС: затворы секции — до и после узла управления подряд.
+        var marks = new Dictionary<string, IReadOnlyList<string>>
+        {
+            ["inletValve"] = ["ЗД1", "ЗД2"],
+            ["valveS"] = ["ЗД3", "ЗД4"],
+            ["valveD"] = ["ЗД5", "ЗД6"],
+            ["cuValve"] = ["ЗД7", "ЗД8", "ЗД9", "ЗД10"],
+            ["cu"] = ["УУ1", "УУ2"],
+            ["cabinet"] = ["ШУН"],
+        };
+        var doc = PumpSchemeDxfWriter.Build(Data with { Inlets = 2, Outlets = ["т. 1", "т. 2"], Marks = marks }, Stamp);
+        var texts = doc.Entities.OfType<TextEntity>().ToList();
+
+        foreach (var mark in marks.Values.SelectMany(m => m))
+        {
+            texts.Count(t => t.Value == mark).ShouldBe(1, mark);
+        }
+
+        texts.ShouldNotContain(t => t.Value == "УУ" || t.Value == "ШУ");
+        // Затвор до узла второй секции (ЗД9) — ниже затвора после узла (ЗД10) по ходу воды вверх по листу.
+        texts.Single(t => t.Value == "ЗД9").InsertPoint.Y.ShouldBeLessThan(texts.Single(t => t.Value == "ЗД10").InsertPoint.Y);
+        texts.Single(t => t.Value == "ЗД9").InsertPoint.X.ShouldBeGreaterThan(texts.Single(t => t.Value == "ЗД7").InsertPoint.X);
+    }
+
+    [Fact]
     public void Each_inlet_has_its_own_branch_and_valve_on_the_scheme()
     {
         // Inlets=2 (п. 6.10.27): на всасывающем коллекторе две ветви ввода, у каждой — своя задвижка с номером позиции.

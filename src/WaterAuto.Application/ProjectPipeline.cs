@@ -725,6 +725,8 @@ public static class ProjectPipeline
                 ],
                 schemePositions,
                 sections,
+                Marks: controlPoints.Where(cp => cp.Role is not null).GroupBy(cp => cp.Role!)
+                    .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)[.. g.Select(cp => cp.Designation).Distinct()]),
                 Inlets: plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 1),
             SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
             project.Font));

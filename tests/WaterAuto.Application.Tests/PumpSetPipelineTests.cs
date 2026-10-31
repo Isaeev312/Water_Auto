@@ -162,6 +162,13 @@ public sealed class PumpSetPipelineTests : IDisposable
         result.Issues.ShouldNotContain(i => (i.Code.StartsWith("aps.power", StringComparison.Ordinal) || i.Code.StartsWith("aps.battery", StringComparison.Ordinal)) && i.Level == IssueLevel.Error);
         var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.BatteryFile)).SelectMany(r => r).ToList();
         battery.ShouldContain("Требуемая ёмкость АКБ, А·ч");
+
+        // Обозначения перечня — те же на схеме насосной.
+        var scheme = DxfReader.Read(FileOf(result, ProjectPipeline.PumpSchemeFile)).Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
+        foreach (var mark in marks.Distinct())
+        {
+            scheme.ShouldContain(mark);
+        }
     }
 
     [Fact]
