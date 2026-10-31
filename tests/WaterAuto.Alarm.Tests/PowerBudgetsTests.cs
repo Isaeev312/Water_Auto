@@ -95,6 +95,13 @@ public class PowerBudgetsTests
         var warn = result.Issues.Single(i => i.Code == "aps.power.supplyOverload");
         warn.Level.ShouldBe(IssueLevel.Warning);
         warn.Message.ShouldContain("не менее 2 источников");
+        // Принято 2 РИП, нагрузка поровну: ёмкость АКБ — на один источник, у каждого своя батарея.
+        result.Budget.Supplies.ShouldBe(2);
+        result.Budget.AlarmPerSupply.Amperes.ShouldBe(result.Budget.Alarm.Amperes / 2, 1e-9);
+        result.Budget.Lines.Single(l => l.Name == Set.Supply.Name).Count.ShouldBe(2);
+        var single = PowerBudgets.Build(8, set with { Supply = Set.Supply with { MaxOutput = null } }, Norms, new Dictionary<string, int> { ["smoke"] = 9 * 120 });
+        single.Budget.Supplies.ShouldBe(1);
+        result.Budget.Required!.Value.AmpereHours.ShouldBeLessThan(single.Budget.Required!.Value.AmpereHours);
         PowerBudgets.Build(8, set, Norms).Issues.ShouldNotContain(i => i.Code == "aps.power.supplyOverload");
     }
 

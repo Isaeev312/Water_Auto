@@ -111,46 +111,51 @@ public static class PowerBudgets
             new(c.Name, controllers, new Current(standby.Amperes - poweredStandby), new Current(alarm.Amperes - poweredAlarm), "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
             new(m.Name, modules, null, null, $"питание от линии {c.Name}, входит в его ток", m.Source),
             .. deviceLines,
-            new(set.Supply.Name, 1, set.Supply.OwnCurrent, set.Supply.OwnCurrent, "собственный ток от АКБ (Iибэ)", set.Supply.Source),
         ];
 
+        // Число РИП — по току нагрузки в режиме «Пожар» против паспортного; нагрузка делится между источниками поровну
+        // (у каждого своя АКБ), а какие приборы на какой источник — решает проектировщик.
+        var supplies = 1;
         if (set.Supply.MaxOutput is { } maxOut && alarm.Amperes > maxOut.Amperes + 1e-12)
         {
-            // Один РИП на все приборы не тянет: расчёт АКБ ниже — на суммарную нагрузку, деление по источникам — проектировщик.
-            var supplies = (int)Math.Ceiling(alarm.Amperes / maxOut.Amperes);
+            supplies = (int)Math.Ceiling(alarm.Amperes / maxOut.Amperes);
             issues.Add(new Issue("aps.power.supplyOverload", IssueLevel.Warning,
-                string.Create(ru, $"Ток в режиме «Пожар» {alarm.Amperes:0.##} А больше номинального тока нагрузки {set.Supply.Name} ({maxOut.Amperes:0.##} А по паспорту): нужно не менее {supplies} источников; расчёт АКБ дан на суммарную нагрузку, распределение приборов по источникам — проектировщик.")));
+                string.Create(ru, $"Ток в режиме «Пожар» {alarm.Amperes:0.##} А больше номинального тока нагрузки {set.Supply.Name} ({maxOut.Amperes:0.##} А по паспорту): нужно не менее {supplies} источников; принято {supplies}, нагрузка поделена поровну, ёмкость АКБ рассчитана на один источник; распределение приборов по источникам — проектировщик.")));
         }
 
+        lines.Add(new(set.Supply.Name, supplies, set.Supply.OwnCurrent, set.Supply.OwnCurrent, supplies > 1 ? "собственный ток от АКБ (Iибэ) каждого источника" : "собственный ток от АКБ (Iибэ)", set.Supply.Source));
+
         var own = set.Supply.OwnCurrent;
+        var standbyPer = new Current(standby.Amperes / supplies);
+        var alarmPer = new Current(alarm.Amperes / supplies);
         var hourIssues = new List<Issue>();
         var td = BatteryCapacity.Hours(norms, BatteryCapacity.StandbyTimeId, hourIssues);
         var tp = BatteryCapacity.Hours(norms, BatteryCapacity.AlarmTimeId, hourIssues);
         issues.AddRange(hourIssues);
-        var kd = td is { } hd ? LoadFactor(set.Battery, hd, standby.Amperes + own.Amperes, "дежурного режима", issues) : null;
-        var kp = tp is { } hp ? LoadFactor(set.Battery, hp, alarm.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
+        var kd = td is { } hd ? LoadFactor(set.Battery, hd, standbyPer.Amperes + own.Amperes, "дежурного режима", issues) : null;
+        var kp = tp is { } hp ? LoadFactor(set.Battery, hp, alarmPer.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
 
         var aging = BatteryCapacity.Aging(set.Battery.EndOfLifePercent, []);
         Charge? required = null;
         TimeSpan? backup = null;
         if (kd is { } kStandby && kp is { } kAlarm)
         {
-            var capacity = BatteryCapacity.Required(new BatteryLoad(standby, alarm, own), new BatteryFactors(kStandby, kAlarm, set.Battery.EndOfLifePercent), norms);
+            var capacity = BatteryCapacity.Required(new BatteryLoad(standbyPer, alarmPer, own), new BatteryFactors(kStandby, kAlarm, set.Battery.EndOfLifePercent), norms);
             issues.AddRange(capacity.Issues);
             required = capacity.Required;
             if (required is { } r && r.AmpereHours > set.Battery.Nominal.AmpereHours)
             {
                 issues.Add(new Issue("aps.power.capacity", IssueLevel.Warning,
-                    string.Create(ru, $"Требуется АКБ не менее {r.AmpereHours:0.##} А·ч, {set.Battery.Name} — {set.Battery.Nominal.AmpereHours:0.##} А·ч: нужна АКБ большей ёмкости или дополнительный бокс."),
+                    string.Create(ru, $"Требуется АКБ не менее {r.AmpereHours:0.##} А·ч{(supplies > 1 ? $" на каждый из {supplies} источников" : "")}, {set.Battery.Name} — {set.Battery.Nominal.AmpereHours:0.##} А·ч: нужна АКБ большей ёмкости или дополнительный бокс."),
                     Clause: Doc));
             }
 
-            var time = BatteryCapacity.Backup(set.Battery.Nominal, alarm, set.Battery.EndOfLifePercent);
+            var time = BatteryCapacity.Backup(set.Battery.Nominal, alarmPer, set.Battery.EndOfLifePercent);
             issues.AddRange(time.Issues);
             backup = time.Time;
         }
 
-        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging), issues);
+        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging, supplies), issues);
     }
 
     /// <summary>

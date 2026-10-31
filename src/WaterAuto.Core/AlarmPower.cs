@@ -87,7 +87,14 @@ public sealed record PowerBudget(
     double? AlarmLoadFactor,
     Charge? Required,
     TimeSpan? Backup,
-    double? AgingFactor = null);
+    double? AgingFactor = null,
+    int Supplies = 1)
+{
+    /// <summary>Ток одного источника при равном делении нагрузки между <see cref="Supplies"/> РИП (ёмкость АКБ считается на один источник).</summary>
+    public Current StandbyPerSupply => new(Standby.Amperes / Math.Max(1, Supplies));
+
+    public Current AlarmPerSupply => new(Alarm.Amperes / Math.Max(1, Supplies));
+}
 
 /// <summary>Строка спецификации оборудования АПС.</summary>
 public sealed record AlarmSpecItem(string Name, string Designation, string Manufacturer, string Unit, int Quantity, string? Certificate, string? Note);
