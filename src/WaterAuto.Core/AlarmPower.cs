@@ -57,6 +57,32 @@ public sealed record PowerSupply(string Name, Current OwnCurrent, string Source)
 public sealed record BatteryModel(string Name, Charge Nominal, double EndOfLifePercent, IReadOnlyDictionary<TimeSpan, Current> Discharge, string Source) : ICertified
 {
     public string? Certificate { get; init; }
+
+    /// <summary>Число одинаковых батарей в параллель (в РИП и боксе); ёмкость и токи разряда умножаются.</summary>
+    public int Count { get; init; } = 1;
+
+    /// <summary>Суммарная ёмкость C20 всех батарей источника.</summary>
+    public Charge Total => new(Nominal.AmpereHours * Count);
+
+    /// <summary>Обозначение для записки и спецификации: «2 × АБ 1240С».</summary>
+    public string Label => Count > 1 ? $"{Count} × {Name}" : Name;
+
+    /// <summary>Батарея источника как одна эквивалентная: ёмкость и токи разряда × Count.</summary>
+    public BatteryModel Combined() => Count == 1 ? this : this with
+    {
+        Nominal = Total,
+        Discharge = Discharge.ToDictionary(kv => kv.Key, kv => new Current(kv.Value.Amperes * Count)),
+        Count = 1,
+    };
+}
+
+/// <summary>Вариант питания из каталога: РИП и его батареи (с боксом — по примечанию каталога).</summary>
+public sealed record PowerOption(PowerSupply Supply, BatteryModel Battery)
+{
+    public string? Note { get; init; }
+
+    /// <summary>Бокс для дополнительных батарей (по РЭ РИП); null — батареи в корпусе РИП. Варианты с боксом — после вариантов без него.</summary>
+    public string? Box { get; init; }
 }
 
 /// <summary>Набор приборов питания автоматики АУПТ в АПС из каталога; все токи — при напряжении <paramref name="Voltage"/>, В.</summary>
@@ -67,6 +93,12 @@ public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, L
 
     /// <summary>Изолятор КЗ линии (БРИЗ); null — в каталоге нет.</summary>
     public LoopDevice? Isolator { get; init; }
+
+    /// <summary>Бокс дополнительных батарей принятого варианта; null — без бокса.</summary>
+    public string? Box { get; init; }
+
+    /// <summary>Варианты РИП с батареями для подбора; пусто — только набор по умолчанию.</summary>
+    public IReadOnlyList<PowerOption> Options { get; init; } = [];
 }
 
 /// <summary>Строка расчёта питания: прибор, количество, токи на единицу (null — питается не от РИП), пояснение и источник.</summary>

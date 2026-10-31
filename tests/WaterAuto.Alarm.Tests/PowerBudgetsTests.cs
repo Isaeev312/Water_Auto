@@ -21,6 +21,31 @@ public class PowerBudgetsTests
         new() { [TimeSpan.FromHours(1)] = new(oneHour), [TimeSpan.FromHours(24)] = new(day) };
 
     [Fact]
+    public void Smallest_catalog_option_that_covers_the_required_capacity_is_chosen()
+    {
+        // Нагрузка 0,6 А дежурный и 1,5 А «Пожар» — требуется около 23 А·ч: АБ 1217С (17 А·ч) не хватает. Варианты: РИП 3 А + 1 × АБ 1217С,
+        // РИП 3 А + 2 × АБ 1226С (52 А·ч), РИП 6 А + 2 × АБ 1240С (80 А·ч). Берётся наименьший достаточный — 2 × АБ 1226С.
+        var load = new PoweredDevice("Нагрузка", Current.Zero, 0, new Current(0.6), new Current(1.5), "тест", "тест");
+        var rip3 = Set.Supply with { MaxOutput = new Current(3) };
+        var rip6 = new PowerSupply("РИП-12 исп.06", new Current(0.09), "РЭ") { Certificate = "тест", MaxOutput = new Current(6) };
+        var ab26x2 = new BatteryModel("АБ 1226С", new Charge(26), 80, Table(15.9, 1.14), "РЭ АБ") { Certificate = "тест", Count = 2 };
+        var ab40x2 = new BatteryModel("АБ 1240С", new Charge(40), 80, Table(22.9, 2.11), "РЭ АБ") { Certificate = "тест", Count = 2 };
+        var set = Set with { Supply = rip3, Options = [new(rip3, Set.Battery), new(rip6, ab40x2), new(rip3, ab26x2)] };
+
+        var result = PowerBudgets.Build(8, set, Norms, powered: [(load, 1)]);
+
+        result.Set.Battery.Name.ShouldBe("АБ 1226С");
+        result.Set.Battery.Count.ShouldBe(2);
+        result.Budget.Required!.Value.AmpereHours.ShouldBeLessThanOrEqualTo(52);
+        result.Issues.ShouldNotContain(i => i.Code == "aps.power.capacity");
+        result.Issues.ShouldContain(i => i.Code == "aps.power.optionChosen" && i.Message.Contains("2 × АБ 1226С"));
+
+        // Ни один вариант не покрывает — остаётся прежнее предупреждение о ёмкости по набору по умолчанию.
+        var huge = PowerBudgets.Build(8, set with { Options = [new(rip3, Set.Battery)] }, Norms, powered: [(load, 1)]);
+        huge.Issues.ShouldContain(i => i.Code == "aps.power.capacity");
+    }
+
+    [Fact]
     public void Set_with_zero_denominators_is_an_error_not_a_crash()
     {
         var bad = Set with { Controller = Set.Controller with { LoadOfLoaded = Current.Zero } };
