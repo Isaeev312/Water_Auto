@@ -476,11 +476,18 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph($"*Принято:* потери в местных сопротивлениях и в узле управления — {F(d.LocalLossFactor * 100, "0")} % линейных потерь (п. Б.1.3.13); потери распределительной сети от диктующего оросителя до точки подключения учтены в *P*_{{вв}} (формула 5.8)."),
             new NoteParagraph($"Потери в подводящем трубопроводе от насоса до точки подключения (DN{supplyDn}, *L* = {F(s.SupplyLength.Meters, "0.0")} м, *K*_{{т}} = {F(kt, "0.##")}) при расходе насоса:"),
             new NoteFormula($"Δ*P*_{{подв}} = *Q*_{{нас}}^{{2}}·*L* / (100·*K*_{{т}}) = {F(d.PumpFlow.LitersPerSecond, "0.00")}^{{2}}·{F(s.SupplyLength.Meters, "0.0")} / (100·{F(kt, "0.##")}) = {F(d.SupplyLinearLoss.Mpa, "0.0000")} МПа.", "6.2", []),
+            .. d.RiserPipe is { } rp
+                ? new NoteBlock[]
+                {
+                    new NoteParagraph($"Потери в стояке этажа (DN{rp.Dn}, *L* = {F(s.RiserLength.Meters, "0.0")} м, *K*_{{т}} = {F(rp.Kt.Kt, "0.##")}) — отдельным участком, в формуле 6.4 добавляются к Δ*P*_{{подв}}:"),
+                    new NoteFormula($"Δ*P*_{{ст}} = *Q*_{{нас}}^{{2}}·*L* / (100·*K*_{{т}}) = {F(d.PumpFlow.LitersPerSecond, "0.00")}^{{2}}·{F(s.RiserLength.Meters, "0.0")} / (100·{F(rp.Kt.Kt, "0.##")}) = {F(d.RiserLinearLoss.Mpa, "0.0000")} МПа.", "6.2а", []),
+                }
+                : [],
             new NoteFormula($"*Z* = *H* / 100 = {F(s.DictatingAboveAxis.Meters, "0.00")} / 100 = {F(d.Elevation.Mpa, "0.000")} МПа.", "6.3", [
                 "где *H* — высота диктующего оросителя над осью насоса, м.",
             ]),
             new NoteParagraph("Требуемое давление насоса:"),
-            new NoteFormula($"*P*_{{н}} = *P*_{{вв}} + (1 + {F(d.LocalLossFactor, "0.0")})·Δ*P*_{{подв}} + *Z* − *P*_{{вх}} = {F(d.InletNodePressure.Mpa, "0.000")} + {F((1 + d.LocalLossFactor) * d.SupplyLinearLoss.Mpa, "0.000")} + {F(d.Elevation.Mpa, "0.000")} − {F(s.InletPressure.Mpa, "0.000")} = **{F(d.PumpPressure.Mpa, "0.000")} МПа**,", "6.4", [
+            new NoteFormula($"*P*_{{н}} = *P*_{{вв}} + (1 + {F(d.LocalLossFactor, "0.0")})·Δ*P*_{{подв}} + *Z* − *P*_{{вх}} = {F(d.InletNodePressure.Mpa, "0.000")} + {F((1 + d.LocalLossFactor) * (d.SupplyLinearLoss.Mpa + d.RiserLinearLoss.Mpa), "0.000")} + {F(d.Elevation.Mpa, "0.000")} − {F(s.InletPressure.Mpa, "0.000")} = **{F(d.PumpPressure.Mpa, "0.000")} МПа**,", "6.4", [
                 $"где *P*_{{вх}} — гарантированное давление в наружной сети на входе насоса, *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа (по техническим условиям).",
             ]),
             new NoteFormula($"*H*_{{н}} = 100·*P*_{{н}} = **{F(d.PumpHead.Meters, "0.0")} м**.", "6.5", []),

@@ -18,7 +18,9 @@ public sealed record DesignSettings(
     double? DesignVelocity = null,
     bool RingValvesClosed = false,
     IReadOnlyList<PipeSize>? PipeSizes = null,
-    bool ResizeOverLimit = false);
+    bool ResizeOverLimit = false,
+    Length RiserLength = default,
+    int? RiserDn = null);
 
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
@@ -96,7 +98,14 @@ public sealed record DesignResult(
     IReadOnlyList<ZoneCandidate> Candidates,
     HydrantResult? Hydrants = null,
     RingCheck? Ring = null,
-    string? ZoneCenterId = null);
+    string? ZoneCenterId = null)
+{
+    /// <summary>Стояк этажа своим DN (null — стояка нет или он учтён в подводящем).</summary>
+    public SeriesPipe? RiserPipe { get; init; }
+
+    /// <summary>Линейные потери в стояке при расходе насоса.</summary>
+    public Pressure RiserLinearLoss { get; init; }
+}
 
 /// <summary>
 /// Проектный расчёт спринклерной АУП по приложению Б СП 485 (ADR 0008):
@@ -322,8 +331,16 @@ public static class DesignCalculation
 
         var supply = series.Pick(settings.SupplyDn);
         var supplyLinear = supply is null ? 0 : qPump * qPump * settings.SupplyLength.Meters / (100 * supply.Kt.Kt);
+        // Стояк этажа своим DN (design.levels[].riserDn): отдельный участок Q²·L/(100·Kт) с той же долей местных потерь.
+        var riser = settings.RiserDn is { } rdn && settings.RiserLength.Meters > 0 ? series.Pick(rdn) : null;
+        var riserLinear = riser is null ? 0 : qPump * qPump * settings.RiserLength.Meters / (100 * riser.Kt.Kt);
+        if (riser is not null && Velocity(qPump, riser) is var rv && rv > vMax + 1e-9)
+        {
+            issues.Add(new Issue("design.velocity", IssueLevel.Warning, $"Стояк DN{riser.Dn}: скорость {rv:0.00} м/с больше {vMax} м/с — увеличить диаметр.", Clause: "6.7.1.37"));
+        }
+
         var z = Pressure.FromHeight(settings.DictatingAboveAxis).Mpa;
-        var pump = solution.SourcePressure.Mpa + ((1 + k) * supplyLinear) + z - settings.InletPressure.Mpa;
+        var pump = solution.SourcePressure.Mpa + ((1 + k) * (supplyLinear + riserLinear)) + z - settings.InletPressure.Mpa;
         var supplyVelocity = supply is null ? 0 : Velocity(qPump, supply);
 
         foreach (var c in current.Loops)
@@ -386,7 +403,7 @@ public static class DesignCalculation
             issues,
             [],
             hydrant,
-            ringCheck);
+            ringCheck) { RiserPipe = riser, RiserLinearLoss = new Pressure(riserLinear) };
     }
 
     // Трубы кольца: замыкающие участки и путь по дереву между их концами.

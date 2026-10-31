@@ -209,6 +209,12 @@ public sealed record ProjectAuptLevel
     public string Drawing { get; init; } = "";
 
     public double Elevation { get; init; }
+
+    /// <summary>DN стояка этажа; null — стояк считается по DN подводящего (замечание, В-28).</summary>
+    public int? RiserDn { get; init; }
+
+    /// <summary>Разводка по основному этажу от подводящего до стояка, м (DN подводящего); 0 — стояк у точки подключения.</summary>
+    public double RiserRun { get; init; }
 }
 
 /// <summary>Помещение со своей группой по приложению А СП 485 (имя — текст внутри контура ПТ_КОНТУР) и высотами для табл. 6.2, 6.3.</summary>

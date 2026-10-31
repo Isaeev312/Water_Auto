@@ -356,6 +356,21 @@ public sealed class ProjectPipelineTests : IDisposable
         Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.PlanDxfFile, StringComparison.Ordinal))).ShouldBe(singlePlan);
         Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.LevelPlanFile(1), StringComparison.Ordinal))).ShouldBe(singlePlan);
         Installed(result).ShouldBe(2 * singleInstalled);
+
+        // Стояк DN50 вместо подводящего DN125 и разводка 20 м до стояка: потери стояка — отдельным участком, напор выше (В-28).
+        var riserJson = ProjectFile.ToJson(project with
+        {
+            Design = project.Design with { Levels = [new ProjectAuptLevel { Name = "2 этаж", Drawing = "floor.dxf", Elevation = 3.3, RiserDn = 50, RiserRun = 20 }] },
+        });
+        var headNoRiser = result.Design.PumpHead.Meters;
+        var riser = Run(Write("riser.waproj", riserJson));
+        riser.Success.ShouldBeTrue();
+        riser.Design!.RiserPipe!.Dn.ShouldBe(50);
+        riser.Design.RiserLinearLoss.Mpa.ShouldBeGreaterThan(0);
+        riser.Design.PumpHead.Meters.ShouldBeGreaterThan(headNoRiser);
+        using var riserNote = WordprocessingDocument.Open(riser.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        riserNote.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("стояк");
+        result.Issues.ShouldContain(i => i.Code == "design.level.noRiserDn");
     }
 
     [Fact]
