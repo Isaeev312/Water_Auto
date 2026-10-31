@@ -87,6 +87,7 @@ public static class ProjectPipeline
     public const string PumpRoomAxonometryFile = "pump_room_axonometry.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string SignalListFile = "aps_signals.xlsx";
+    public const string BatteryFile = "aps_battery.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -310,6 +311,7 @@ public static class ProjectPipeline
         }
 
         IReadOnlyList<ControlPoint> controlPoints = [];
+        PowerBudget? powerBudget = null;
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -343,6 +345,15 @@ public static class ProjectPipeline
             {
                 issues.Add(new Issue("aps.signals.incomplete", IssueLevel.Info,
                     "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; сигналов жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+            }
+
+            // АКБ приборов автоматики АУПТ (ADR 0012, этап 1): по одному входу модуля на точку управления.
+            var powerSet = EquipmentSet.PathFor(normsDir, AlarmPowerCatalog.File);
+            if (controlPoints.Count > 0 && File.Exists(powerSet))
+            {
+                var power = PowerBudgets.Build(controlPoints.Count, AlarmPowerCatalog.Load(powerSet), norms);
+                powerBudget = power.Budget;
+                issues.AddRange(power.Issues);
             }
         }
 
@@ -964,6 +975,11 @@ public static class ProjectPipeline
             }
 
             Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
+        }
+
+        if (powerBudget is not null)
+        {
+            Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
         }
 
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));

@@ -156,6 +156,12 @@ public sealed class PumpSetPipelineTests : IDisposable
         // Поз. — номер строки ПТ2.СО, как на схеме насосной; у шкафа — строка установки.
         body.ShouldAllBe(r => r[2] != "");
         result.Issues.ShouldContain(i => i.Code == "aps.signals.incomplete");
+
+        // АКБ — по числу сигналов: 8 входов — один АР8; набор из каталога назван в замечании, ошибок расчёта нет.
+        result.Issues.ShouldContain(i => i.Code == "aps.power.defaultSet");
+        result.Issues.ShouldNotContain(i => (i.Code.StartsWith("aps.power", StringComparison.Ordinal) || i.Code.StartsWith("aps.battery", StringComparison.Ordinal)) && i.Level == IssueLevel.Error);
+        var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.BatteryFile)).SelectMany(r => r).ToList();
+        battery.ShouldContain("Требуемая ёмкость АКБ, А·ч");
     }
 
     [Fact]
