@@ -347,6 +347,42 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Powder_section_produces_the_powder_volume_with_module_count_by_appendix_I()
+    {
+        // Стоянка 30 × 20 м = 600 м², Буран-8У на 4 м (класс В: 28 → 20 м² на 3,5…5,5 м, на 4 м — 26 м²), бензин (k3 = 1,0),
+        // k1 = 1,0 и k4 = 1,0 по паспорту, Sз = 0: N = 600 / 26 = 23,08 → 24; запас 24.
+        Drawing(withInlet: false);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Склад (пример)",
+            Drawing = "floor.dxf",
+            Aupt = false,
+            Powder = new ProjectPowder
+            {
+                Module = "epotos.buran_8u",
+                Rooms = [new ProjectPowderRoom { Room = "Автостоянка", Method = PowderMethod.Area, FireClass = "B", Substance = "sp485.tI_1.petrol", CeilingHeight = 4, ShadedArea = 0 }],
+            },
+        });
+        var result = Run(Write("powder.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        var names = result.Files.Select(Path.GetFileName).ToList();
+        names.ShouldContain(ProjectPipeline.PowderNoteFile);
+        names.ShouldContain(ProjectPipeline.PowderSpecFile);
+        result.Files.Where(f => Path.GetFileName(f).StartsWith("apt_", StringComparison.Ordinal)).ShouldAllBe(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.PowderVolume);
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Single(r => r[2] == "Буран-8У")[5].ShouldBe("48");
+        using (var doc = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderNoteFile, StringComparison.Ordinal)), false))
+        {
+            doc.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("600/26·1·1·1·1 = 23,08 → 24");
+        }
+
+        // Модуль без k2 в паспорте (Гарант) — ошибка с объяснением, записки нет.
+        var garant = Run(Write("garant.waproj", json.Replace("epotos.buran_8u", "eternis.garant_7", StringComparison.Ordinal)));
+        garant.Issues.ShouldContain(i => i.Code == "powder.k2.missing");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();

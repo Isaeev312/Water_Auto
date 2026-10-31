@@ -4,57 +4,209 @@
   "title": "Модули порошкового пожаротушения: паспортные данные для расчёта количества по прил. И СП 485",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "schemaVersion", "modules"],
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "modules"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "verified": { "type": "boolean" },
-    "notes": { "type": "array", "items": { "type": "string" } },
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "modules": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "designation", "manufacturer", "powder", "impulse", "minHeight", "maxHeight", "coverage", "source"],
+        "required": [
+          "id",
+          "name",
+          "designation",
+          "manufacturer",
+          "powder",
+          "impulse",
+          "coverage",
+          "source"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$" },
-          "name": { "type": "string", "minLength": 1 },
-          "designation": { "type": "string", "minLength": 1 },
-          "manufacturer": { "type": "string", "minLength": 1 },
-          "powder": { "type": "string", "enum": ["AB", "B"], "description": "Порошок для классов А, В или только В (строка табл. И.1)." },
-          "impulse": { "type": "boolean" },
-          "minHeight": { "type": "number", "minimum": 0, "description": "Наименьшая высота установки, м." },
-          "maxHeight": { "type": "number", "exclusiveMinimum": 0, "description": "Наибольшая высота установки, м." },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "designation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "manufacturer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "powder": {
+            "type": "string",
+            "enum": [
+              "AB",
+              "B"
+            ],
+            "description": "Порошок для классов А, В или только В (строка табл. И.1)."
+          },
+          "impulse": {
+            "type": "boolean"
+          },
           "coverage": {
             "type": "array",
             "minItems": 1,
-            "description": "Диаграмма распыла: на высоте установки — защищаемая площадь по классам А и В, м², объём, м³ (чего нет в паспорте — не указывать).",
+            "description": "Отрезки высот установки по паспорту: значения на концах, внутри — линейно (интерполяция по таблице или формула паспорта на концах); одна точка — from = to.",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["heightM"],
+              "required": [
+                "from",
+                "to",
+                "atFrom",
+                "atTo"
+              ],
               "properties": {
-                "heightM": { "type": "number", "exclusiveMinimum": 0 },
-                "areaA": { "type": "number", "exclusiveMinimum": 0 },
-                "areaB": { "type": "number", "exclusiveMinimum": 0 },
-                "volume": { "type": "number", "exclusiveMinimum": 0 }
+                "from": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "to": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "atFrom": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "areaA": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "areaB": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "volumeA": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "volumeB": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "description": "Защищаемая площадь, м², и объём, м³, по классам А и В (чего нет в паспорте — не указывать)."
+                },
+                "atTo": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "areaA": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "areaB": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "volumeA": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "volumeB": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "description": "Защищаемая площадь, м², и объём, м³, по классам А и В (чего нет в паспорте — не указывать)."
+                },
+                "note": {
+                  "type": "string"
+                }
               }
             }
           },
-          "k1": { "type": "number", "minimum": 1 },
-          "k2": { "type": "number", "minimum": 1, "description": "Коэффициент запаса на затенения по огневым испытаниям изготовителя (прил. И)." },
-          "k4": { "type": "number", "minimum": 1 },
-          "fireRank": { "type": "string" },
-          "powderMass": { "type": "number", "exclusiveMinimum": 0 },
-          "mass": { "type": "number", "exclusiveMinimum": 0 },
-          "startCurrent": { "type": "number", "exclusiveMinimum": 0, "description": "Ток пуска, А." },
-          "startDuration": { "type": "number", "exclusiveMinimum": 0, "description": "Длительность импульса пуска, с." },
-          "monitorCurrent": { "type": "number", "minimum": 0, "description": "Ток контроля цепи пуска, А." },
-          "selfStartTemperature": { "type": "number" },
-          "certificate": { "type": "string", "minLength": 1 },
-          "source": { "type": "string", "minLength": 1 },
-          "note": { "type": "string" }
+          "k1": {
+            "type": "number",
+            "minimum": 1
+          },
+          "fireRank": {
+            "type": "string"
+          },
+          "powderMass": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "mass": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "startCurrent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Ток пуска, А."
+          },
+          "startDuration": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Длительность импульса пуска, с."
+          },
+          "monitorCurrent": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Ток контроля цепи пуска, А."
+          },
+          "selfStartTemperature": {
+            "type": "number"
+          },
+          "certificate": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string"
+          },
+          "k2Factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "k2 = 1 + k2Factor·Sз/Sу по формуле паспорта."
+          },
+          "k2Limit": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Порог Sз/Sу, выше которого изготовитель рекомендует доп. модули."
+          },
+          "k4Area": {
+            "type": "number",
+            "minimum": 1,
+            "description": "k4 по документации для тушения по площади (всей и локально)."
+          },
+          "k4Volume": {
+            "type": "number",
+            "minimum": 1,
+            "description": "k4 по документации для тушения по объёму."
+          }
         }
       }
     }

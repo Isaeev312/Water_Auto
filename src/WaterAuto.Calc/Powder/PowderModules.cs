@@ -14,6 +14,31 @@ public static class PowderModules
     private const string Doc = "СП 485.1311500.2020";
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
+    /// <summary>
+    /// Защищаемая модулем площадь/объём на высоте h по отрезкам, где эта величина задана: внутри отрезка — линейно (при
+    /// перекрытии отрезков — меньшее); между отрезками — меньшее из соседних концов; ниже первого и выше последнего — null.
+    /// </summary>
+    public static double? Coverage(IReadOnlyList<PowderSegment> segments, double h, char fireClass, bool volume)
+    {
+        ArgumentNullException.ThrowIfNull(segments);
+        var known = segments.Where(s => s.AtFrom.Pick(fireClass, volume) is not null && s.AtTo.Pick(fireClass, volume) is not null).ToList();
+        double At(PowderSegment s, double x)
+        {
+            var (a, b) = (s.AtFrom.Pick(fireClass, volume)!.Value, s.AtTo.Pick(fireClass, volume)!.Value);
+            return s.ToM - s.FromM < 1e-9 ? Math.Min(a, b) : a + ((b - a) * (Math.Clamp(x, s.FromM, s.ToM) - s.FromM) / (s.ToM - s.FromM));
+        }
+
+        var inside = known.Where(s => h >= s.FromM - 1e-9 && h <= s.ToM + 1e-9).Select(s => At(s, h)).ToList();
+        if (inside.Count > 0)
+        {
+            return inside.Min();
+        }
+
+        var below = known.Where(s => s.ToM < h).MaxBy(s => s.ToM);
+        var above = known.Where(s => s.FromM > h).MinBy(s => s.FromM);
+        return below is null || above is null ? null : Math.Min(At(below, below.ToM), At(above, above.FromM));
+    }
+
     public static PowderResult Calculate(IReadOnlyList<PowderRoom> rooms, PowderModuleModel module, INormsProvider norms)
     {
         ArgumentNullException.ThrowIfNull(rooms);
@@ -33,10 +58,10 @@ public static class PowderModules
         }
 
         var results = new List<PowderRoomResult>();
-        if (module.K2 is not { } k2)
+        if (module.K2Factor is not { } k2Factor)
         {
             issues.Add(new Issue("powder.k2.missing", IssueLevel.Error,
-                $"У модуля {module.Name} в документации нет коэффициента k2 (запас на затенения) — по своду его определяет изготовитель по огневым испытаниям; расчёт количества модулей не выполнен (А-17).",
+                $"У модуля {module.Name} в документации нет коэффициента k2 (запас на затенения) — по своду его определяет изготовитель по огневым испытаниям; расчёт количества модулей не выполнен, запросить k2 у изготовителя (А-17).",
                 Clause: Doc + ", прил. И, п. И.3.1.1"));
             return new([], 0, issues);
         }
@@ -60,15 +85,11 @@ public static class PowderModules
                 continue;
             }
 
-            // Sн/Vн — по ближайшей строке диаграммы распыла не ниже высоты установки (высота между строками — следующая строка).
-            var above = module.Coverage.Where(c => c.HeightM >= room.MountHeightM - 1e-9).ToList();
-            var rows = above.Count == 0 ? [] : above.Where(c => Math.Abs(c.HeightM - above.Min(x => x.HeightM)) < 1e-9).ToList();
-            double? Pick(Func<PowderCoverage, double?> f) => rows.Select(f).Where(v => v is > 0).Select(v => v!.Value).DefaultIfEmpty().Min() is var m && m > 0 ? m : null;
-            var perModule = byVolume ? Pick(c => c.Volume) : Pick(c => room.FireClass == 'A' ? c.AreaA : c.AreaB);
-            if (perModule is not { } per)
+            // Sн/Vн — по отрезкам высот паспорта: внутри — линейно, между отрезками — меньшее из соседних значений.
+            if (Coverage(module.Coverage, room.MountHeightM, room.FireClass, byVolume) is not { } per)
             {
                 issues.Add(new Issue("powder.coverage.missing", IssueLevel.Error,
-                    string.Create(Ru, $"«{room.Name}»: в документации {module.Name} нет {(byVolume ? "защищаемого объёма" : $"защищаемой площади по классу {room.FireClass}")} для высоты {room.MountHeightM:0.##} м."),
+                    string.Create(Ru, $"«{room.Name}»: в документации {module.Name} нет {(byVolume ? "защищаемого объёма" : "защищаемой площади")} по классу {room.FireClass} для высоты {room.MountHeightM:0.##} м."),
                     room.Id, Doc + ", прил. И"));
                 continue;
             }
@@ -89,6 +110,24 @@ public static class PowderModules
             if (k1 < k1Rule.Values["min"]!.Value - 1e-9 || k1 > k1Rule.Values["max"]!.Value + 1e-9)
             {
                 issues.Add(new Issue("powder.k1.range", IssueLevel.Warning, string.Create(Ru, $"«{room.Name}»: k1 = {k1:0.##} вне диапазона {k1Rule.Values["min"]:0.0}…{k1Rule.Values["max"]:0.0} по И.3.1.1."), room.Id, Doc + ", прил. И, п. И.3.1.1"));
+            }
+
+            // k2 = 1 + K2Factor·Sз/Sу по формуле паспорта; Sз — решение проектировщика (0 — затенений нет), без него не считается.
+            if (room.ShadedAreaM2 is not { } shaded)
+            {
+                issues.Add(new Issue("powder.k2.noShading", IssueLevel.Error,
+                    string.Create(Ru, $"«{room.Name}»: k2 модуля {module.Name} — по формуле паспорта 1 + {k2Factor:0.##}·Sз/Sу, а затенённая площадь Sз не задана (powder.rooms[].shadedArea, 0 — затенений нет)."),
+                    room.Id, module.Source));
+                continue;
+            }
+
+            var shadedRatio = room.AreaM2 > 0 ? shaded / room.AreaM2 : 0;
+            var k2 = 1 + (k2Factor * shadedRatio);
+            if (module.K2Limit is { } limit && shadedRatio > limit + 1e-9)
+            {
+                issues.Add(new Issue("powder.k2.shading", IssueLevel.Warning,
+                    string.Create(Ru, $"«{room.Name}»: Sз/Sу = {shadedRatio:0.##} больше {limit:0.##} — изготовитель рекомендует дополнительные модули для затенённых зон; k2 = {k2:0.###} принят по формуле паспорта."),
+                    room.Id, module.Source));
             }
 
             // k3: задание → табл. И.1 по виду порошка; значение в скобках — для ручного пуска и импульсных модулей.
@@ -115,7 +154,7 @@ public static class PowderModules
             // k4: паспорт → по способу (по объёму 1 + 10·f, по площади и локально — числа свода).
             double k4;
             var coefficient = formulas.Values["k4Coefficient"]!.Value;
-            if (module.K4 is { } mk4) { k4 = mk4; }
+            if ((byVolume ? module.K4Volume : module.K4Area) is { } mk4) { k4 = mk4; }
             else
             {
                 k4 = room.Method switch

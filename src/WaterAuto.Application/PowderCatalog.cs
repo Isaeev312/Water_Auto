@@ -19,22 +19,25 @@ public static class PowderCatalog
         {
             double? Opt(string name) => m.TryGetProperty(name, out var v) ? v.GetDouble() : null;
             string? Text(string name) => m.TryGetProperty(name, out var v) ? v.GetString() : null;
-            var coverage = m.GetProperty("coverage").EnumerateArray().Select(c => new PowderCoverage(
-                c.GetProperty("heightM").GetDouble(),
-                c.TryGetProperty("areaA", out var a) ? a.GetDouble() : null,
-                c.TryGetProperty("areaB", out var b) ? b.GetDouble() : null,
-                c.TryGetProperty("volume", out var v) ? v.GetDouble() : null)).ToList();
+            static PowderValues Values(JsonElement v)
+            {
+                double? O(string n) => v.TryGetProperty(n, out var x) ? x.GetDouble() : null;
+                return new PowderValues(O("areaA"), O("areaB"), O("volumeA"), O("volumeB"));
+            }
+
+            var coverage = m.GetProperty("coverage").EnumerateArray().Select(c => new PowderSegment(
+                c.GetProperty("from").GetDouble(), c.GetProperty("to").GetDouble(), Values(c.GetProperty("atFrom")), Values(c.GetProperty("atTo")))).ToList();
             var model = new PowderModuleModel(
                 m.GetProperty("id").GetString()!,
                 m.GetProperty("name").GetString()!,
                 m.GetProperty("powder").GetString() == "B" ? PowderKind.B : PowderKind.AB,
                 m.GetProperty("impulse").GetBoolean(),
-                m.GetProperty("minHeight").GetDouble(),
-                m.GetProperty("maxHeight").GetDouble(),
                 coverage,
                 Opt("k1"),
-                Opt("k2"),
-                Opt("k4"),
+                Opt("k2Factor"),
+                Opt("k2Limit"),
+                Opt("k4Area"),
+                Opt("k4Volume"),
                 m.GetProperty("source").GetString()!);
             list.Add(new PowderModuleEntry(model, m.GetProperty("designation").GetString()!, m.GetProperty("manufacturer").GetString()!,
                 Opt("startCurrent"), Opt("startDuration"), Opt("monitorCurrent"), Opt("powderMass"), Opt("mass"), Text("fireRank"), Text("certificate")));

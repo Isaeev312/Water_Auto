@@ -1,0 +1,546 @@
+{
+  "$schema": "../schemas/powder_modules.schema.json",
+  "schemaVersion": 1,
+  "verified": false,
+  "notes": [
+    "Модули порошкового пожаротушения по паспортам изготовителей (собраны 31.10.2026, PDF — с сайтов epotos.ru, antifire.org, eternis.ru). Числа — только из паспортов; формулы площади/объёма от высоты (Тунгус) посчитаны на концах отрезков и приведены в note.",
+    "В каталог включены модели с действующим сертификатом ТР ЕАЭС 043/2017. Не включены (сертификат истёк): Буран-2,5-2С (ПБ97.В.00074/21, до 12.01.2026), Буран-15КД (ПБ97.В.00079/21, до 12.01.2026, нового на сайте нет), Буран-8У по прежним ТУ (ПБ97.В.00076/21), Тунгус-2 МПП(Н) (00055/21, до 15.01.2026).",
+    "Гарант: сертификат ПБ34.В.00200/22 — год окончания частично закрыт печатью (читается 2027), сверить в реестре ФГИС; у изготовителя ООО «Спецприбор-М» для ООО «ГК ЭТЕРНИС» (не ФПС). Буран выпускает ООО «ЭПОТОС-К».",
+    "k3 из паспортов Бурана (запасные значения при отсутствии вещества в табл. И.1) в каталог не перенесены — программа берёт k3 по табл. И.1 СП 485 или по заданию."
+  ],
+  "modules": [
+    {
+      "id": "epotos.buran_2_6",
+      "name": "Буран-2,6",
+      "designation": "МПП(Р)-2,6-И-ГЭ-УХЛ3.1-ПТКЛ.634233.005ТУ",
+      "manufacturer": "ООО «ЭПОТОС-К»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 2.5,
+          "to": 3.5,
+          "atFrom": {
+            "areaA": 7,
+            "areaB": 7,
+            "volumeA": 18,
+            "volumeB": 16
+          },
+          "atTo": {
+            "areaA": 7,
+            "areaB": 7,
+            "volumeA": 18,
+            "volumeB": 16
+          },
+          "note": "одно значение на интервал 2,5…3,5 м (табл. 2 паспорта)"
+        }
+      ],
+      "k1": 1.0,
+      "k2Factor": 1.33,
+      "k2Limit": 0.15,
+      "k4Area": 1.0,
+      "fireRank": "34В",
+      "powderMass": 1.95,
+      "mass": 3.05,
+      "startCurrent": 0.7,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ97.В.00680/25, ОС ФГБОУ ВО «Академия ГПС МЧС России» (RA.RU.11ПБ97), 2025-12-30–2030-12-29",
+      "source": "https://epotos.ru/api/product-docs/102/passport/21 — с. 2–4: п.1.6, табл. 1, п.2.2–2.4, табл. 2; https://epotos.ru/api/product-docs/102/passport/21 — с. 6, п.4.2.2; https://epotos.ru/api/product-docs/102/passport/21 — с. свидетельство о приёмке",
+      "note": "k2 = 1 + 1,33·Sз/Sу; при Sз/Sу > 0,15 изготовитель рекомендует доп. МПП (п. 2.2); k4 = 1,0 по площади, иначе по СП 485 (п. 2.4); самосрабатывание при 180 °С."
+    },
+    {
+      "id": "epotos.buran_8u",
+      "name": "Буран-8У",
+      "designation": "МПП(р)-8-И-ГЭ-УХЛ2,5-ТУ 4854-006-52459334-2001",
+      "manufacturer": "ООО «ЭПОТОС-К»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 2.5,
+          "to": 3.5,
+          "atFrom": {
+            "areaA": 42,
+            "areaB": 28,
+            "volumeA": 68,
+            "volumeB": 45
+          },
+          "atTo": {
+            "areaA": 42,
+            "areaB": 28,
+            "volumeA": 68,
+            "volumeB": 45
+          },
+          "note": "3,0 ± 0,5 м, табл. 2"
+        },
+        {
+          "from": 3.5,
+          "to": 5.5,
+          "atFrom": {
+            "areaA": 42,
+            "areaB": 28
+          },
+          "atTo": {
+            "areaA": 30,
+            "areaB": 20
+          },
+          "note": "интерполяция по рис. 3 паспорта (п. 2.5), концы — значения табл. 2"
+        },
+        {
+          "from": 5.5,
+          "to": 6.5,
+          "atFrom": {
+            "areaA": 30,
+            "areaB": 20,
+            "volumeA": 48,
+            "volumeB": 32
+          },
+          "atTo": {
+            "areaA": 30,
+            "areaB": 20,
+            "volumeA": 48,
+            "volumeB": 32
+          },
+          "note": "6,0 ± 0,5 м, табл. 2"
+        }
+      ],
+      "k1": 1.0,
+      "k2Factor": 1.33,
+      "k2Limit": 0.15,
+      "k4Area": 1.0,
+      "fireRank": "233В",
+      "powderMass": 7.0,
+      "mass": 12.1,
+      "startCurrent": 0.7,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ97.В.00076/21, ОС ФГБОУ ВО «Академия ГПС МЧС России», ?–2026-01-12",
+      "source": "https://epotos.ru/api/product-docs/60/passport/110 — с. 2–3: табл. 1, табл. 2; свидетельство о приёмке",
+      "note": "Импульсный, подача ≤ 1,0 с; Буран-8КД (кратковременного действия) — те же площади, отдельная запись не ведётся. Зона защиты — прямоугольник L×К (табл. 2). Между 3,5 и 5,5 м объём в паспорте не задан."
+    },
+    {
+      "id": "istochnik.tungus_2r",
+      "name": "Тунгус-2 МПП(Р)-2(п)",
+      "designation": "МПП(Р)-2(п)-И-ГЭ-У2-ТУ 28.99.39-007-54572789-2020",
+      "manufacturer": "АО «Источник Плюс»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 2,
+          "to": 4,
+          "atFrom": {
+            "areaA": 25,
+            "areaB": 10,
+            "volumeA": 38,
+            "volumeB": 13
+          },
+          "atTo": {
+            "areaA": 25,
+            "areaB": 10,
+            "volumeA": 38,
+            "volumeB": 13
+          },
+          "note": "номинал 3 м (п. 7.1–7.3); монтаж при отклонении высоты от номинала в пределах ±1 м с сохранением защищаемых показателей допускается паспортом"
+        }
+      ],
+      "k1": 1.0,
+      "k2Factor": 1.33,
+      "fireRank": "55В",
+      "powderMass": 1.9,
+      "mass": 3.5,
+      "startCurrent": 0.15,
+      "startDuration": 0.1,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ97.В.00745/26, ОС ФГБОУ ВО «Академия ГПС МЧС России» (RA.RU.11ПБ97), 2026-07-17–2031-07-16",
+      "source": "https://antifire.org/wp-content/uploads/2026/08/Pasport-MPPR-2.pdf — с. 3–4: табл. 1 и примечания; https://antifire.org/wp-content/uploads/2026/08/Pasport-MPPR-2.pdf — с. 7–8: п.6.4–6.6, табл. 2, 3; https://antifire.org/wp-content/uploads/2026/08/Pasport-MPPR-2.pdf — с. 16",
+      "note": "k2 = 1 + 1,33·Sз/Sу (п. 6.4); k4 в паспорте нет — по СП 485. Класс В по всему объёму — 13 м³ на площади 4,3 м²."
+    },
+    {
+      "id": "istochnik.tungus_6r",
+      "name": "Тунгус-6 МПП(Р)-6(п)",
+      "designation": "МПП(Р)-6(п)-И-ГЭ-У2-ТУ 28.99.39-010-54572789-2021",
+      "manufacturer": "АО «Источник Плюс»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 2,
+          "to": 3,
+          "atFrom": {
+            "areaA": 50,
+            "areaB": 27,
+            "volumeA": 150,
+            "volumeB": 40
+          },
+          "atTo": {
+            "areaA": 50,
+            "areaB": 27,
+            "volumeA": 150,
+            "volumeB": 40
+          },
+          "note": "номинал 3 м, отклонение до −1 м с сохранением показателей (паспорт)"
+        },
+        {
+          "from": 3,
+          "to": 9,
+          "atFrom": {
+            "areaA": 50,
+            "volumeA": 150
+          },
+          "atTo": {
+            "areaA": 37.5,
+            "volumeA": 90
+          },
+          "note": "S = 50 − 2,08·(Н − 3), V = 150 − 10·(Н − 3) (паспорт); 9 м — табл. п. 7.2"
+        },
+        {
+          "from": 3,
+          "to": 8,
+          "atFrom": {
+            "areaB": 27
+          },
+          "atTo": {
+            "areaB": 14
+          },
+          "note": "S = 27 − 2,6·(Н − 3) (паспорт), 8 м — п. 7.4"
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "atFrom": {
+            "volumeB": 40
+          },
+          "atTo": {
+            "volumeB": 40
+          },
+          "note": "класс В по объёму — номинал 3 м, +1 м с сохранением объёма (паспорт)"
+        }
+      ],
+      "k1": 1.0,
+      "k2Factor": 1.33,
+      "fireRank": "233В",
+      "powderMass": 6.0,
+      "mass": 9.2,
+      "startCurrent": 0.15,
+      "startDuration": 0.1,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ЧС13.В.01077/26, ОС «ПОЖТЕСТ» ФГБУ ВНИИПО МЧС России (RA.RU.10ЧС13), 2026-04-10–2031-04-09",
+      "source": "https://antifire.org/wp-content/uploads/2026/06/Pasport-MPPR-6-1.pdf — с. 3–4: табл. 1 и примечания; https://antifire.org/wp-content/uploads/2026/06/Pasport-MPPR-6-1.pdf — с. 8: табл. 2, 3; https://antifire.org/wp-content/uploads/2026/06/Pasport-MPPR-6-1.pdf — с. 16",
+      "note": "k2 = 1 + 1,33·Sз/Sу (п. 6.4); k4 в паспорте нет — по СП 485. Версия МПП(Н)-6 имеет другие значения класса В — не путать."
+    },
+    {
+      "id": "istochnik.tungus_9n",
+      "name": "Тунгус-9 МПП(Н)-9(п)",
+      "designation": "МПП(Н)-9(п)-И-ГЭ-У2 ТУ 28.99.39-014-54572789-2021",
+      "manufacturer": "АО «Источник Плюс»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 2,
+          "to": 3,
+          "atFrom": {
+            "areaA": 72,
+            "areaB": 33,
+            "volumeA": 144,
+            "volumeB": 54
+          },
+          "atTo": {
+            "areaA": 72,
+            "areaB": 33,
+            "volumeA": 216,
+            "volumeB": 54
+          },
+          "note": "V = 144 + 72·(Н − 2) на 2…3 м (паспорт)"
+        },
+        {
+          "from": 3,
+          "to": 13,
+          "atFrom": {
+            "areaA": 72,
+            "areaB": 33,
+            "volumeA": 216,
+            "volumeB": 54
+          },
+          "atTo": {
+            "areaA": 62,
+            "areaB": 9.3,
+            "volumeA": 171,
+            "volumeB": 54
+          },
+          "note": "S_A = 72 − (Н − 3), S_B = 33 − 2,37·(Н − 3), V_A = 216 − 4,5·(Н − 3), V_B = 54 (паспорт, табл. 2)"
+        }
+      ],
+      "k1": 1.0,
+      "k2Factor": 1.33,
+      "fireRank": "233В",
+      "powderMass": 8.6,
+      "mass": 13,
+      "startCurrent": 0.15,
+      "startDuration": 0.1,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ЧС13.В.00346/21, ОС «ПОЖТЕСТ» ФГБУ ВНИИПО МЧС России, 2021-11-09–2026-11-09 (действует, истекает 09.11.2026)",
+      "source": "https://antifire.org/wp-content/uploads/2025/01/Pasport-MPP-9.pdf — с. 3–4: табл. 1 и примечания; https://antifire.org/wp-content/uploads/2025/01/Pasport-MPP-9.pdf — с. 8: табл. 2; https://antifire.org/wp-content/uploads/2021/11/Sert-sootv-MPP-9-2021...2026.pdf — с. 1 (скан)",
+      "note": "k2 = 1 + 1,33·Sз/Sу (п. 6.4 паспорта). СЕРТИФИКАТ ИСТЕКАЕТ 09.11.2026 — проверить новый перед применением."
+    },
+    {
+      "id": "eternis.garant_5",
+      "name": "Гарант-5",
+      "designation": "МПП(р)-5,5-И-ГЭ-УХЛ3.1-ТУ 28.99.39-001-27598793-2021",
+      "manufacturer": "ООО «Спецприбор-М» для ООО «ГК ЭТЕРНИС»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 2.5,
+          "to": 2.5,
+          "atFrom": {
+            "areaA": 25,
+            "areaB": 12,
+            "volumeA": 45,
+            "volumeB": 22
+          },
+          "atTo": {
+            "areaA": 25,
+            "areaB": 12,
+            "volumeA": 45,
+            "volumeB": 22
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 3.5,
+          "to": 3.5,
+          "atFrom": {
+            "areaA": 26,
+            "areaB": 12,
+            "volumeA": 47,
+            "volumeB": 22
+          },
+          "atTo": {
+            "areaA": 26,
+            "areaB": 12,
+            "volumeA": 47,
+            "volumeB": 22
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 4,
+          "to": 4,
+          "atFrom": {
+            "areaA": 27,
+            "areaB": 14,
+            "volumeA": 49,
+            "volumeB": 25
+          },
+          "atTo": {
+            "areaA": 27,
+            "areaB": 14,
+            "volumeA": 49,
+            "volumeB": 25
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 5,
+          "to": 5,
+          "atFrom": {
+            "areaA": 27,
+            "areaB": 16,
+            "volumeA": 49,
+            "volumeB": 29
+          },
+          "atTo": {
+            "areaA": 27,
+            "areaB": 16,
+            "volumeA": 49,
+            "volumeB": 29
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        }
+      ],
+      "k1": 1.0,
+      "k4Area": 1.0,
+      "fireRank": "21В",
+      "powderMass": 4.8,
+      "mass": 8.0,
+      "startCurrent": 0.1,
+      "startDuration": 0.01,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ34.В.00200/22, ОС ООО «НТЦ «ПОЖ-АУДИТ» (RA.RU.ПБ34), 2022-07-18–2027-07-17 (действует; последняя цифра года частично закрыта печатью, при увеличении читается как 7 — сверить в реестре ФГИС)",
+      "source": "https://www.eternis.ru/upload/iblock/bab/tk7y6evzsyaw3ozxz5y81owjjp3krjtj/PS-Garant_5-_011225_v.3.7_UTV_.pdf — с. 3–5: табл. 1, табл. 2; 6–7: табл. 3–4; https://www.eternis.ru/upload/iblock/ff7/0vwrw8jwou1gw6qjg8qda6817lmulm53/Sertifikat_MPP_5_7_12.pdf — с. 1–2 (скан с приложением)",
+      "note": "k2 в паспорте НЕТ — расчёт количества по прил. И не выполняется до получения k2 от изготовителя (А-17). k1 = 1,0 и k4 = 1,0 указаны без привязки к способу — k4 принят для тушения по площади. Значения — по вписанному квадрату; между точками таблицы — меньшее."
+    },
+    {
+      "id": "eternis.garant_7",
+      "name": "Гарант-7",
+      "designation": "МПП(р)-7-И-ГЭ-УХЛ3.1-ТУ 28.99.39-001-27598793-2021",
+      "manufacturer": "ООО «Спецприбор-М» для ООО «ГК ЭТЕРНИС»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 4,
+          "to": 4,
+          "atFrom": {
+            "areaA": 28,
+            "areaB": 16,
+            "volumeA": 50,
+            "volumeB": 29
+          },
+          "atTo": {
+            "areaA": 28,
+            "areaB": 16,
+            "volumeA": 50,
+            "volumeB": 29
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 5,
+          "to": 5,
+          "atFrom": {
+            "areaA": 29,
+            "areaB": 17,
+            "volumeA": 52,
+            "volumeB": 31
+          },
+          "atTo": {
+            "areaA": 29,
+            "areaB": 17,
+            "volumeA": 52,
+            "volumeB": 31
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 6,
+          "to": 6,
+          "atFrom": {
+            "areaA": 30,
+            "areaB": 17,
+            "volumeA": 54,
+            "volumeB": 31
+          },
+          "atTo": {
+            "areaA": 30,
+            "areaB": 17,
+            "volumeA": 54,
+            "volumeB": 31
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 8,
+          "to": 8,
+          "atFrom": {
+            "areaA": 30,
+            "areaB": 20,
+            "volumeA": 54,
+            "volumeB": 36
+          },
+          "atTo": {
+            "areaA": 30,
+            "areaB": 20,
+            "volumeA": 54,
+            "volumeB": 36
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        }
+      ],
+      "k1": 1.0,
+      "k4Area": 1.0,
+      "fireRank": "21В",
+      "powderMass": 6.8,
+      "mass": 10.5,
+      "startCurrent": 0.1,
+      "startDuration": 0.01,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ34.В.00200/22, ОС ООО «НТЦ «ПОЖ-АУДИТ» (RA.RU.ПБ34), 2022-07-18–2027-07-17 (действует; последняя цифра года частично закрыта печатью, при увеличении читается как 7 — сверить в реестре ФГИС)",
+      "source": "https://www.eternis.ru/upload/iblock/0e3/83g9a8fw63x4fvmc8t2lbkif238zcncn/PS-Garant_7-_021225_v.3.6_UTV_.pdf — с. 3–5: табл. 1, табл. 2; 6–7: табл. 3–4; https://www.eternis.ru/upload/iblock/ff7/0vwrw8jwou1gw6qjg8qda6817lmulm53/Sertifikat_MPP_5_7_12.pdf — с. 1–2 (скан с приложением)",
+      "note": "k2 в паспорте НЕТ — расчёт количества по прил. И не выполняется до получения k2 от изготовителя (А-17). k1 = 1,0 и k4 = 1,0 указаны без привязки к способу — k4 принят для тушения по площади. Значения — по вписанному квадрату; между точками таблицы — меньшее."
+    },
+    {
+      "id": "eternis.garant_12",
+      "name": "Гарант-12",
+      "designation": "МПП(р)-12,9-И-ГЭ-УХЛ3.1-ТУ 28.99.39-001-27598793-2021",
+      "manufacturer": "ООО «Спецприбор-М» для ООО «ГК ЭТЕРНИС»",
+      "powder": "AB",
+      "impulse": true,
+      "coverage": [
+        {
+          "from": 6,
+          "to": 6,
+          "atFrom": {
+            "areaA": 40,
+            "areaB": 25,
+            "volumeA": 104,
+            "volumeB": 50
+          },
+          "atTo": {
+            "areaA": 40,
+            "areaB": 25,
+            "volumeA": 104,
+            "volumeB": 50
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 8,
+          "to": 8,
+          "atFrom": {
+            "areaA": 49,
+            "areaB": 35,
+            "volumeA": 98,
+            "volumeB": 70
+          },
+          "atTo": {
+            "areaA": 49,
+            "areaB": 35,
+            "volumeA": 98,
+            "volumeB": 70
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 10,
+          "to": 10,
+          "atFrom": {
+            "areaA": 49,
+            "areaB": 29,
+            "volumeA": 98,
+            "volumeB": 58
+          },
+          "atTo": {
+            "areaA": 49,
+            "areaB": 29,
+            "volumeA": 98,
+            "volumeB": 58
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        },
+        {
+          "from": 12,
+          "to": 12,
+          "atFrom": {
+            "areaA": 53,
+            "areaB": 25,
+            "volumeA": 95,
+            "volumeB": 50
+          },
+          "atTo": {
+            "areaA": 53,
+            "areaB": 25,
+            "volumeA": 95,
+            "volumeB": 50
+          },
+          "note": "вписанный квадрат (рекомендация паспорта)"
+        }
+      ],
+      "k1": 1.0,
+      "k4Area": 1.0,
+      "fireRank": "233В",
+      "powderMass": 10.8,
+      "mass": 18.1,
+      "startCurrent": 0.1,
+      "startDuration": 0.01,
+      "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ34.В.00200/22, ОС ООО «НТЦ «ПОЖ-АУДИТ» (RA.RU.ПБ34), 2022-07-18–2027-07-17 (действует; последняя цифра года частично закрыта печатью, при увеличении читается как 7 — сверить в реестре ФГИС)",
+      "source": "https://www.eternis.ru/upload/iblock/585/tahoiuyqeux5lkfc308uk3t8k9hrtylx/PS-Garant_12-_021225_v.3.10_UTV_.pdf — с. 3–6: табл. 1–3; 8: табл. 4; https://www.eternis.ru/upload/iblock/ff7/0vwrw8jwou1gw6qjg8qda6817lmulm53/Sertifikat_MPP_5_7_12.pdf — с. 1–2 (скан с приложением); https://files.layta.ru/upload/files_upload/Eternis/pasporta/garant_12_passport.pdf — с. 3–4: табл. 1–2",
+      "note": "k2 в паспорте НЕТ — расчёт количества по прил. И не выполняется до получения k2 от изготовителя (А-17). k1 = 1,0 и k4 = 1,0 указаны без привязки к способу — k4 принят для тушения по площади. Значения — по вписанному квадрату; между точками таблицы — меньшее. Табл. 2 и табл. 4 паспорта расходятся на 12 м (объём А 95 / 96) — принято 95."
+    }
+  ]
+}

@@ -109,6 +109,11 @@ public static class ProjectPipeline
     public const string AuptVolume = "АУПТ";
     public const string AlarmVolume = "АПС";
 
+    /// <summary>Том порошкового пожаротушения (АУПП, СП 485 разд. 10).</summary>
+    public const string PowderVolume = "АПТ";
+    public const string PowderNoteFile = "apt_pz.docx";
+    public const string PowderSpecFile = "apt_spec.xlsx";
+
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
     {
         Directory.CreateDirectory(outDir);
@@ -592,20 +597,86 @@ public static class ProjectPipeline
             }
         }
 
-        // Проект без водяной АУПТ: только том АПС (и смежные), раздел design не нужен.
+        // Порошковое пожаротушение модульного типа (СП 485 разд. 10, прил. И): помещения с чертежа по имени, модуль — из
+        // каталога; том АПТ — записка с расчётом и спецификация модулей с запасом.
+        void BuildPowder()
+        {
+            if (project.Powder is not { } powder)
+            {
+                return;
+            }
+
+            var catalogFile = EquipmentSet.PathFor(normsDir, PowderCatalog.File);
+            if (!File.Exists(catalogFile))
+            {
+                issues.Add(new Issue("powder.noCatalog", IssueLevel.Error, $"Нет каталога модулей {PowderCatalog.File}: порошковое пожаротушение не рассчитано."));
+                return;
+            }
+
+            var catalog = PowderCatalog.Load(catalogFile);
+            var entry = powder.Module is { } mid ? catalog.FirstOrDefault(c => c.Model.Id == mid) : (catalog.Count > 0 ? catalog[0] : null);
+            if (entry is null)
+            {
+                issues.Add(new Issue("powder.module.unknown", IssueLevel.Error, $"Модуля «{powder.Module}» нет в каталоге {PowderCatalog.File}."));
+                return;
+            }
+
+            if (powder.Module is null)
+            {
+                issues.Add(new Issue("powder.module.default", IssueLevel.Info, $"Модуль не выбран — принят {entry.Model.Name}, первый в каталоге; задайте powder.module."));
+            }
+
+            var rooms = new List<PowderRoom>();
+            foreach (var r in powder.Rooms)
+            {
+                var found = plan.Rooms.FirstOrDefault(x => string.Equals(x.Name, r.Room, StringComparison.OrdinalIgnoreCase));
+                if (found is null)
+                {
+                    issues.Add(new Issue("powder.noRoom", IssueLevel.Warning, $"АУПП: помещение «{r.Room}» на чертеже не найдено (слой ПТ_КОНТУР)."));
+                    continue;
+                }
+
+                var area = found.Contour.AreaMm2 / 1e6;
+                rooms.Add(new PowderRoom(found.Id, found.Name, area, area * r.CeilingHeight, r.MountHeight ?? r.CeilingHeight, r.Method,
+                    r.FireClass.Length > 0 ? char.ToUpperInvariant(r.FireClass[0]) == 'А' ? 'A' : char.ToUpperInvariant(r.FireClass[0]) == 'В' ? 'B' : char.ToUpperInvariant(r.FireClass[0]) : 'B',
+                    r.Substance, r.K3, r.OpenFraction, r.K1, r.ManualOnly, r.ShadedArea));
+            }
+
+            var result = WaterAuto.Calc.Powder.PowderModules.Calculate(rooms, entry.Model, norms);
+            issues.AddRange(result.Issues);
+            if (result.Rooms.Count == 0)
+            {
+                return;
+            }
+
+            var dir = Path.Combine(outDir, PowderVolume);
+            var tt = project.Title;
+            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues);
+            Write(dir, PowderNoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "АПТ.ПЗ", "Порошковое пожаротушение. Пояснительная записка"), project.Font));
+            var total = result.Rooms.Sum(x => x.Modules);
+            AlarmSpecItem[] items =
+            [
+                new($"Модуль порошкового пожаротушения {entry.Designation}", entry.Model.Name, entry.Manufacturer, "шт.", total + result.Reserve, entry.Certificate,
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"в установке {total}, запас {result.Reserve} (п. 10.2.16 СП 485){(entry.StartCurrent is { } sc ? $"; ток пуска не менее {sc:0.##} А" : "")}")),
+            ];
+            Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
+        }
+
+        // Проект без водяной АУПТ: только том АПС и (или) АПТ, раздел design не нужен.
         if (!project.Aupt)
         {
-            if (detectorLayout is null)
+            if (detectorLayout is null && project.Powder is null)
             {
-                issues.Add(new Issue("project.nothingToDo", IssueLevel.Error, "В проекте нет водяной АУПТ (aupt: false) и нет раздела alarm с помещениями — выпускать нечего."));
+                issues.Add(new Issue("project.nothingToDo", IssueLevel.Error, "В проекте нет водяной АУПТ (aupt: false) и нет разделов alarm или powder с помещениями — выпускать нечего."));
                 return Stop();
             }
 
             BuildAlarmPower();
             WriteAlarmPlans([.. issues]);
             WriteAlarmDocs();
+            BuildPowder();
             files.Add(WriteIssues(outDir, issues));
-            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && i.Code.StartsWith("aps.", StringComparison.Ordinal)), files, issues, null);
+            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal))), files, issues, null);
         }
 
         var resolved = LayoutRules.Resolve(norms, design.RoomGroup, design.ConstructionClass, design.MaxSpacing is { } m ? new Length(m) : null);
@@ -1468,6 +1539,7 @@ public static class ProjectPipeline
         }
 
         WriteAlarmDocs();
+        BuildPowder();
 
         Write(auptDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
         Write(auptDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));

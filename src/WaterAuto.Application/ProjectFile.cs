@@ -522,4 +522,7 @@ public sealed class ProjectPowderRoom
     public double OpenFraction { get; init; }
 
     public bool ManualOnly { get; init; }
+
+    /// <summary>Затенённая площадь Sз, м², для k2 по формуле паспорта модуля; 0 — затенений нет (решение проектировщика), null — не задана.</summary>
+    public double? ShadedArea { get; init; }
 }
