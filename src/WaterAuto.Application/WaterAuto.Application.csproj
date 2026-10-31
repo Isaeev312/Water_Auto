@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WaterAuto.Core\WaterAuto.Core.csproj" />
+    <ProjectReference Include="..\WaterAuto.Alarm\WaterAuto.Alarm.csproj" />
     <ProjectReference Include="..\WaterAuto.Calc\WaterAuto.Calc.csproj" />
     <ProjectReference Include="..\WaterAuto.Norms\WaterAuto.Norms.csproj" />
     <ProjectReference Include="..\WaterAuto.Catalog\WaterAuto.Catalog.csproj" />

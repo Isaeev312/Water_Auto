@@ -12,6 +12,7 @@
       "src\\WaterAuto.Import\\WaterAuto.Import.csproj",
       "src\\WaterAuto.Norms\\WaterAuto.Norms.csproj",
       "src\\WaterAuto.Reports\\WaterAuto.Reports.csproj",
+      "tests\\WaterAuto.Alarm.Tests\\WaterAuto.Alarm.Tests.csproj",
       "tests\\WaterAuto.Application.Tests\\WaterAuto.Application.Tests.csproj",
       "tests\\WaterAuto.Architecture.Tests\\WaterAuto.Architecture.Tests.csproj",
       "tests\\WaterAuto.Calc.Tests\\WaterAuto.Calc.Tests.csproj",
