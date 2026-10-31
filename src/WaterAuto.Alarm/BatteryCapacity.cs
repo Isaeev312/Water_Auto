@@ -21,7 +21,12 @@ public static class BatteryCapacity
     public const string StandbyTimeId = "sp6.b2.standbyTime";
     public const string AlarmTimeId = "sp6.b2.alarmTime";
 
+    // Пункты приложения Б и формулы в них нумеруются по-разному: п. Б.2 — формула Б.1, п. Б.3 — Б.1.1, п. Б.4 — Б.2, п. Б.5 — Б.3.
     private const string Doc = "СП 6.13130.2025, прил. Б";
+    private const string ClauseB1 = Doc + ", п. Б.2 (формула Б.1)";
+    private const string ClauseB11 = Doc + ", п. Б.3 (формула Б.1.1)";
+    private const string ClauseB2 = Doc + ", п. Б.4 (формула Б.2)";
+    private const string ClauseB3 = Doc + ", п. Б.5 (формула Б.3)";
 
     /// <summary>
     /// C = Kстр·(Kн.д·(ΣIд + Iибэ)·tд + Kн.п·(ΣIп + Iибэ)·tп) — формула Б.1.1 с током «Пожара» во втором слагаемом
@@ -36,7 +41,7 @@ public static class BatteryCapacity
         if (factors.StandbyLoadFactor <= 0 || factors.AlarmLoadFactor <= 0)
         {
             issues.Add(new Issue("aps.battery.loadFactor", IssueLevel.Error,
-                "Коэффициент Kн должен быть больше нуля (паспорт АКБ).", Clause: Doc + ", п. Б.2"));
+                "Коэффициент Kн должен быть больше нуля (паспорт АКБ).", Clause: ClauseB1));
         }
 
         var aging = Aging(factors.EndOfLifePercent, issues);
@@ -49,7 +54,7 @@ public static class BatteryCapacity
         {
             issues.Add(new Issue("aps.battery.b11Correction", IssueLevel.Info,
                 "Ёмкость по формуле Б.1.1 с током режима «Пожар» во втором слагаемом (в тексте — ток дежурного режима; решение владельца, А-03).",
-                Clause: Doc + ", п. Б.3"));
+                Clause: ClauseB11));
         }
 
         var own = load.SupplyOwn.Amperes;
@@ -65,7 +70,7 @@ public static class BatteryCapacity
         if (alarm.Amperes <= 0)
         {
             issues.Add(new Issue("aps.battery.current", IssueLevel.Error,
-                "Для времени работы нужен ток режима «Пожар» больше нуля.", Clause: Doc + ", п. Б.5"));
+                "Для времени работы нужен ток режима «Пожар» больше нуля.", Clause: ClauseB3));
         }
 
         var aging = Aging(endOfLifePercent, issues);
@@ -78,7 +83,7 @@ public static class BatteryCapacity
     }
 
     /// <summary>Kстр = 100 % / S — формула Б.2; 100 % — начальная ёмкость АКБ по определению, не норматив.</summary>
-    private static double? Aging(double endOfLifePercent, List<Issue> issues)
+    public static double? Aging(double endOfLifePercent, List<Issue> issues)
     {
         if (endOfLifePercent is > 0 and <= 100)
         {
@@ -86,8 +91,8 @@ public static class BatteryCapacity
         }
 
         issues.Add(new Issue("aps.battery.endOfLife", IssueLevel.Error,
-            $"Ёмкость АКБ в конце срока службы S = {endOfLifePercent} % — нужна доля от начальной ёмкости больше 0 и не больше 100 % (паспорт АКБ).",
-            Clause: Doc + ", п. Б.4"));
+            string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"Ёмкость АКБ в конце срока службы S = {endOfLifePercent:0.##} % — нужна доля от начальной ёмкости больше 0 и не больше 100 % (паспорт АКБ)."),
+            Clause: ClauseB2));
         return null;
     }
 
@@ -96,7 +101,7 @@ public static class BatteryCapacity
         if (currents.Any(c => c.Amperes < 0))
         {
             issues.Add(new Issue("aps.battery.current", IssueLevel.Error,
-                "Ток потребления не может быть отрицательным.", Clause: Doc + ", п. Б.2"));
+                "Ток потребления не может быть отрицательным.", Clause: ClauseB1));
         }
     }
 
@@ -108,7 +113,7 @@ public static class BatteryCapacity
         }
 
         issues.Add(new Issue("aps.battery.noNorm", IssueLevel.Error,
-            $"В данных норм нет записи {id} (время работы от АКБ).", Clause: Doc + ", п. Б.2"));
+            $"В данных норм нет записи {id} (время работы от АКБ).", Clause: ClauseB1));
         return null;
     }
 }

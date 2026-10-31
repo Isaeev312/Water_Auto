@@ -21,6 +21,14 @@ public static class PowerBudgets
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var c = set.Controller;
         var m = set.Module;
+        if (m.Inputs <= 0 || m.LoopCurrent.Amperes < 0 || c.LoadOfLoaded.Amperes <= 0 || c.MaxLoopLoad.Amperes <= 0 || c.MaxAddresses <= 0 || m.MaxPerLoop <= 0)
+        {
+            // Набор не из каталога (схема такие значения не пропускает): считать нечего, а делить на ноль нельзя.
+            issues.Add(new Issue("aps.power.badSet", IssueLevel.Error,
+                $"Набор приборов ({c.Name}, {m.Name}) задан неполно: входы модуля, ток и нагрузка линии, число адресов должны быть больше нуля."));
+            return new(new PowerBudget(set.Voltage, [], Current.Zero, Current.Zero, set.Supply.OwnCurrent, set.Battery, null, null, null, null), issues);
+        }
+
         var layout = LoopLayout.Plan(inputs, c, m);
         var modules = layout.Modules;
         var controllers = Math.Max(1, layout.Controllers);
@@ -58,6 +66,7 @@ public static class PowerBudgets
         var kd = td is { } hd ? LoadFactor(set.Battery, hd, standby.Amperes + own.Amperes, "дежурного режима", issues) : null;
         var kp = tp is { } hp ? LoadFactor(set.Battery, hp, alarm.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
 
+        var aging = BatteryCapacity.Aging(set.Battery.EndOfLifePercent, []);
         Charge? required = null;
         TimeSpan? backup = null;
         if (kd is { } kStandby && kp is { } kAlarm)
@@ -77,7 +86,7 @@ public static class PowerBudgets
             backup = time.Time;
         }
 
-        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup), issues);
+        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging), issues);
     }
 
     /// <summary>

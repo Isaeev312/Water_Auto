@@ -19,9 +19,11 @@ public static class LoopLayout
     {
         ArgumentNullException.ThrowIfNull(controller);
         ArgumentNullException.ThrowIfNull(module);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(module.Inputs, 0, nameof(module));
         var modules = inputs <= 0 ? 0 : (inputs + module.Inputs - 1) / module.Inputs;
-        var byLoad = module.LoopCurrent.Amperes > 0 ? (int)Math.Floor(controller.MaxLoopLoad.Amperes / module.LoopCurrent.Amperes) : int.MaxValue;
-        var perLine = Math.Max(1, Math.Min(module.MaxPerLoop, Math.Min(controller.MaxAddresses / module.Inputs, byLoad)));
+        // Предел по току — в double: при очень малом токе модуля частное не помещается в int.
+        var byLoad = module.LoopCurrent.Amperes > 0 ? Math.Floor(controller.MaxLoopLoad.Amperes / module.LoopCurrent.Amperes) : double.PositiveInfinity;
+        var perLine = Math.Max(1, (int)Math.Min(Math.Min(module.MaxPerLoop, controller.MaxAddresses / module.Inputs), Math.Min(byLoad, int.MaxValue)));
         var byController = new List<int>();
         for (var left = modules; left > 0; left -= perLine)
         {

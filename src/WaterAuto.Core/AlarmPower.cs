@@ -25,8 +25,8 @@ public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, L
 public sealed record PowerLine(string Name, int Count, Current? Standby, Current? Alarm, string Note, string Source);
 
 /// <summary>
-/// Расчёт АКБ: суммарные токи ΣIд и ΣIп, Iибэ, коэффициенты Kн по паспорту АКБ, требуемая ёмкость (Б.1.1) и время работы
-/// выбранной АКБ (Б.3). Null — величину посчитать нельзя, причина — в замечаниях.
+/// Расчёт АКБ: суммарные токи ΣIд и ΣIп, Iибэ, коэффициенты Kн по паспорту АКБ и Kстр (Б.2), требуемая ёмкость (Б.1.1)
+/// и время работы выбранной АКБ (Б.3). Null — величину посчитать нельзя, причина — в замечаниях.
 /// </summary>
 public sealed record PowerBudget(
     Voltage Voltage,
@@ -38,4 +38,5 @@ public sealed record PowerBudget(
     double? StandbyLoadFactor,
     double? AlarmLoadFactor,
     Charge? Required,
-    TimeSpan? Backup);
+    TimeSpan? Backup,
+    double? AgingFactor = null);

@@ -13,6 +13,8 @@ namespace WaterAuto.Export;
 /// ввода на плане); по одному узлу управления на выход. Inlets — число входных всасывающих вводов (п. 6.10.27): каждый
 /// рисуется отдельной линией со своей задвижкой; по умолчанию 1. Marks — обозначения устройств по роли из перечня сигналов АПС
 /// (ЗД1, УУ1…) в порядке устройств: вводы, агрегаты, у секции — затвор до и после узла управления; пишутся у устройства.
+/// PumpLineSensors — рисовать ли датчики положения у затворов линий агрегатов: у комплектной установки их состав — по её
+/// паспорту, и в перечне сигналов их нет.
 /// </summary>
 public sealed record PumpSchemeData(
     int Pumps,
@@ -28,7 +30,8 @@ public sealed record PumpSchemeData(
     IReadOnlyDictionary<string, int>? Positions = null,
     IReadOnlyList<string>? Outlets = null,
     int Inlets = 1,
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? Marks = null);
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Marks = null,
+    bool PumpLineSensors = true);
 
 /// <summary>
 /// Принципиальная схема насосной станции пожаротушения на листе A3 с рамкой и основной надписью по форме 3:
@@ -113,7 +116,7 @@ public static class PumpSchemeDxfWriter
         {
             var x = branches[k];
             d.Pipe(x, yS, x, yD);
-            d.Valve(x, 111, vertical: true, sensor: true);
+            d.Valve(x, 111, vertical: true, sensor: data.PumpLineSensors);
             d.Insert(x, 120);
             d.Gauge(x, 126, "Р", vacuum: true);
             d.Reducer(x, 133, wideBelow: true);
@@ -123,7 +126,7 @@ public static class PumpSchemeDxfWriter
             d.Insert(x, 163);
             d.Gauge(x, 168, "Р", vacuum: false);
             d.Check(x, 175);
-            d.Valve(x, 183, vertical: true, sensor: true);
+            d.Valve(x, 183, vertical: true, sensor: data.PumpLineSensors);
             Mark(x - 13, 112, "valveS", k);
             Mark(x - 13, 186, "valveD", k);
             d.Text(x + 6, 104, $"DN{data.SuctionDn}", 2.5);

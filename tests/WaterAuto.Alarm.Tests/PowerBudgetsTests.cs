@@ -21,6 +21,29 @@ public class PowerBudgetsTests
         new() { [TimeSpan.FromHours(1)] = new(oneHour), [TimeSpan.FromHours(24)] = new(day) };
 
     [Fact]
+    public void Set_with_zero_denominators_is_an_error_not_a_crash()
+    {
+        var bad = Set with { Controller = Set.Controller with { LoadOfLoaded = Current.Zero } };
+
+        var result = PowerBudgets.Build(8, bad, Norms);
+
+        result.Budget.Required.ShouldBeNull();
+        result.Budget.Lines.ShouldBeEmpty();
+        result.Issues.ShouldContain(i => i.Code == "aps.power.badSet" && i.Level == IssueLevel.Error);
+        Should.NotThrow(() => PowerBudgets.Build(8, Set with { Module = Set.Module with { Inputs = 0 } }, Norms));
+    }
+
+    [Fact]
+    public void Zero_inputs_still_count_one_controller_and_report_aging()
+    {
+        var b = PowerBudgets.Build(0, Set, Norms).Budget;
+
+        b.Lines.Single(l => l.Name == "С2000-КДЛ").Count.ShouldBe(1);
+        b.Lines.Single(l => l.Name == "С2000-АР8").Count.ShouldBe(0);
+        b.AgingFactor!.Value.ShouldBe(1.25, 1e-12);
+    }
+
+    [Fact]
     public void Second_controller_doubles_alarm_current_and_adds_its_idle_current()
     {
         // 16 АР8 — 15 на первой линии, 1 на второй. Iп = 2·400 мА; Iд = (80 + 80·60/63,5) + (80 + 80·4/63,5) мА.

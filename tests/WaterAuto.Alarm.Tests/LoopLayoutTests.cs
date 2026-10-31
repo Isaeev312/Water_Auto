@@ -28,6 +28,20 @@ public class LoopLayoutTests
     }
 
     [Fact]
+    public void Tiny_or_zero_module_current_does_not_overflow()
+    {
+        LoopLayout.Plan(8, Kdl, Ar8 with { LoopCurrent = new Current(1e-12) }).ModulesPerLine.ShouldBe(15);
+        LoopLayout.Plan(8, Kdl, Ar8 with { LoopCurrent = Current.Zero }).ModulesPerLine.ShouldBe(15);
+    }
+
+    [Fact]
+    public void Fewer_addresses_than_module_inputs_still_gives_one_module_per_line()
+    {
+        LoopLayout.Plan(8, Kdl with { MaxAddresses = 4 }, Ar8).ModulesPerLine.ShouldBe(1);
+        Should.Throw<ArgumentOutOfRangeException>(() => LoopLayout.Plan(8, Kdl, Ar8 with { Inputs = 0 }));
+    }
+
+    [Fact]
     public void No_inputs_means_no_controllers()
     {
         LoopLayout.Plan(0, Kdl, Ar8).Controllers.ShouldBe(0);

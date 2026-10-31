@@ -103,8 +103,23 @@ public sealed class PumpSetPipelineTests : IDisposable
         return path;
     }
 
-    private PipelineResult Run(string project) =>
-        ProjectPipeline.Run(project, Path.Combine(_dir, "out"), RepoPaths.Norms, RepoPaths.Registry);
+    private PipelineResult Run(string project, string? normsDir = null) =>
+        ProjectPipeline.Run(project, Path.Combine(_dir, "out"), normsDir ?? RepoPaths.Norms, RepoPaths.Registry);
+
+    // Копия data/ в папке теста, чтобы менять каталог АПС, не трогая репозиторий; возвращает путь к norms.
+    private string DataCopy(Action<string> patchCatalog)
+    {
+        var data = Path.Combine(_dir, "data");
+        foreach (var file in Directory.EnumerateFiles(Path.GetDirectoryName(RepoPaths.Norms)!, "*.json", SearchOption.AllDirectories))
+        {
+            var target = Path.Combine(data, Path.GetRelativePath(Path.GetDirectoryName(RepoPaths.Norms)!, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(file, target);
+        }
+
+        patchCatalog(Path.Combine(data, "catalog", AlarmPowerCatalog.File));
+        return Path.Combine(data, "norms");
+    }
 
     private static string IssueText(PipelineResult result) =>
         string.Join("\n", result.Issues.Select(i => $"{i.Level} {i.Code}: {i.Message}"));
@@ -175,6 +190,46 @@ public sealed class PumpSetPipelineTests : IDisposable
         {
             scheme.ShouldContain(mark);
         }
+    }
+
+    [Fact]
+    public void Missing_power_catalog_is_reported_and_the_rest_is_still_produced()
+    {
+        Drawing();
+        var result = Run(Project(), DataCopy(File.Delete));
+
+        result.Success.ShouldBeTrue(IssueText(result));
+        result.Issues.ShouldContain(i => i.Code == "aps.power.noCatalog" && i.Level == IssueLevel.Warning);
+        var names = result.Files.Select(Path.GetFileName).ToList();
+        names.ShouldContain(ProjectPipeline.SignalListFile);
+        names.ShouldContain(ProjectPipeline.InteractionFile);
+        names.ShouldNotContain(ProjectPipeline.BatteryFile);
+        names.ShouldNotContain(ProjectPipeline.AddressTableFile);
+    }
+
+    [Fact]
+    public void Broken_power_catalog_is_an_error_issue_not_a_crash()
+    {
+        Drawing();
+        var result = Run(Project(), DataCopy(p => File.WriteAllText(p, File.ReadAllText(p).Replace("\"voltage\": 12,\n    \"ownCurrent\"", "\"voltage\": 24,\n    \"ownCurrent\"").Replace("\"voltage\": 12,\r\n    \"ownCurrent\"", "\"voltage\": 24,\r\n    \"ownCurrent\""))));
+
+        result.Success.ShouldBeTrue(IssueText(result));
+        result.Issues.ShouldContain(i => i.Code == "aps.power.catalogError" && i.Level == IssueLevel.Error);
+        result.Files.Select(Path.GetFileName).ShouldContain(ProjectPipeline.PumpSchemeFile);
+        result.Files.Select(Path.GetFileName).ShouldNotContain(ProjectPipeline.BatteryFile);
+    }
+
+    [Fact]
+    public void Pump_set_scheme_does_not_claim_sensors_the_signal_list_lacks()
+    {
+        Drawing();
+        var result = Run(Project());
+        result.Pump.ShouldNotBeNull();
+
+        var doc = DxfReader.Read(FileOf(result, ProjectPipeline.PumpSchemeFile));
+        var scheme = doc.Entities.OfType<TextEntity>().Select(t => t.Value).Concat(doc.Entities.OfType<MText>().Select(t => t.Value)).ToList();
+        scheme.ShouldContain(t => t.Contains("по паспорту комплектной установки", StringComparison.Ordinal));
+        scheme.ShouldNotContain(t => t.Contains("Затворы на линиях агрегатов", StringComparison.Ordinal));
     }
 
     [Fact]

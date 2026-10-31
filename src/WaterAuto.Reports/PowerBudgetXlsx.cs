@@ -60,7 +60,7 @@ public static class PowerBudgetXlsx
             ("ΣIп — ток в режиме «Пожар», мА", Milli(budget.Alarm, ru)),
             ("Iибэ — собственный ток РИП от АКБ, мА", Milli(budget.SupplyOwn, ru)),
             ("АКБ", $"{b.Name}, C20 = {b.Nominal.AmpereHours.ToString("0.##", ru)} А·ч; {b.Source}"),
-            ("Kстр = 100 % / S (Б.2)", (100 / b.EndOfLifePercent).ToString("0.###", ru)),
+            ("Kстр = 100 % / S (Б.2)", budget.AgingFactor?.ToString("0.###", ru) ?? "не определён"),
             ("Kн дежурного режима (паспорт АКБ)", budget.StandbyLoadFactor?.ToString("0.###", ru) ?? "не определён"),
             ("Kн режима «Пожар» (паспорт АКБ)", budget.AlarmLoadFactor?.ToString("0.###", ru) ?? "не определён"),
             ("Требуемая ёмкость АКБ, А·ч", budget.Required?.AmpereHours.ToString("0.##", ru) ?? "не определена"),

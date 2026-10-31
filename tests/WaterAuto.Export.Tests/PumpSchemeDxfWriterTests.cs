@@ -75,6 +75,27 @@ public class PumpSchemeDxfWriterTests
     }
 
     [Fact]
+    public void Marks_follow_four_pumps_and_a_short_list_leaves_the_rest_unmarked()
+    {
+        var marks = new Dictionary<string, IReadOnlyList<string>> { ["valveS"] = ["ЗД1", "ЗД2", "ЗД3"] };
+        var doc = PumpSchemeDxfWriter.Build(Data with { Pumps = 4, Marks = marks }, Stamp);
+        var texts = doc.Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
+
+        texts.Count(t => t.StartsWith("ЗД", StringComparison.Ordinal)).ShouldBe(3);
+        texts.ShouldContain("Н4");
+    }
+
+    [Fact]
+    public void Pump_line_valves_without_sensors_are_drawn_plain()
+    {
+        var with = PumpSchemeDxfWriter.Build(Data, Stamp).Entities.Count(e => e.Layer.Name == PumpSchemeDxfWriter.EquipmentLayer);
+        var without = PumpSchemeDxfWriter.Build(Data with { PumpLineSensors = false }, Stamp).Entities.Count(e => e.Layer.Name == PumpSchemeDxfWriter.EquipmentLayer);
+
+        // Два агрегата × два затвора — четыре датчика меньше.
+        without.ShouldBeLessThan(with);
+    }
+
+    [Fact]
     public void Each_inlet_has_its_own_branch_and_valve_on_the_scheme()
     {
         // Inlets=2 (п. 6.10.27): на всасывающем коллекторе две ветви ввода, у каждой — своя задвижка с номером позиции.
