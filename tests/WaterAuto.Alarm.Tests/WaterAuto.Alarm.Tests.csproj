@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\WaterAuto.Core\WaterAuto.Core.csproj" />
     <ProjectReference Include="..\..\src\WaterAuto.Alarm\WaterAuto.Alarm.csproj" />
+    <ProjectReference Include="..\..\src\WaterAuto.Norms\WaterAuto.Norms.csproj" />
   </ItemGroup>
 
 </Project>
