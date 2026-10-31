@@ -22,6 +22,9 @@ public sealed record ProjectFile
     /// </summary>
     public bool Aupt { get; init; } = true;
 
+    /// <summary>Выпустить раздел 9 «Мероприятия по обеспечению пожарной безопасности» в части систем ППЗ по п. 26 ПП РФ № 87 (стадия П).</summary>
+    public bool Pp87 { get; init; }
+
     public ProjectDesign Design { get; init; } = new();
 
     public ProjectTitle Title { get; init; } = new();

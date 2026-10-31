@@ -105,6 +105,9 @@ public static class ProjectPipeline
     public const string SouePlanLayer = "СОУЭ_ОПОВЕЩАТЕЛИ";
     public const string IssuesFile = "issues.txt";
 
+    /// <summary>Раздел 9 по п. 26 ПП РФ № 87 (стадия П), в корне выпуска.</summary>
+    public const string Pp87File = "pb_razdel9.docx";
+
     /// <summary>План этажа АУПТ из design.levels (k = 1, 2, …; основной этаж — <see cref="PlanDxfFile"/>).</summary>
     public static string LevelPlanFile(int k) => string.Create(CultureInfo.InvariantCulture, $"plan_level{k}.dxf");
 
@@ -1734,6 +1737,45 @@ public static class ProjectPipeline
                 curtains),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
+
+        // Раздел 9 по п. 26 ПП РФ № 87 (стадия П) — подпункты, следующие из расчётов систем ППЗ.
+        if (project.Pp87)
+        {
+            var allRooms = plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList();
+            var protectedIds = layout.Sprinklers.Select(x => x.RoomId).ToHashSet(StringComparer.Ordinal);
+            var ru87 = CultureInfo.GetCultureInfo("ru-RU");
+            var volumes87 = new List<string>();
+            if (project.Alarm is not null)
+            {
+                volumes87.Add("система пожарной сигнализации и система оповещения и управления эвакуацией — том АПС");
+            }
+
+            if (project.Powder is not null)
+            {
+                volumes87.Add("модульная установка порошкового пожаротушения — том АПТ");
+            }
+
+            var schemes87 = new List<string> { "принципиальная схема насосной станции (лист ПТ)", "аксонометрическая схема трубопроводов АУП (лист ПТ)" };
+            if (project.Alarm is not null)
+            {
+                schemes87.Add("структурная схема системы пожарной сигнализации (том АПС)");
+            }
+
+            var pb = Pp87Composer.Compose(new Pp87Inputs(
+                new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
+                project.Name,
+                [.. allRooms.Where(r => protectedIds.Contains(r.Id))],
+                layout.Sprinklers.Count,
+                worst,
+                string.Join("; ", roomGroups.Zones.Select(z => string.Create(ru87, $"группа помещений {z.Group} ({z.Parameters.Source}): {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м²")).Distinct()),
+                design.AirFilled,
+                curtains,
+                hydrantPoints.Count,
+                string.Create(ru87, $"насосная станция: {station.WorkingPumps} рабочих и {station.StandbyPumps} резервных пожарных насоса, Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м"),
+                volumes87,
+                schemes87));
+            Write(outDir, Pp87File, files, p => NoteDocx.Write(p, pb, Stamp(project, "ПБ", "Мероприятия по обеспечению пожарной безопасности"), project.Font));
+        }
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(

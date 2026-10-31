@@ -544,6 +544,24 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Pp87_section_9_lists_protected_rooms_and_systems_by_clause_26()
+    {
+        Drawing();
+        Run(Project());
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("pp87.waproj", ProjectFile.ToJson(project with { Pp87 = true })));
+
+        result.Success.ShouldBeTrue();
+        using var doc = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.Pp87File, StringComparison.Ordinal)), false);
+        var text = doc.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("№ 87");
+        text.ShouldContain("Автостоянка");
+        text.ShouldContain("спринклерная водозаполненная");
+        text.ShouldContain("Заполняется проектировщиком");
+        text.ShouldContain(result.Design!.PumpHead.Meters.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")));
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();
