@@ -12,7 +12,8 @@ public static class GasNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<(GasRoom Room, string Agent, GasMassResult Result)> rooms, double altitude, IReadOnlyList<Issue> issues)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<(GasRoom Room, string Agent, GasMassResult Result)> rooms, double altitude, IReadOnlyList<Issue> issues,
+        IReadOnlyList<(string Room, string Module, GasModulesResult Result)>? modules = null)
     {
         ArgumentNullException.ThrowIfNull(rooms);
         ArgumentNullException.ThrowIfNull(issues);
@@ -37,6 +38,10 @@ public static class GasNote
                     [.. rooms.Select(x => (IReadOnlyList<string>)[x.Room.Name, F(x.Result.Concentration, "0.0"), F(x.Result.Rho1, "0.###"), F(x.Result.K3, "0.###"), F(x.Result.Delta, "0.######"), F(x.Result.DischargeTimeS, "0"), F(x.Result.K2, "0.#####"), F(x.Result.DesignMass, "0.#"), F(x.Result.TotalMass, "0")])]),
                 .. rooms.Select(x => (NoteBlock)new NoteParagraph(string.Create(Ru,
                     $"{x.Room.Name}: Mр = {F(x.Room.VolumeM3, "0")}·{F(x.Result.Rho1, "0.###")}·(1 + {F(x.Result.K2, "0.#####")})·{(x.Result.Concentration > 0 ? $"{F(x.Result.Concentration, "0.0")}/(100 − {F(x.Result.Concentration, "0.0")})" : "—")} = {F(x.Result.DesignMass, "0.#")} кг; Mг = 1,05·({F(x.Result.DesignMass, "0.#")} + {F(x.Room.PipeResidueKg ?? 0, "0.#")} + {F(x.Room.ModuleResidueKg * x.Room.Modules, "0.#")}) = {F(x.Result.TotalMass, "0")} кг."))),
+                .. modules is { Count: > 0 }
+                    ? new NoteBlock[] { new NoteTable("Модули (Mг по Д.1 с остатком Mб·n; наполнение не менее 44 % максимального, п. 9.6.5)", ["Помещение", "Модуль", "n, шт.", "ГОТВ в модуле, кг", "Наполнение, %"],
+                        [.. modules.Select(m => (IReadOnlyList<string>)[m.Room, m.Module, m.Result.Modules.ToString(Ru), F(m.Result.MassPerModule, "0.#"), F(m.Result.FillPercent, "0")])]) }
+                    : [],
                 new NoteParagraph(string.Create(Ru, $"Масса ГОТВ на объект — по наибольшему помещению (направлению): {F(rooms.Max(x => x.Result.TotalMass), "0")} кг; кроме расчётного количества — 100 % запас (модульные) или резерв (централизованные), п. 9.6.2, 9.6.3. Количество и типоразмер модулей — по ТД изготовителя (наполнение не менее 44 % максимального, п. 9.6.5).")),
             ]),
             new("3", "Проём для сброса избыточного давления",

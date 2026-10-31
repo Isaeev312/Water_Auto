@@ -539,6 +539,9 @@ public sealed class ProjectGas
     /// <summary>Установка модульная (true) или централизованная (false) — нормативное время подачи по 9.7.4.</summary>
     public bool Modular { get; init; } = true;
 
+    /// <summary>Модуль из data/catalog/gas_modules.json; null — по каждому помещению наименьшее число модулей из каталога.</summary>
+    public string? Module { get; init; }
+
     public IReadOnlyList<ProjectGasRoom> Rooms { get; init; } = [];
 }
 

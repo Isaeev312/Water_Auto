@@ -112,6 +112,7 @@ public static class ProjectPipeline
     /// <summary>Том газового пожаротушения (АУГП, СП 485 разд. 9).</summary>
     public const string GasVolume = "АГП";
     public const string GasNoteFile = "agp_pz.docx";
+    public const string GasSpecFile = "agp_spec.xlsx";
 
     /// <summary>Том порошкового пожаротушения (АУПП, СП 485 разд. 10).</summary>
     public const string PowderVolume = "АПТ";
@@ -722,6 +723,14 @@ public static class ProjectPipeline
             }
 
             var results = new List<(GasRoom Room, string Agent, GasMassResult Result)>();
+            var chosen = new List<(GasRoom Room, GasModuleEntry Entry, GasModulesResult Result)>();
+            var gasCatalogFile = EquipmentSet.PathFor(normsDir, GasCatalog.File);
+            var gasCatalog = gas.Modular && File.Exists(gasCatalogFile) ? GasCatalog.Load(gasCatalogFile) : [];
+            if (gas.Modular && gasCatalog.Count == 0)
+            {
+                issues.Add(new Issue("gas.noCatalog", IssueLevel.Warning, $"Нет каталога модулей {GasCatalog.File}: число модулей не подобрано."));
+            }
+
             foreach (var r in gas.Rooms)
             {
                 var found = plan.Rooms.FirstOrDefault(x => string.Equals(x.Name, r.Room, StringComparison.OrdinalIgnoreCase));
@@ -743,6 +752,28 @@ public static class ProjectPipeline
                 var room = new GasRoom(found.Id, found.Name, found.Contour.AreaMm2 / 1e6 * r.CeilingHeight, r.CeilingHeight, agentId, r.Material, r.OpenArea, r.Openings, r.MinTemperature, gas.Altitude,
                     gas.Modular, r.ClassA1, r.DischargeTime, r.ModuleResidue, r.Modules, r.PipeResidue, r.MaxOverpressure);
                 var result = WaterAuto.Calc.Gas.GasMass.Calculate(room, norms);
+                // Модули: заданный или из каталога — наименьшее число без ошибок наполнения, при равенстве меньшая вместимость.
+                var candidates = gas.Module is { } mid ? gasCatalog.Where(e => e.Model.Id == mid).ToList() : [.. gasCatalog.Where(e => e.Model.Charges.ContainsKey(r.Agent))];
+                if (gas.Module is not null && candidates.Count == 0)
+                {
+                    issues.Add(new Issue("gas.module.unknown", IssueLevel.Error, $"Модуля «{gas.Module}» нет в каталоге {GasCatalog.File}."));
+                }
+
+                var pick = candidates.Select(e => (Entry: e, Result: WaterAuto.Calc.Gas.GasModules.Select(room, e.Model, norms)))
+                    .OrderBy(x => x.Result.Issues.Any(i => i.Level == IssueLevel.Error && i.Code.StartsWith("gas.module.", StringComparison.Ordinal)) ? 1 : 0)
+                    .ThenBy(x => x.Result.Modules).ThenBy(x => x.Entry.Model.VolumeL).FirstOrDefault();
+                if (pick.Entry is not null && pick.Result.Modules > 0)
+                {
+                    result = pick.Result.Mass;
+                    room = room with { Modules = pick.Result.Modules, ModuleResidueKg = pick.Entry.Model.Charges.GetValueOrDefault(r.Agent)?.ResidueKg ?? 0 };
+                    issues.AddRange(pick.Result.Issues.Where(i => i.Code.StartsWith("gas.module.", StringComparison.Ordinal)));
+                    chosen.Add((room, pick.Entry, pick.Result));
+                }
+                else if (gas.Modular && gasCatalog.Count > 0 && gas.Module is null)
+                {
+                    issues.Add(new Issue("gas.module.none", IssueLevel.Warning, $"«{found.Name}»: в каталоге нет модуля под {agentName} — число модулей не подобрано.", found.Id));
+                }
+
                 issues.AddRange(result.Issues);
                 if (result.TotalMass > 0)
                 {
@@ -756,8 +787,23 @@ public static class ProjectPipeline
             }
 
             var tg = project.Title;
-            var gasNote = GasNote.Build(new NoteTitle(tg.Organization, tg.Subject, tg.Document, tg.Author, tg.Supervisor, tg.CityYear, project.Name), results, gas.Altitude, issues);
+            var gasNote = GasNote.Build(new NoteTitle(tg.Organization, tg.Subject, tg.Document, tg.Author, tg.Supervisor, tg.CityYear, project.Name), results, gas.Altitude, issues,
+                [.. chosen.Select(c => (c.Room.Name, c.Entry.Model.Name, c.Result))]);
             Write(Path.Combine(outDir, GasVolume), GasNoteFile, files, p => NoteDocx.Write(p, gasNote, Stamp(project, "АГП.ПЗ", "Газовое пожаротушение. Пояснительная записка"), project.Font));
+            if (chosen.Count > 0)
+            {
+                // Запас 100 % (п. 9.6.2) — по помещению с наибольшим числом модулей каждой модели.
+                var ru = CultureInfo.GetCultureInfo("ru-RU");
+                AlarmSpecItem[] gasItems = [.. chosen.GroupBy(c => c.Entry.Model.Id).Select(g =>
+                {
+                    var e = g.First().Entry;
+                    var inUse = g.Sum(c => c.Result.Modules);
+                    var reserve = g.Max(c => c.Result.Modules);
+                    return new AlarmSpecItem($"Модуль газового пожаротушения {e.Designation}", e.Model.Name, e.Manufacturer, "шт.", inUse + reserve, e.Certificate,
+                        string.Create(ru, $"в установке {inUse} ({string.Join(", ", g.Select(c => $"{c.Room.Name} — {c.Result.Modules} × {c.Result.MassPerModule:0.#} кг"))}), запас {reserve} (п. 9.6.2 СП 485){(e.StartCurrent is { } sc ? $"; ток пуска не более {sc:0.##} А" : "")}"));
+                })];
+                Write(Path.Combine(outDir, GasVolume), GasSpecFile, files, p => AlarmSpecXlsx.Write(p, gasItems, $"{project.Name}. Спецификация оборудования АУГП", project.Font));
+            }
         }
 
         // Порошок считается до питания АПС: блоки пуска модулей входят в расчёт АКБ.

@@ -412,6 +412,9 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Write("gas.waproj", json));
 
         result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        // Модули из каталога: наименьшее число 6 дают 180 и 187 л, берётся меньший: МПА-КД (50-180-50), 180 кг; 1,05·(1018,6 + 6·0,3) = 1071,4 кг → 6; запас 6.
+        var gasSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.GasSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        gasSpec.Single(r => r[2] == "МПА-КД (50-180-50)")[5].ShouldBe("12");
         var note = result.Files.Single(f => f.EndsWith(ProjectPipeline.GasNoteFile, StringComparison.Ordinal));
         Path.GetFileName(Path.GetDirectoryName(note)).ShouldBe(ProjectPipeline.GasVolume);
         using (var doc = WordprocessingDocument.Open(note, false))
@@ -419,7 +422,7 @@ public sealed class ProjectPipelineTests : IDisposable
             var text = doc.MainDocumentPart!.Document.Body!.InnerText;
             text.ShouldContain("хладон 227еа");
             text.ShouldContain("Mг = 1,05");
-            text.ShouldContain("= 1070 кг");
+            text.ShouldContain("= 1071 кг"); // с остатком 6 × 0,3 кг в модулях
             text.ShouldContain("Г.17");
         }
 
