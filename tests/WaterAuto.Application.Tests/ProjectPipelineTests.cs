@@ -125,6 +125,21 @@ public sealed class ProjectPipelineTests : IDisposable
         var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
         addresses.Count(r => r[4].StartsWith("Автостоянка", StringComparison.Ordinal) || r[7] == "ЗКСПС-1").ShouldBeGreaterThanOrEqualTo(12);
 
+        // СОУЭ: раздел warning — оповещатели на плане, в спецификации, записке и расчёте питания.
+        var soueRun = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+            Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40 },
+        }));
+        soueRun.Success.ShouldBeTrue(string.Join("; ", soueRun.Issues.Select(i => i.Message)));
+        var souePlan = DxfReader.Read(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal)));
+        souePlan.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.NotifierLayer).ShouldBeGreaterThanOrEqualTo(2);
+        var soueSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        soueSpec.Select(r => r[2]).ShouldContain("С2000-ОПЗ");
+        soueSpec.Select(r => r[2]).ShouldContain("С2000-ОСТ («Выход»)");
+        soueRun.Issues.ShouldContain(i => i.Code == "aps.power.noCertificate" && i.Message.Contains("С2000-ОПЗ")); // сертификат 043 истёк
+        soueRun.Issues.ShouldNotContain(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
+
         // АППЗ: раздел hvac даёт ТЗ на вентиляцию с командами.
         var hvacRun = Run(Project(alarm: new ProjectAlarm
         {
@@ -139,6 +154,10 @@ public sealed class ProjectPipelineTests : IDisposable
             text.ShouldContain("ВДУ-1");
             text.ShouldContain("20 с");
         }
+
+        // Релейные блоки для 1 + 1 + 3 команд: по 2 выхода → 3 блока С2000-СП2 в спецификации.
+        var hvacSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(hvacRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        hvacSpec.Single(r => r[2] == "С2000-СП2 исп.02")[5].ShouldBe("3");
 
         // Без точки поста кабельного журнала нет (предупреждение); с точкой — журнал с ДПЛС, питанием и сигналами.
         result.Issues.ShouldContain(i => i.Code == "aps.cable.noPanel");

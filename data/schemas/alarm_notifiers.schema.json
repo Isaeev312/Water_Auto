@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/alarm_notifiers.schema.json",
+  "title": "Оповещатели СОУЭ и релейные блоки управления: паспортные данные моделей для выбора в проекте",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "notifiers", "relays"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "verified": { "type": "boolean" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "notifiers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "name", "designation", "manufacturer", "loopCurrent", "addresses", "standbyCurrent", "alarmCurrent", "voltage", "source"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$" },
+          "kind": { "type": "string", "enum": ["sound", "speech", "light"] },
+          "name": { "type": "string", "minLength": 1 },
+          "designation": { "type": "string", "minLength": 1 },
+          "manufacturer": { "type": "string", "minLength": 1 },
+          "levelAt1m": { "type": "number", "description": "Уровень звука на 1 м, дБ (наименьший по паспорту); у световых отсутствует." },
+          "loopCurrent": { "type": "number", "minimum": 0, "description": "Ток от адресной линии, А." },
+          "addresses": { "type": "integer", "minimum": 0 },
+          "standbyCurrent": { "type": "number", "minimum": 0, "description": "Ток от линии питания в дежурном режиме, А." },
+          "alarmCurrent": { "type": "number", "minimum": 0, "description": "Ток от линии питания при оповещении, А." },
+          "voltage": { "type": "number", "exclusiveMinimum": 0 },
+          "certificate": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "minLength": 1 },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "relays": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "designation", "manufacturer", "outputs", "loopCurrent", "addresses", "standbyCurrent", "alarmCurrent", "voltage", "source"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "designation": { "type": "string", "minLength": 1 },
+          "manufacturer": { "type": "string", "minLength": 1 },
+          "outputs": { "type": "integer", "minimum": 1, "description": "Выходов (реле) в блоке." },
+          "loopCurrent": { "type": "number", "minimum": 0 },
+          "addresses": { "type": "integer", "minimum": 0 },
+          "standbyCurrent": { "type": "number", "minimum": 0 },
+          "alarmCurrent": { "type": "number", "minimum": 0 },
+          "voltage": { "type": "number", "exclusiveMinimum": 0 },
+          "certificate": { "type": "string", "minLength": 1 },
+          "source": { "type": "string", "minLength": 1 },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -16,10 +16,12 @@ public static class PowerBudgets
     /// <param name="inputs">Число входов модулей — по одному на точку управления.</param>
     /// <param name="detectors">Число извещателей по ключам каталога набора (smoke, heat, manual); null — без извещателей.</param>
     /// <param name="isolators">Изоляторов КЗ на линиях (ток без адреса).</param>
-    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null, int isolators = 0)
+    /// <param name="powered">Устройства с питанием от РИП (оповещатели, релейные блоки) и их число.</param>
+    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null, int isolators = 0, IReadOnlyList<(PoweredDevice Device, int Count)>? powered = null)
     {
         ArgumentNullException.ThrowIfNull(set);
         detectors ??= new Dictionary<string, int>();
+        powered ??= [];
         var issues = new List<Issue>();
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var c = set.Controller;
@@ -47,6 +49,17 @@ public static class PowerBudgets
             deviceLines.Add(new PowerLine(device.Name, count, null, null, $"питание от линии {c.Name}, входит в его ток; {device.Addresses} адрес", device.Source));
         }
 
+        var poweredStandby = 0.0;
+        var poweredAlarm = 0.0;
+        foreach (var (device, count) in powered.Where(x => x.Count > 0))
+        {
+            devices.Add((count, device.LoopCurrent, device.Addresses));
+            poweredStandby += count * device.Standby.Amperes;
+            poweredAlarm += count * device.Alarm.Amperes;
+            deviceLines.Add(new PowerLine(device.Name, count, new Current(count * device.Standby.Amperes), new Current(count * device.Alarm.Amperes),
+                $"адресное устройство ({device.Addresses} адр.) с питанием от РИП: дежурный и «Пожар» — всего на {count} шт.", device.Source));
+        }
+
         if (isolators > 0)
         {
             if (set.Isolator is { } iso)
@@ -66,6 +79,7 @@ public static class PowerBudgets
 
         // Сертификаты соответствия, действующие на объекте (А-12): без них изделие в проект не попадает — предупреждение одно на набор.
         var uncertified = new ICertified[] { c, m, set.Supply, set.Battery }.Concat(set.Detectors.Where(kv => detectors.GetValueOrDefault(kv.Key) > 0).Select(kv => (ICertified)kv.Value))
+            .Concat(powered.Where(x => x.Count > 0).Select(x => (ICertified)x.Device))
             .Concat(isolators > 0 && set.Isolator is not null ? [set.Isolator] : [])
             .Where(d => string.IsNullOrWhiteSpace(d.Certificate)).Select(d => d.Name).Distinct().ToList();
         if (uncertified.Count > 0)
@@ -85,8 +99,8 @@ public static class PowerBudgets
         // Ток каждого контроллера в дежурном режиме — линейно между двумя точками паспорта по нагрузке его линии
         // (адресов у модуля столько, сколько входов использовано — паспорт АР8, п. 2.2.5.3); сумма — по всем контроллерам.
         var loads = layout.Controllers == 0 ? [0.0] : layout.LoadByController.Select(l => l.Amperes).ToList();
-        var standby = new Current(loads.Sum(load => c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * load / c.LoadOfLoaded.Amperes)));
-        var alarm = new Current(c.Max.Amperes * controllers);
+        var standby = new Current(loads.Sum(load => c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * load / c.LoadOfLoaded.Amperes)) + poweredStandby);
+        var alarm = new Current((c.Max.Amperes * controllers) + poweredAlarm);
         issues.Add(new Issue("aps.power.controllerStandby", IssueLevel.Info,
             string.Create(ru, $"Ток {c.Name} в дежурном режиме — по нагрузке линии ({string.Join("; ", loads.Select(l => (l * 1000).ToString("0.#", ru)))} мА) линейно между двумя точками паспорта (допущение программы).")));
         issues.Add(new Issue("aps.power.controllerAlarm", IssueLevel.Info,
@@ -94,7 +108,7 @@ public static class PowerBudgets
 
         List<PowerLine> lines =
         [
-            new(c.Name, controllers, standby, alarm, "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
+            new(c.Name, controllers, new Current(standby.Amperes - poweredStandby), new Current(alarm.Amperes - poweredAlarm), "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
             new(m.Name, modules, null, null, $"питание от линии {c.Name}, входит в его ток", m.Source),
             .. deviceLines,
             new(set.Supply.Name, 1, set.Supply.OwnCurrent, set.Supply.OwnCurrent, "собственный ток от АКБ (Iибэ)", set.Supply.Source),

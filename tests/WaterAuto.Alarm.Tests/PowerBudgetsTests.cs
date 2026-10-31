@@ -111,6 +111,23 @@ public class PowerBudgetsTests
     }
 
     [Fact]
+    public void Powered_devices_add_their_own_standby_and_alarm_currents_and_loop_load()
+    {
+        // 10 оповещателей: 1 мА дежурный / 60 мА «Пожар» каждый, 0,6 мА от линии, 1 адрес.
+        var sounder = new PoweredDevice("С2000-ОПЗ", new Current(0.0006), 1, new Current(0.001), new Current(0.06), "РЭ", "серт.");
+
+        var result = PowerBudgets.Build(8, Set, Norms, powered: [(sounder, 10)]);
+
+        var b = result.Budget;
+        b.Lines.Single(l => l.Name == "С2000-ОПЗ").Count.ShouldBe(10);
+        // Контроллер: линия 4 + 6 мА; плюс 10 мА оповещателей в дежурном; «Пожар»: 400 + 600 мА.
+        b.Standby.Amperes.ShouldBe(0.08 + (0.08 * 0.010 / 0.0635) + 0.010, 1e-12);
+        b.Alarm.Amperes.ShouldBe(1.0, 1e-12);
+        b.Lines.Single(l => l.Name == "С2000-КДЛ").Alarm!.Value.Amperes.ShouldBe(0.4, 1e-12);
+        result.Issues.ShouldNotContain(i => i.Code == "aps.power.noCertificate");
+    }
+
+    [Fact]
     public void Second_controller_doubles_alarm_current_and_adds_its_idle_current()
     {
         // 16 АР8 — 15 на первой линии, 1 на второй. Iп = 2·400 мА; Iд = (80 + 80·60/63,5) + (80 + 80·4/63,5) мА.

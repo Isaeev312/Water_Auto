@@ -22,14 +22,18 @@ public static class AlarmPlanDxfWriter
     public const string HeatBlock = "АПС_ИП_ТЕПЛ";
     public const string ManualBlock = "АПС_ИПР";
     public const string ManualLayer = "АПС_ИПР";
+    public const string NotifierLayer = "СОУЭ_ОПОВЕЩАТЕЛИ";
+    public const string SounderBlock = "СОУЭ_ЗВУК";
+    public const string LightBlock = "СОУЭ_ТАБЛО";
 
-    public static void Write(string path, DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, string font = DocumentStyle.DefaultFont, double textHeightMm = 250, IReadOnlyList<PlacedManual>? manuals = null, IReadOnlyDictionary<string, string>? zoneOf = null, TitleBlock? stamp = null) =>
-        DxfDrawing.Save(path, Build(layout, zones, issues, textHeightMm, manuals, zoneOf, stamp), font);
+    public static void Write(string path, DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, string font = DocumentStyle.DefaultFont, double textHeightMm = 250, IReadOnlyList<PlacedManual>? manuals = null, IReadOnlyDictionary<string, string>? zoneOf = null, TitleBlock? stamp = null, IReadOnlyList<PlacedNotifier>? notifiers = null) =>
+        DxfDrawing.Save(path, Build(layout, zones, issues, textHeightMm, manuals, zoneOf, stamp, notifiers), font);
 
     /// <param name="manuals">Ручные извещатели — квадратный блок на слое АПС_ИПР.</param>
     /// <param name="zoneOf">ЗКСПС каждого ИП — пишется в сводку помещения.</param>
     /// <param name="stamp">Основная надпись: с ней план оформляется листом в рамке (ГОСТ Р 21.101) в масштабе 1:100 или мельче, с условными обозначениями и примечаниями под планом.</param>
-    public static CadDocument Build(DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, double textHeightMm = 250, IReadOnlyList<PlacedManual>? manuals = null, IReadOnlyDictionary<string, string>? zoneOf = null, TitleBlock? stamp = null)
+    /// <param name="notifiers">Оповещатели СОУЭ: звуковые и речевые — треугольник, световые табло — прямоугольник, слой СОУЭ_ОПОВЕЩАТЕЛИ.</param>
+    public static CadDocument Build(DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, double textHeightMm = 250, IReadOnlyList<PlacedManual>? manuals = null, IReadOnlyDictionary<string, string>? zoneOf = null, TitleBlock? stamp = null, IReadOnlyList<PlacedNotifier>? notifiers = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(zones);
@@ -118,6 +122,28 @@ public static class AlarmPlanDxfWriter
             }
         }
 
+        if (notifiers is { Count: > 0 })
+        {
+            var notifierLayer = DxfDrawing.AddLayer(doc, NotifierLayer, 4);
+            var sounderBlock = ShapeBlock(doc, SounderBlock, radius, textHeightMm, [new XY(-radius, -radius), new XY(radius, -radius), new XY(0, radius)]);
+            var lightBlock = ShapeBlock(doc, LightBlock, radius, textHeightMm, [new XY(-1.5 * radius, -0.6 * radius), new XY(1.5 * radius, -0.6 * radius), new XY(1.5 * radius, 0.6 * radius), new XY(-1.5 * radius, 0.6 * radius)]);
+            foreach (var n in notifiers)
+            {
+                var insert = new Insert(n.Kind == NotifierKind.Light ? lightBlock : sounderBlock) { InsertPoint = new XYZ(n.Location.XMm, n.Location.YMm, 0), Layer = notifierLayer };
+                doc.Entities.Add(insert);
+                var id = insert.Attributes.FirstOrDefault(a => a.Tag == "ID");
+                if (id is null)
+                {
+                    id = new AttributeEntity { Tag = "ID", Height = textHeightMm / 2 };
+                    insert.Attributes.Add(id);
+                }
+
+                id.Value = n.Id;
+                id.InsertPoint = new XYZ(n.Location.XMm + radius, n.Location.YMm - (2 * radius), 0);
+                id.Layer = notifierLayer;
+            }
+        }
+
         var planIssues = issues.Where(i => i.Location is not null && (i.Code.StartsWith("aps.layout", StringComparison.Ordinal) || i.Code.StartsWith("aps.zone", StringComparison.Ordinal))).ToList();
         for (var k = 0; k < planIssues.Count; k++)
         {
@@ -129,7 +155,8 @@ public static class AlarmPlanDxfWriter
 
         if (sheet is not null)
         {
-            Legend(doc, sheet, summary, textHeightMm, radius, manuals is { Count: > 0 }, zones.Any(z => z.Kind == DetectorKind.Heat), zones.Any(z => z.Kind == DetectorKind.Smoke));
+            Legend(doc, sheet, summary, textHeightMm, radius, manuals is { Count: > 0 }, zones.Any(z => z.Kind == DetectorKind.Heat), zones.Any(z => z.Kind == DetectorKind.Smoke),
+                notifiers?.Any(n => n.Kind != NotifierKind.Light) == true, notifiers?.Any(n => n.Kind == NotifierKind.Light) == true);
             var notes = summaryLines.Concat(planIssues.Select((i, k) => $"{k + 1}. {i.Level}: {i.Message}")).ToList();
             if (notes.Count > 0)
             {
@@ -169,7 +196,21 @@ public static class AlarmPlanDxfWriter
     }
 
     /// <summary>Условные обозначения — слева под планом: дымовой ИП, тепловой ИП, ИПР.</summary>
-    private static void Legend(CadDocument doc, SheetPlacement sheet, Layer layer, double textHeightMm, double radius, bool manuals, bool heat, bool smoke)
+    private static BlockRecord ShapeBlock(CadDocument doc, string name, double radius, double textHeightMm, List<XY> shape)
+    {
+        if (doc.BlockRecords.TryGetValue(name, out var block))
+        {
+            return block;
+        }
+
+        block = new BlockRecord(name);
+        block.Entities.Add(new LwPolyline(shape) { IsClosed = true });
+        block.Entities.Add(new AttributeDefinition { Tag = "ID", Prompt = "ID оповещателя", Height = textHeightMm / 2, InsertPoint = new XYZ(radius, -2 * radius, 0), Flags = AttributeFlags.Hidden });
+        doc.BlockRecords.Add(block);
+        return block;
+    }
+
+    private static void Legend(CadDocument doc, SheetPlacement sheet, Layer layer, double textHeightMm, double radius, bool manuals, bool heat, bool smoke, bool sounders = false, bool lights = false)
     {
         var x = sheet.At(35, 0).X;
         var y = sheet.At(0, 115).Y;
@@ -196,6 +237,22 @@ public static class AlarmPlanDxfWriter
             var cy = y + (textHeightMm / 2);
             doc.Entities.Add(new LwPolyline([new XY(x, cy - radius), new XY(x + (2 * radius), cy - radius), new XY(x + (2 * radius), cy + radius), new XY(x, cy + radius)]) { IsClosed = true, Layer = layer });
             doc.Entities.Add(new TextEntity("— извещатель пожарный ручной адресный, h = 1,5 м") { InsertPoint = new XYZ(x + (4 * radius), y, 0), Height = textHeightMm * 0.8, Layer = layer });
+            y -= step;
+        }
+
+        if (sounders)
+        {
+            var cy = y + (textHeightMm / 2);
+            doc.Entities.Add(new LwPolyline([new XY(x, cy - radius), new XY(x + (2 * radius), cy - radius), new XY(x + radius, cy + radius)]) { IsClosed = true, Layer = layer });
+            doc.Entities.Add(new TextEntity("— оповещатель пожарный звуковой (речевой) адресный, h ≥ 2,3 м") { InsertPoint = new XYZ(x + (4 * radius), y, 0), Height = textHeightMm * 0.8, Layer = layer });
+            y -= step;
+        }
+
+        if (lights)
+        {
+            var cy = y + (textHeightMm / 2);
+            doc.Entities.Add(new LwPolyline([new XY(x - (0.5 * radius), cy - (0.6 * radius)), new XY(x + (2.5 * radius), cy - (0.6 * radius)), new XY(x + (2.5 * radius), cy + (0.6 * radius)), new XY(x - (0.5 * radius), cy + (0.6 * radius))]) { IsClosed = true, Layer = layer });
+            doc.Entities.Add(new TextEntity("— оповещатель пожарный световой (табло «Выход»), на стене 1,9–2,3 м") { InsertPoint = new XYZ(x + (4 * radius), y, 0), Height = textHeightMm * 0.8, Layer = layer });
         }
     }
 

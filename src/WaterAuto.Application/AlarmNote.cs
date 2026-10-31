@@ -14,7 +14,7 @@ public static class AlarmNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null, IReadOnlyList<string>? volumeFiles = null)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null, SoueLayout? soue = null, IReadOnlyList<string>? volumeFiles = null)
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -35,9 +35,14 @@ public static class AlarmNote
         sections.Add(new("4", "Зоны контроля, ручные извещатели, изоляторы и прибор", Zones(zones, layout, issues, zoning)));
         sections.Add(new("5", "Сигналы от установки пожаротушения", Signals(points)));
         sections.Add(new("6", "Электропитание и аккумуляторная батарея", Power(budget)));
+        if (soue is not null)
+        {
+            sections.Add(new("7", "Система оповещения и управления эвакуацией", Soue(zones, soue, issues)));
+        }
+
         if (volumeFiles is { Count: > 0 })
         {
-            sections.Add(new("7", "Состав тома", [new NoteParagraph("Том «Пожарная сигнализация» выпускается отдельной папкой и содержит:"), new NoteList([.. volumeFiles.Select(VolumeFileText)])]));
+            sections.Add(new(soue is null ? "7" : "8", "Состав тома", [new NoteParagraph("Том «Пожарная сигнализация» выпускается отдельной папкой и содержит:"), new NoteList([.. volumeFiles.Select(VolumeFileText)])]));
         }
         return new NoteDocument(title with { Title = "Пожарная сигнализация. Пояснительная записка к расчёту" }, sections, []);
     }
@@ -134,6 +139,24 @@ public static class AlarmNote
                 [.. points.Select(p => (IReadOnlyList<string>)[p.Designation, p.Equipment, p.Kind.Text(), p.Clause ?? "состав оборудования"])]),
             new NoteParagraph(string.Create(Ru, $"Всего сигналов — {points.Count}; перечень — aps_signals.xlsx, распределение по модулям и входам — aps_addresses.xlsx, требования смежному разделу — aps_interaction.docx.")),
         ];
+    }
+
+    private static List<NoteBlock> Soue(IReadOnlyList<DetectorZone> zones, SoueLayout soue, IReadOnlyList<Issue> issues)
+    {
+        var blocks = new List<NoteBlock>
+        {
+            new NoteParagraph("Способ оповещения (звуковой или речевой) принят проектировщиком по табл. Б.1 СП 3.13130.2026: для подземных стоянок до 50 машино-мест — звуковой, от 50 — речевой; в закрытых рампах, венткамерах и насосных речевой заменяется звуковым (прим. 3). Уровень звука на высоте 1,5 м должен превышать фоновый шум помещения не менее чем на 15 дБ и быть не ниже 65 дБА (п. 6.8.2); фон — по табл. В.1 (автостоянки 70 дБА, насосные 80 дБА)."),
+            new NoteFormula("*L*_{2} = *L*_{1} + 20·lg(*r*_{1}/*r*_{2}) → *r*_{2} = *r*_{1}·10^{(*L*_{1} − *L*_{треб})/20},", "7.1", ["где *L*_{1} — уровень звука оповещателя на расстоянии *r*_{1} = 1 м по паспорту, дБ; *L*_{треб} — требуемый уровень, дБА; *r*_{2} — расстояние, на котором он ещё обеспечен (формула В.2 прил. В)."]),
+            new NoteParagraph("Оповещатели расставлены сеткой так, чтобы любая точка помещения была в радиусе *r*_{2} ближайшего оповещателя (без суммирования нескольких оповещателей — в запас); для речевых шаг не больше 6 м (п. 6.11.3). Световые оповещатели (табло «Выход») — на стенах так, чтобы до любой точки было не больше 15 м (п. 6.16.2). Высота установки — не ниже 2,3 м (п. 6.18.1). Запуск — автоматически от сигнала «Пожар» не позже 10 с (п. 6.3.2), первой оповещается зона обнаружения (п. 6.6.4)."),
+            new NoteTable("Результат", ["Помещение", "Фон, дБА", "Требуется, дБА", "Радиус r₂, м", "Звуковых/речевых, шт.", "Световых, шт."],
+                [.. soue.Zones.Select(z => (IReadOnlyList<string>)[zones.FirstOrDefault(x => x.RoomId == z.RoomId)?.RoomName ?? z.RoomId, "—", z.RequiredLevel.ToString("0", Ru), z.SoundRadius.Meters.ToString("0.#", Ru), z.Sounders.ToString(Ru), z.Lights.ToString(Ru)])]),
+        };
+        foreach (var i in issues.Where(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level != IssueLevel.Info))
+        {
+            blocks.Add(new NotePending($"{i.Level}: {i.Message}"));
+        }
+
+        return blocks;
     }
 
     private static List<NoteBlock> Power(PowerBudget? b)

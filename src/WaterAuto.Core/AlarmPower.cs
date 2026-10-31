@@ -35,6 +35,12 @@ public sealed record LoopDevice(string Name, Current LoopCurrent, string Source)
     public int Addresses { get; init; } = 1;
 }
 
+/// <summary>
+/// Адресное устройство с собственным питанием от РИП (оповещатель, релейный блок): ток от линии контроллера и адреса —
+/// в нагрузку линии; токи дежурного режима и «Пожара» — в расчёт АКБ.
+/// </summary>
+public sealed record PoweredDevice(string Name, Current LoopCurrent, int Addresses, Current Standby, Current Alarm, string Source, string? Certificate) : ICertified;
+
 /// <summary>Резервированный источник питания: собственный ток от АКБ при отсутствии сети (Iибэ).</summary>
 public sealed record PowerSupply(string Name, Current OwnCurrent, string Source) : ICertified
 {

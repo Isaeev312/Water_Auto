@@ -98,6 +98,7 @@ public static class ProjectPipeline
     public const string CableJournalDocxFile = "aps_cables.docx";
     public const string AlarmGeneralDataFile = "aps_general_data.docx";
     public const string HvacSpecFile = "aps_hvac.docx";
+    public const string SouePlanLayer = "СОУЭ_ОПОВЕЩАТЕЛИ";
     public const string IssuesFile = "issues.txt";
 
     /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
@@ -156,6 +157,11 @@ public static class ProjectPipeline
         var detectorZones = AlarmZones(project, plan, design, normsDir, issues);
         var detectorLayout = detectorZones.Count > 0 ? DetectorLayouter.Layout(detectorZones, norms) : null;
         AlarmZoningResult? zoning = null;
+        SoueLayout? soue = null;
+        var poweredDevices = new List<(PoweredDevice Device, int Count)>();
+        RelayModel? relayModel = null;
+        NotifierEntry? sounderEntry = null;
+        NotifierEntry? lightEntry = null;
         DetectorModel? manualModel = null;
         var detectorModels = new Dictionary<string, DetectorModel>();
         if (detectorLayout is not null)
@@ -183,6 +189,53 @@ public static class ProjectPipeline
 
             zoning = AlarmZoning.Build(detectorZones, detectorLayout, norms, manualModel?.Isolator ?? false);
             issues.AddRange(zoning.Issues);
+
+            // СОУЭ (этап 3): способ по табл. Б.1 — решение проектировщика, фон по табл. В.1, модели — из каталога оповещателей.
+            var notifierPath = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
+            if (project.Alarm?.Warning is { } warning && File.Exists(notifierPath))
+            {
+                var (notifiers, relays) = AlarmNotifierCatalog.Load(notifierPath);
+                var wantKind = warning.Method == WarningMethod.Speech ? NotifierKind.Speech : NotifierKind.Sound;
+                sounderEntry = warning.Sounder is { } sid ? notifiers.FirstOrDefault(n => n.Id == sid) : notifiers.FirstOrDefault(n => n.Model.Kind == wantKind);
+                lightEntry = warning.Light is { } lid ? notifiers.FirstOrDefault(n => n.Id == lid) : notifiers.FirstOrDefault(n => n.Model.Kind == NotifierKind.Light);
+                if (sounderEntry is null || lightEntry is null)
+                {
+                    issues.Add(new Issue("soue.noModel", IssueLevel.Error, $"СОУЭ: в каталоге {AlarmNotifierCatalog.File} нет {(sounderEntry is null ? (warning.Method == WarningMethod.Speech ? "речевого" : "звукового") : "светового")} оповещателя (или задан неизвестный ID)."));
+                }
+                else
+                {
+                    if (sounderEntry.Model.Kind != wantKind)
+                    {
+                        issues.Add(new Issue("soue.model.kind", IssueLevel.Warning, $"СОУЭ: оповещатель {sounderEntry.Model.Name} — {sounderEntry.Model.Kind}, а способ оповещения — {warning.Method}."));
+                    }
+
+                    if (warning.MethodRow is { } row)
+                    {
+                        issues.AddRange(SoueMethod.Check(warning.Method, row, warning.Indicator, norms));
+                    }
+
+                    var background = warning.BackgroundDba ?? norms.Find(warning.BackgroundRow ?? "sp3.tB_1.parking")?.Values["background"];
+                    if (background is null)
+                    {
+                        issues.Add(new Issue("soue.noBackground", IssueLevel.Error, $"СОУЭ: фоновый шум не задан и строки «{warning.BackgroundRow}» нет в табл. В.1 СП 3."));
+                    }
+                    else
+                    {
+                        var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)).ToList();
+                        soue = SoueLayouter.Layout(soueZones, sounderEntry.Model, lightEntry.Model, norms);
+                        issues.AddRange(soue.Issues);
+                        if (soue.Sounders.Count > 0) { poweredDevices.Add((sounderEntry.Device, soue.Sounders.Count)); }
+                        if (soue.Lights.Count > 0) { poweredDevices.Add((lightEntry.Device, soue.Lights.Count)); }
+                    }
+                }
+            }
+
+            // Релейный блок для команд АППЗ — из того же каталога, независимо от СОУЭ.
+            if (project.Alarm?.Hvac is { } hvacForRelay && File.Exists(notifierPath))
+            {
+                var relays = AlarmNotifierCatalog.Load(notifierPath).Relays;
+                relayModel = hvacForRelay.Relay is { } rid ? relays.FirstOrDefault(r => r.Id == rid) : (relays.Count > 0 ? relays[0] : null);
+            }
         }
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
@@ -451,14 +504,25 @@ public static class ProjectPipeline
                         {
                             addressDevices.Add(new(manual.Id, $"ИПР {manualModel?.Name ?? ""} — {zoneById[manual.RoomId].RoomName}".Trim(), "Пожар (ручной)", "", manualModel?.LoopCurrent ?? Current.Zero));
                         }
+
+                        foreach (var s in soue?.Sounders ?? [])
+                        {
+                            addressDevices.Add(new(s.Id, $"{sounderEntry?.Model.Name} — {zoneById[s.RoomId].RoomName}", "Оповещение (выход)", "", sounderEntry?.Device.LoopCurrent ?? Current.Zero));
+                        }
+
+                        foreach (var l in soue?.Lights ?? [])
+                        {
+                            addressDevices.Add(new(l.Id, $"{lightEntry?.Model.Name} — {zoneById[l.RoomId].RoomName}", "Оповещение (табло)", "", lightEntry?.Device.LoopCurrent ?? Current.Zero));
+                        }
                     }
 
-                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0);
+                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0, poweredDevices);
                     powerBudget = power.Budget;
                     alarmSetForDocs = alarmSet;
                     issues.AddRange(power.Issues);
                     addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module, addressDevices).Rows;
-                    alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0);
+                    alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0,
+                        [.. soue is null ? [] : new[] { (sounderEntry!, soue.Sounders.Count), (lightEntry!, soue.Lights.Count) }], relayModel, poweredDevices.FirstOrDefault(x => relayModel is not null && x.Device == relayModel.Device).Count);
 
                     // Кабельный журнал — только при заданной точке пожарного поста: без неё длин линий нет.
                     var cablesPath = EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File);
@@ -466,7 +530,8 @@ public static class ProjectPipeline
                     {
                         var loopPlan = LoopLayout.Plan(controlPoints.Count, alarmSet.Controller, alarmSet.Module,
                             addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
-                        var devicePoints = (detectorLayout?.Detectors.Select(d => d.Location) ?? []).Concat(zoning?.Manuals.Select(m => m.Location) ?? []).ToList();
+                        var devicePoints = (detectorLayout?.Detectors.Select(d => d.Location) ?? []).Concat(zoning?.Manuals.Select(m => m.Location) ?? [])
+                            .Concat(soue?.Sounders.Select(s => s.Location) ?? []).Concat(soue?.Lights.Select(l => l.Location) ?? []).ToList();
                         var loops = new List<LoopLine>();
                         var offset = 0;
                         for (var k = 0; k < Math.Max(1, loopPlan.Controllers); k++)
@@ -828,7 +893,7 @@ public static class ProjectPipeline
         {
             var planSheet = project.Alarm?.Sheets.FirstOrDefault(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase));
             var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
-            Write(alarmDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf, stamp: planStamp));
+            Write(alarmDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf, stamp: planStamp, notifiers: soue is null ? null : [.. soue.Sounders, .. soue.Lights]));
         }
 
         Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
@@ -1157,6 +1222,17 @@ public static class ProjectPipeline
             var hvacInputs = new HvacInputs(hvac.GeneralVentilation, [.. hvac.SmokeZones.Select(z => new SmokeZone(z.Name, z.ExhaustSystem, z.SupplySystem, z.SmokeDampers))], hvac.NormallyOpenDampers);
             var hvacCommands = HvacCommands.Build(hvacInputs, norms);
             issues.AddRange(hvacCommands.Issues);
+            if (hvacCommands.Outputs > 0)
+            {
+                if (relayModel is null)
+                {
+                    issues.Add(new Issue("aps.hvac.noRelay", IssueLevel.Warning, $"АППЗ: релейный блок не выбран (каталог {AlarmNotifierCatalog.File}) — {hvacCommands.Outputs} выходов не учтены в питании и спецификации."));
+                }
+                else
+                {
+                    poweredDevices.Add((relayModel.Device, (hvacCommands.Outputs + relayModel.Outputs - 1) / relayModel.Outputs));
+                }
+            }
             if (hvacCommands.Commands.Count > 0)
             {
                 var th = project.Title;
@@ -1176,7 +1252,7 @@ public static class ProjectPipeline
             // Записка АПС — объяснение хода расчёта для проектировщика: исходные данные, выбор ИП, размещение, ЗКСПС, сигналы, АКБ.
             var tn = project.Title;
             var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
-                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning,
+                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning, soue,
                 [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile]);
             Write(alarmDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
         }

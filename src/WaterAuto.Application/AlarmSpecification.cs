@@ -8,7 +8,8 @@ namespace WaterAuto.Application;
 /// </summary>
 public static class AlarmSpecification
 {
-    public static IReadOnlyList<AlarmSpecItem> Build(PowerBudget? budget, AlarmPowerSet? set, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyDictionary<string, DetectorModel> models, DetectorModel? manualModel, int manuals, int isolators)
+    public static IReadOnlyList<AlarmSpecItem> Build(PowerBudget? budget, AlarmPowerSet? set, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyDictionary<string, DetectorModel> models, DetectorModel? manualModel, int manuals, int isolators,
+        IReadOnlyList<(NotifierEntry Entry, int Count)>? notifiers = null, RelayModel? relay = null, int relays = 0)
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -39,6 +40,20 @@ public static class AlarmSpecification
         if (manuals > 0 && manualModel is not null)
         {
             items.Add(new($"Извещатель пожарный ручной адресный {manualModel.Designation}", manualModel.Name, manualModel.Manufacturer, "шт.", manuals, manualModel.Certificate, manualModel.Isolator ? "со встроенным изолятором КЗ" : null));
+        }
+
+        foreach (var (entry, count) in notifiers ?? [])
+        {
+            if (count > 0)
+            {
+                items.Add(new($"Оповещатель пожарный {(entry.Model.Kind == NotifierKind.Light ? "световой" : entry.Model.Kind == NotifierKind.Speech ? "речевой" : "звуковой")} адресный", entry.Model.Name, entry.Manufacturer, "шт.", count, entry.Device.Certificate,
+                    entry.Model.LevelAt1m is { } lv ? string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"{lv:0} дБ на 1 м; СОУЭ по СП 3.13130.2026") : "СОУЭ по СП 3.13130.2026"));
+            }
+        }
+
+        if (relay is not null && relays > 0)
+        {
+            items.Add(new("Блок сигнально-пусковой адресный (команды в системы вентиляции)", relay.Name, relay.Manufacturer, "шт.", relays, relay.Device.Certificate, $"{relay.Outputs} вых. в блоке; АППЗ по СП 484 разд. 7, СП 7"));
         }
 
         if (isolators > 0 && set?.Isolator is { } iso)

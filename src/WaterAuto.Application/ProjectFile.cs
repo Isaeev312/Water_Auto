@@ -364,6 +364,9 @@ public sealed class ProjectAlarm
     /// <summary>Системы вентиляции от раздела ОВ для команд АППЗ; null — ТЗ на вентиляцию не выпускается.</summary>
     public ProjectHvac? Hvac { get; init; }
 
+    /// <summary>СОУЭ: способ оповещения и модели оповещателей для помещений из zones; null — СОУЭ не проектируется.</summary>
+    public ProjectWarning? Warning { get; init; }
+
     /// <summary>Ведомость рабочих чертежей тома АПС (лист «Общие данные»).</summary>
     public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
     [
@@ -380,6 +383,32 @@ public sealed class ProjectHvac
     public IReadOnlyList<ProjectSmokeZone> SmokeZones { get; init; } = [];
 
     public int NormallyOpenDampers { get; init; }
+
+    /// <summary>ID релейного блока из каталога оповещателей для команд; null — первый в каталоге.</summary>
+    public string? Relay { get; init; }
+}
+
+/// <summary>СОУЭ (СП 3.13130.2026): способ оповещения — решение проектировщика по табл. Б.1, фон — по табл. В.1, модели — из каталога.</summary>
+public sealed class ProjectWarning
+{
+    public Core.WarningMethod Method { get; init; } = Core.WarningMethod.Sound;
+
+    /// <summary>ID строки табл. Б.1 (data/norms/sp3/table_B_1_method.json), по которой проверяется способ; null — не проверять.</summary>
+    public string? MethodRow { get; init; } = "sp3.tB_1m.undergroundParking";
+
+    /// <summary>Показатель строки табл. Б.1: машино-мест, м² или человек.</summary>
+    public double Indicator { get; init; }
+
+    /// <summary>ID строки табл. В.1 с фоновым шумом; null — автостоянка (70 дБА).</summary>
+    public string? BackgroundRow { get; init; } = "sp3.tB_1.parking";
+
+    /// <summary>Фоновый шум по заданию, дБА; задан — важнее строки таблицы.</summary>
+    public double? BackgroundDba { get; init; }
+
+    /// <summary>ID моделей оповещателей из каталога; null — первая подходящего вида.</summary>
+    public string? Sounder { get; init; }
+
+    public string? Light { get; init; }
 }
 
 /// <summary>Дымовая зона: вытяжная система, подпор (может отсутствовать), число клапанов дымоудаления.</summary>
