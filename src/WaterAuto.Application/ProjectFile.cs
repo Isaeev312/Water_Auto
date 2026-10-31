@@ -361,12 +361,37 @@ public sealed class ProjectAlarm
     /// <summary>Точка установки приборов (пожарный пост: контроллеры, РИП) на плане, мм; null — кабельный журнал не выпускается.</summary>
     public ProjectPoint? Panel { get; init; }
 
+    /// <summary>Системы вентиляции от раздела ОВ для команд АППЗ; null — ТЗ на вентиляцию не выпускается.</summary>
+    public ProjectHvac? Hvac { get; init; }
+
     /// <summary>Ведомость рабочих чертежей тома АПС (лист «Общие данные»).</summary>
     public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
     [
         new("1", "Общие данные"),
         new("2", "План расстановки извещателей и ручных извещателей"),
     ];
+}
+
+/// <summary>Исходные данные АППЗ от раздела ОВ: общеобменные системы, дымовые зоны, нормально открытые клапаны.</summary>
+public sealed class ProjectHvac
+{
+    public IReadOnlyList<string> GeneralVentilation { get; init; } = [];
+
+    public IReadOnlyList<ProjectSmokeZone> SmokeZones { get; init; } = [];
+
+    public int NormallyOpenDampers { get; init; }
+}
+
+/// <summary>Дымовая зона: вытяжная система, подпор (может отсутствовать), число клапанов дымоудаления.</summary>
+public sealed class ProjectSmokeZone
+{
+    public string Name { get; init; } = "";
+
+    public string ExhaustSystem { get; init; } = "";
+
+    public string? SupplySystem { get; init; }
+
+    public int SmokeDampers { get; init; }
 }
 
 /// <summary>Точка плана в координатах чертежа, мм.</summary>

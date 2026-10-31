@@ -96,6 +96,7 @@ public static class ProjectPipeline
     public const string AlarmSpecFile = "aps_spec.xlsx";
     public const string CableJournalFile = "aps_cables.xlsx";
     public const string AlarmGeneralDataFile = "aps_general_data.docx";
+    public const string HvacSpecFile = "aps_hvac.docx";
     public const string IssuesFile = "issues.txt";
 
     /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
@@ -1146,6 +1147,20 @@ public static class ProjectPipeline
             var ti = project.Title;
             var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
             Write(alarmDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "АПС.ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
+        }
+
+        if (project.Alarm?.Hvac is { } hvac)
+        {
+            // АППЗ: команды СПС в вентиляцию — ТЗ разделу ОВ; состав систем — исходные данные проекта.
+            var hvacInputs = new HvacInputs(hvac.GeneralVentilation, [.. hvac.SmokeZones.Select(z => new SmokeZone(z.Name, z.ExhaustSystem, z.SupplySystem, z.SmokeDampers))], hvac.NormallyOpenDampers);
+            var hvacCommands = HvacCommands.Build(hvacInputs, norms);
+            issues.AddRange(hvacCommands.Issues);
+            if (hvacCommands.Commands.Count > 0)
+            {
+                var th = project.Title;
+                var hvacSpec = HvacSpec.Build(new NoteTitle(th.Organization, th.Subject, th.Document, th.Author, th.Supervisor, th.CityYear, project.Name), hvacInputs, hvacCommands.Commands);
+                Write(alarmDir, HvacSpecFile, files, p => NoteDocx.Write(p, hvacSpec, Stamp(project, "АПС.ТЗ-ОВ", "Техническое задание на автоматизацию вентиляции при пожаре"), project.Font));
+            }
         }
 
         if (detectorLayout is not null && project.Alarm is not null)

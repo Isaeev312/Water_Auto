@@ -125,6 +125,21 @@ public sealed class ProjectPipelineTests : IDisposable
         var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
         addresses.Count(r => r[4].StartsWith("Автостоянка", StringComparison.Ordinal) || r[7] == "ЗКСПС-1").ShouldBeGreaterThanOrEqualTo(12);
 
+        // АППЗ: раздел hvac даёт ТЗ на вентиляцию с командами.
+        var hvacRun = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+            Hvac = new ProjectHvac { GeneralVentilation = ["П-1", "В-1"], SmokeZones = [new ProjectSmokeZone { Name = "ДЗ-1", ExhaustSystem = "ВДУ-1", SupplySystem = "ПД-1", SmokeDampers = 2 }], NormallyOpenDampers = 3 },
+        }));
+        var hvacDoc = hvacRun.Files.Single(f => f.EndsWith(ProjectPipeline.HvacSpecFile, StringComparison.Ordinal));
+        using (var hd = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(hvacDoc, false))
+        {
+            var text = hd.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("Отключить общеобменную вентиляцию");
+            text.ShouldContain("ВДУ-1");
+            text.ShouldContain("20 с");
+        }
+
         // Без точки поста кабельного журнала нет (предупреждение); с точкой — журнал с ДПЛС, питанием и сигналами.
         result.Issues.ShouldContain(i => i.Code == "aps.cable.noPanel");
         result.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal));
