@@ -92,6 +92,12 @@ public sealed record ProjectDesign
     /// <summary>Максимальная температура среды в зоне оросителей, °С (п. 6.2.17) — для номинальной температуры срабатывания (табл. 6.4).</summary>
     public double? MaxAmbientTemperature { get; init; }
 
+    /// <summary>Минимальная температура воздуха в защищаемых помещениях, °С — для выбора водо- или воздухозаполненной (п. 6.2.1, 6.2.19).</summary>
+    public double? MinAmbientTemperature { get; init; }
+
+    /// <summary>Установка спринклерная воздухозаполненная (п. 3.90): питающие и распределительные трубопроводы — под давлением воздуха.</summary>
+    public bool AirFilled { get; init; }
+
     /// <summary>Положение розетки для автоподбора: up (вверх), down (вниз), horizontal, concealed.</summary>
     public string SprinklerDeflector { get; init; } = "up";
 

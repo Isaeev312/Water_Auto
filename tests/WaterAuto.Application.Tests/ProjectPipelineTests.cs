@@ -350,6 +350,32 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Air_filled_installation_reports_air_volume_and_changes_the_control_unit_and_note()
+    {
+        // Неотапливаемый склад (−20 °С): воздухозаполненная АУП — объём воздуха, требование 180 с, узел воздухозаполненный, компрессор.
+        Drawing();
+        Run(Project());
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("air.waproj", ProjectFile.ToJson(project with { Design = project.Design with { AirFilled = true, MinAmbientTemperature = -20 } })));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        result.Issues.ShouldContain(i => i.Code == "air.delay");
+        result.Issues.ShouldContain(i => i.Code == "air.fill");
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.Contains("компрессор", StringComparison.Ordinal)));
+        spec.ShouldNotContain(r => r.Any(c => c.Contains("водозаполненный", StringComparison.Ordinal)));
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("спринклерная воздухозаполненная");
+        text.ShouldContain("п. 6.2.4");
+        text.ShouldContain("п. 6.7.1.21");
+
+        // Водозаполненная при −20 °С — замечание (п. 6.2.1, 6.7.1.41).
+        var cold = Run(Write("cold.waproj", ProjectFile.ToJson(project with { Design = project.Design with { MinAmbientTemperature = -20 } })));
+        cold.Issues.ShouldContain(i => i.Code == "air.coldWaterFilled");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();

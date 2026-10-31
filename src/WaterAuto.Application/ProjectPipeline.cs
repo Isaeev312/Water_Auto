@@ -1036,6 +1036,27 @@ public static class ProjectPipeline
             takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count), issues.Any(i => i.Code == "vpv.diaphragm"))] };
         }
 
+        // Воздухозаполненная АУП (пп. 6.2.1, 6.2.4–6.2.8, 6.2.19, 6.7.1.21): объём воздуха, проверки, узел и компрессор в спецификации.
+        AirFilledResult? air = null;
+        var coldRule = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
+        if (design.AirFilled)
+        {
+            air = AirFilled.Check(routes, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), design.SprinklerDeflector, design.MinAmbientTemperature, norms);
+            issues.AddRange(air.Issues);
+            static TakeoffItem Air(TakeoffItem x) => x with { Name = x.Name.Replace("водозаполненный", "воздухозаполненный", StringComparison.Ordinal) };
+            takeoff = takeoff with
+            {
+                Items = [.. takeoff.Items.Select(Air), new TakeoffItem(TakeoffGroup.ControlUnit, "Источник пневматического давления (компрессор) для воздухозаполненной секции", null, 1, "компл.",
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"подобрать: заполнение {air.AirVolumeM3:0.###} м³ сети до рабочего давления не дольше 1 ч (пп. 6.1.7, 6.2.6 СП 485)"))],
+            };
+            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Select(Air)] };
+        }
+        else if (design.MinAmbientTemperature is { } tMin && coldRule is { } cold && tMin < cold)
+        {
+            issues.Add(new Issue("air.coldWaterFilled", IssueLevel.Warning,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Минимальная температура {tMin:0} °С ниже {cold:0} °С, а установка водозаполненная: нужна воздухозаполненная (design.airFilled, п. 6.2.1) либо антифриз, утепление или обогрев труб (п. 6.7.1.41).")));
+        }
+
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
         var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard, pipeSizes);
         issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
@@ -1486,13 +1507,14 @@ public static class ProjectPipeline
                 userTank,
                 design.Jockey,
                 [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
-                    $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))]),
+                    $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))],
+                air),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
-            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null),
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));

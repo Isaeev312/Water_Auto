@@ -36,7 +36,8 @@ public sealed record NoteInputs(
     string? PipingSource = null,
     UserTank? Tank = null,
     ProjectJockey? Jockey = null,
-    IReadOnlyList<string>? Groups = null);
+    IReadOnlyList<string>? Groups = null,
+    AirFilledResult? Air = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -65,7 +66,7 @@ public static class ExplanatoryNoteComposer
                 Water(i, norms),
                 Interfaces(),
                 Operation(i, norms),
-                ControlValve(norms),
+                ControlValve(norms, i.Air is not null),
                 Installation(i, norms),
                 Maintenance(norms),
                 Conclusion(i),
@@ -617,6 +618,11 @@ public static class ExplanatoryNoteComposer
     // Принцип действия водозаполненной спринклерной АУП: дежурный режим, срабатывание, сигналы, пуск насосов (пп. 6.8.5, 6.9.4, 6.9.5, 6.10.33).
     private static NoteSection Operation(NoteInputs i, INormsProvider norms)
     {
+        if (i.Air is { } air)
+        {
+            return AirOperation(i, air, norms);
+        }
+
         var d = i.Design;
         var delay = norms.Find("sp485.p6_8_5.delay")?.Values;
         var temperature = i.Temperature is { } t ? $" (номинальная температура срабатывания {t.Nominal} °С, колба — {t.Color})" : "";
@@ -631,8 +637,26 @@ public static class ExplanatoryNoteComposer
         ]);
     }
 
+    // Принцип действия воздухозаполненной спринклерной АУП (пп. 3.90, 6.1.7, 6.2.4–6.2.8, 6.2.19, 6.7.1.19, 6.7.1.21).
+    private static NoteSection AirOperation(NoteInputs i, AirFilledResult air, INormsProvider norms)
+    {
+        var d = i.Design;
+        var delay = norms.Find("sp485.p6_2_4.airDelay")?.Values["maxDelay"];
+        var fill = norms.Find("sp485.p6_2_6.airFill")?.Values["maxFill"];
+        var cold = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
+        var temperature = i.Temperature is { } t ? $" (номинальная температура срабатывания {t.Nominal} °С, колба — {t.Color})" : "";
+        return new NoteSection("9", "Принцип действия установки", [
+            new NoteParagraph("Установка — спринклерная воздухозаполненная (п. 3.90): подводящий трубопровод до узла управления заполнен водой, питающие и распределительные трубопроводы за узлом — воздухом под давлением."),
+            new NoteParagraph($"*Дежурный режим.* Давление воздуха в сети поддерживает источник пневматического давления — компрессор или воздушные (азотные) баллоны (п. 6.1.7). Объём воздуха в питающих и распределительных трубопроводах — {F(air.AirVolumeM3, "0.###")} м³; заполнение до рабочего давления — не дольше {F(fill ?? 0, "0")} ч (п. 6.2.6). Отключение компрессора — по п. 6.2.8 (снижение давления ниже минимального рабочего или срабатывание узла управления)."),
+            new NoteParagraph($"*Пожар.* При нагреве разрушается тепловой замок оросителя{temperature}, воздух выходит из сети, давление за узлом управления падает, воздушный клапан узла открывается (с акселератором или эксгаустером — быстрее), сеть заполняется водой. Время от срабатывания диктующего оросителя до начала подачи воды из него — не более {F(delay ?? 0, "0")} с (п. 6.2.4); его подтверждают по технической документации узла управления и акселератора для объёма сети."),
+            new NoteParagraph("*Пуск насосов.* Пожарный насос включается по сигналу узла управления после автоматической проверки давления в подводящем трубопроводе (п. 6.10.33); при отказе рабочего насоса включается резервный (п. 6.10.3)."),
+            new NoteParagraph($"*Тушение.* Насосы подают расход не менее {F(d.PumpFlow.LitersPerSecond, "0.00")} л/с в течение {F(d.Duration, "0")} мин (раздел 7). Вскрывшиеся оросители заменяются из запаса (п. 6.1.15)."),
+            new NoteParagraph($"*Монтаж.* Оросители при температуре ниже {F(cold ?? 0, "0")} °С — только розеткой вверх или горизонтально (п. 6.2.19). Трубопроводы — без перекосов, с уклоном к спуску воды не менее {F(air.SlopeSmall, "0.###")} для DN менее {air.LargeFromDn} и {F(air.SlopeLarge, "0.###")} для DN {air.LargeFromDn} и более (п. 6.7.1.21); после срабатывания и испытаний вода удаляется самотёком, сеть просушивается продувкой (п. 6.7.1.19). Пожарные краны — к подводящему трубопроводу; к распределительным — с проверкой времени подачи воды по СП 10.13130 (п. 6.7.1.45)."),
+        ]);
+    }
+
     // Узел управления (п. 6.8).
-    private static NoteSection ControlValve(INormsProvider norms)
+    private static NoteSection ControlValve(INormsProvider norms, bool air = false)
     {
         var place = norms.Find("sp485.p6_8_2.placement")?.Values;
         var enclosure = norms.Find("sp485.p6_8_3.enclosure")?.Values;
@@ -640,7 +664,7 @@ public static class ExplanatoryNoteComposer
         var items = new List<string>
         {
             "пуск воды на тушение пожара;",
-            "заполнение питающих и распределительных трубопроводов водой;",
+            air ? "заполнение питающих и распределительных трубопроводов воздухом и подачу воды при срабатывании;" : "заполнение питающих и распределительных трубопроводов водой;",
             "слив воды из питающих и распределительных трубопроводов;",
             "компенсацию утечек из гидравлической системы;",
             "сигнализацию при срабатывании сигнального клапана;",
@@ -649,7 +673,7 @@ public static class ExplanatoryNoteComposer
         };
         var blocks = new List<NoteBlock>
         {
-            new NoteParagraph("Узел управления спринклерной водозаполненной установки проектируется по ГОСТ Р 51052 (п. 6.8.1) и устанавливается между подводящим и питающим трубопроводами. Узел обеспечивает (п. 6.8.4):"),
+            new NoteParagraph($"Узел управления спринклерной {(air ? "воздухозаполненной" : "водозаполненной")} установки проектируется по ГОСТ Р 51052 (п. 6.8.1) и устанавливается между подводящим и питающим трубопроводами. Узел обеспечивает (п. 6.8.4):"),
             new NoteList(items),
         };
         if (place is not null)
@@ -706,7 +730,7 @@ public static class ExplanatoryNoteComposer
     {
         var d = i.Design;
         return new NoteSection("", "Заключение", [
-            new NoteParagraph($"Для объекта «{i.ObjectName}» запроектирована спринклерная водозаполненная установка водяного пожаротушения по СП 485.1311500.2020:"),
+            new NoteParagraph($"Для объекта «{i.ObjectName}» запроектирована спринклерная {(i.Air is null ? "водозаполненная" : "воздухозаполненная")} установка водяного пожаротушения по СП 485.1311500.2020:"),
             new NoteList([
                 $"оросителей — **{i.Layout.Sprinklers.Count} шт.** (*K* = {F(i.DesignSettings.SprinklerK.Value)}), запас — по п. 6.1.15;",
                 $"расчётный расход — {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с, расход насоса — **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с** ({F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч);",
