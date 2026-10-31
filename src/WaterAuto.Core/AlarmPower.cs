@@ -85,3 +85,30 @@ public sealed record PowerBudget(
 
 /// <summary>Строка спецификации оборудования АПС.</summary>
 public sealed record AlarmSpecItem(string Name, string Designation, string Manufacturer, string Unit, int Quantity, string? Certificate, string? Note);
+
+/// <summary>Строка кабельного журнала: откуда, куда, назначение, марка, длина (0 — не определена) и примечание.</summary>
+public sealed record CableLine(string Id, string From, string To, string Purpose, string Cable, double LengthM, string Note);
+
+/// <summary>Сечение ДПЛС и наибольшая длина линии, м, по суммарному току адресных устройств, мА (паспорт контроллера).</summary>
+public sealed record LoopCableSection(double SectionMm2, IReadOnlyDictionary<double, double> MaxLengthMByLoadMa);
+
+/// <summary>Каталог кабелей АПС: запас длины, условная длина в посту, марки по умолчанию и таблица длин ДПЛС.</summary>
+public sealed record CableCatalog(double Reserve, double InCabinetM, string LoopName, IReadOnlyList<LoopCableSection> LoopSections, string LoopSource, string PowerName, string MainsName, string SignalName)
+{
+    public double MaxLoopSection => LoopSections.Max(s => s.SectionMm2);
+
+    /// <summary>Наименьшее сечение, при котором паспортная длина для ближайшего не меньшего столбца тока покрывает длину; null — ни одно.</summary>
+    public double? LoopSectionFor(double lengthM, double loadMa)
+    {
+        foreach (var s in LoopSections.OrderBy(s => s.SectionMm2))
+        {
+            var column = s.MaxLengthMByLoadMa.Keys.Where(k => k >= loadMa - 1e-9).DefaultIfEmpty(s.MaxLengthMByLoadMa.Keys.Max()).Min();
+            if (loadMa <= s.MaxLengthMByLoadMa.Keys.Max() + 1e-9 && s.MaxLengthMByLoadMa[column] >= lengthM)
+            {
+                return s.SectionMm2;
+            }
+        }
+
+        return null;
+    }
+}

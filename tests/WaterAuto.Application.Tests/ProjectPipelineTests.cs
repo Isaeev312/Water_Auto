@@ -109,6 +109,15 @@ public sealed class ProjectPipelineTests : IDisposable
         var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
         addresses.Count(r => r[4].StartsWith("Автостоянка", StringComparison.Ordinal) || r[7] == "ЗКСПС-1").ShouldBeGreaterThanOrEqualTo(12);
 
+        // Без точки поста кабельного журнала нет (предупреждение); с точкой — журнал с ДПЛС, питанием и сигналами.
+        result.Issues.ShouldContain(i => i.Code == "aps.cable.noPanel");
+        result.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal));
+        var withPanel = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }], Panel = new ProjectPoint { X = 1000, Y = 1000 } }));
+        var journal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(withPanel.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        journal.Select(r => r[1]).ShouldContain("ДПЛС1");
+        journal.Single(r => r[1] == "ДПЛС1")[5].ShouldStartWith("КПСнг(А)-FRLS 1×2×");
+        double.Parse(journal.Single(r => r[1] == "ДПЛС1")[6], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(50);
+
         // Модель не выбрана — первая из каталога с замечанием; выбранная тепловая для дымовой зоны — ошибка.
         result.Issues.ShouldContain(i => i.Code == "aps.detector.default" && i.Message.Contains("ДИП-34А-03"));
         var mismatch = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3, Model = "bolid.s2000_ip_03" }] }));

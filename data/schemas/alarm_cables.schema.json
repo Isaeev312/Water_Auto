@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/alarm_cables.schema.json",
+  "title": "Кабели линий АПС для кабельного журнала: марки по умолчанию и длины ДПЛС по паспорту контроллера",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "reserve", "inCabinetM", "loop", "power", "mains", "signal"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "verified": { "type": "boolean" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "reserve": { "type": "number", "minimum": 1, "description": "Коэффициент запаса длины (решение проектировщика)." },
+    "inCabinetM": { "type": "number", "minimum": 0, "description": "Условная длина линий в пределах пожарного поста (РИП — контроллер), м." },
+    "loop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "maxLengthKm", "source"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "description": "Марка с подстановкой {section}." },
+        "note": { "type": "string" },
+        "maxLengthKm": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["section", "byLoadMa"],
+            "properties": {
+              "section": { "type": "number", "exclusiveMinimum": 0, "description": "Сечение жилы, мм²." },
+              "byLoadMa": {
+                "type": "object",
+                "description": "Наибольшая длина линии, км, по суммарному току адресных устройств, мА (ключ).",
+                "propertyNames": { "pattern": "^[0-9]+$" },
+                "additionalProperties": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            }
+          }
+        },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "power": { "$ref": "#/$defs/cable" },
+    "mains": { "$ref": "#/$defs/cable" },
+    "signal": { "$ref": "#/$defs/cable" }
+  },
+  "$defs": {
+    "cable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

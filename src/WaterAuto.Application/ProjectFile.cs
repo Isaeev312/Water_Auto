@@ -357,6 +357,17 @@ public sealed class ProjectAlarm
 
     /// <summary>ID модели ручного извещателя из каталога извещателей; null — первая ручная модель (с замечанием).</summary>
     public string? ManualModel { get; init; }
+
+    /// <summary>Точка установки приборов (пожарный пост: контроллеры, РИП) на плане, мм; null — кабельный журнал не выпускается.</summary>
+    public ProjectPoint? Panel { get; init; }
+}
+
+/// <summary>Точка плана в координатах чертежа, мм.</summary>
+public sealed class ProjectPoint
+{
+    public double X { get; init; }
+
+    public double Y { get; init; }
 }
 
 /// <summary>Зона раскладки ИП: помещение по имени с чертежа («*» — все помещения), тип ИП, алгоритм, адресность, высота до перекрытия.</summary>

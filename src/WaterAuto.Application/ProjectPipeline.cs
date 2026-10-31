@@ -94,6 +94,7 @@ public static class ProjectPipeline
     public const string AlarmPlanFile = "aps_plan.dxf";
     public const string AlarmNoteFile = "aps_pz.docx";
     public const string AlarmSpecFile = "aps_spec.xlsx";
+    public const string CableJournalFile = "aps_cables.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -355,6 +356,7 @@ public static class ProjectPipeline
         PowerBudget? powerBudget = null;
         IReadOnlyList<AddressRow> addressRows = [];
         IReadOnlyList<AlarmSpecItem> alarmSpec = [];
+        IReadOnlyList<CableLine> cableLines = [];
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -446,6 +448,33 @@ public static class ProjectPipeline
                     issues.AddRange(power.Issues);
                     addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module, addressDevices).Rows;
                     alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0);
+
+                    // Кабельный журнал — только при заданной точке пожарного поста: без неё длин линий нет.
+                    var cablesPath = EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File);
+                    if (project.Alarm?.Panel is { } panelPoint && File.Exists(cablesPath))
+                    {
+                        var loopPlan = LoopLayout.Plan(controlPoints.Count, alarmSet.Controller, alarmSet.Module,
+                            addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
+                        var devicePoints = (detectorLayout?.Detectors.Select(d => d.Location) ?? []).Concat(zoning?.Manuals.Select(m => m.Location) ?? []).ToList();
+                        var loops = new List<LoopLine>();
+                        var offset = 0;
+                        for (var k = 0; k < Math.Max(1, loopPlan.Controllers); k++)
+                        {
+                            var take = k < loopPlan.DevicesByController.Count ? loopPlan.DevicesByController[k] : 0;
+                            var load = k < loopPlan.LoadByController.Count ? loopPlan.LoadByController[k] : Current.Zero;
+                            loops.Add(new LoopLine(k + 1, devicePoints.Skip(offset).Take(take).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0));
+                            offset += take;
+                        }
+
+                        var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
+                            plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
+                        cableLines = journal.Lines;
+                        issues.AddRange(journal.Issues);
+                    }
+                    else if (project.Alarm is not null && project.Alarm.Panel is null)
+                    {
+                        issues.Add(new Issue("aps.cable.noPanel", IssueLevel.Warning, "Кабельный журнал АПС не выпущен: не задана точка установки приборов (alarm.panel — координаты пожарного поста на плане, мм)."));
+                    }
                 }
             }
         }
@@ -1089,6 +1118,11 @@ public static class ProjectPipeline
         if (addressRows.Count > 0)
         {
             Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов АПС", project.Font));
+        }
+
+        if (cableLines.Count > 0)
+        {
+            Write(outDir, CableJournalFile, files, p => CableJournalXlsx.Write(p, cableLines, $"{project.Name}. Кабельный журнал АПС", project.Font));
         }
 
         if (alarmSpec.Count > 0)
