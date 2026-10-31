@@ -369,6 +369,10 @@ public sealed class ProjectPipelineTests : IDisposable
         var names = result.Files.Select(Path.GetFileName).ToList();
         names.ShouldContain(ProjectPipeline.PowderNoteFile);
         names.ShouldContain(ProjectPipeline.PowderSpecFile);
+        names.ShouldContain(ProjectPipeline.PowderPlanFile);
+        var powderPlan = DxfReader.Read(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderPlanFile, StringComparison.Ordinal)));
+        powderPlan.Entities.OfType<LwPolyline>().Count(e => e.Layer.Name == PowderPlanDxfWriter.ModuleLayer).ShouldBe(24 + 1);
+        powderPlan.Entities.ShouldContain(e => e.Layer.Name == GostSheet.Layer);
         result.Files.Where(f => Path.GetFileName(f).StartsWith("apt_", StringComparison.Ordinal)).ShouldAllBe(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.PowderVolume);
         var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
         spec.Single(r => r[2] == "Буран-8У")[5].ShouldBe("48");
