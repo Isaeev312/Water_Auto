@@ -140,21 +140,16 @@ public static class ProjectPipeline
         }
 
         var norms = JsonNormsProvider.Load(normsDir);
-        var resolved = LayoutRules.Resolve(norms, design.RoomGroup, design.ConstructionClass, design.MaxSpacing is { } m ? new Length(m) : null);
-        issues.AddRange(resolved.Issues);
-        if (resolved.Rules is not { } rules)
+        // Группы помещений (design.rooms): раскладка и трассы — по правилам своей группы; без записей — одна группа design.roomGroup.
+        if (AuptGroups.Build(plan, design, norms, issues) is not { } roomGroups)
         {
             return Stop();
         }
 
-        var fire = FireParameters.Resolve(norms, design.RoomGroup, design.RoomHeight is { } rh ? new Length(rh) : null, design.StorageHeight is { } sh ? new Length(sh) : null);
-        issues.AddRange(fire.Issues);
-        if (fire.Parameters is not { } parameters)
-        {
-            return Stop();
-        }
-
-        var layout = SprinklerLayouter.Layout(plan, rules, design.FloorElevation is { } floor ? new Length(floor) : null);
+        var mainZone = roomGroups.Zones.FirstOrDefault(z => z.Group == design.RoomGroup) ?? roomGroups.Zones[0];
+        var rules = mainZone.Rules;
+        var parameters = mainZone.Parameters;
+        var layout = roomGroups.Layout;
         issues.AddRange(layout.Issues);
 
         // АПС, этап 2 (ADR 0012): извещатели — только в помещениях и с параметрами, заданными проектировщиком.
@@ -337,7 +332,7 @@ public static class ProjectPipeline
 
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
-        var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero, design.Ring);
+        var routing = roomGroups.Routing;
         issues.AddRange(routing.Issues);
         if (design.MaxSprinklersPerBranch is { } maxBranch)
         {
@@ -395,13 +390,13 @@ public static class ProjectPipeline
         IReadOnlyList<int>? sprinklerTemps = null;
         if (sprinklerK > 0)
         {
-            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
+            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, roomGroups.ZoneOf(r.RoomId).Rules, settings, roomGroups.ZoneOf(r.RoomId).Parameters, hydrants)).ToList();
         }
         else
         {
             // Автоподбор: модели каталога с нужным положением розетки, полный расчёт для каждой (SprinklerSelection).
             var catalog = SprinklerCatalog.ForWater(SprinklerCatalog.Load(catalogPath), design.SprinklerDeflector).ToList();
-            selection = SprinklerSelection.Select(routing.Routes, norms, rules, settings, parameters, hydrants, catalog.Select(c => c.Candidate).ToList());
+            selection = SprinklerSelection.Select([.. routing.Routes.Select(r => (r, roomGroups.ZoneOf(r.RoomId).Rules, (FireParameters?)roomGroups.ZoneOf(r.RoomId).Parameters))], norms, settings, hydrants, catalog.Select(c => c.Candidate).ToList());
             issues.AddRange(selection.Issues);
             if (selection is not { Chosen: { } chosen, Designs: { } chosenDesigns })
             {
@@ -421,7 +416,10 @@ public static class ProjectPipeline
                 string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Подобран ороситель {chosen.Maker} {chosen.Model}, K = {chosen.K:0.###}: из {selection.Rows.Count} моделей подходят {selection.Rows.Count(r => r.Valid)}, выбрана с наименьшим Q·P насоса.{(entry.Verified ? "" : " Данные каталога не сверены с паспортом изделия.")}")));
         }
 
-        var worst = designs.MaxBy(d => d.PumpPressure.Mpa)!;
+        // Разные группы — насос и бак по огибающей (В-27); правила и параметры записки — группы диктующего расчёта.
+        var worst = AuptGroups.Envelope(designs, roomGroups, issues);
+        rules = roomGroups.ZoneOf(worst.Route.RoomId).Rules;
+        parameters = roomGroups.ZoneOf(worst.Route.RoomId).Parameters;
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         UserTank? userTank = design.Tank is { } tank
             ? new UserTank(new Length(tank.Length), new Length(tank.Width), new Length(tank.Height), new Length(tank.DeadLayer))
@@ -1405,7 +1403,7 @@ public static class ProjectPipeline
             new NoteInputs(
                 new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
                 project.Name,
-                design.RoomGroup,
+                roomGroups.ZoneOf(worst.Route.RoomId).Group,
                 design.ConstructionClass,
                 plan,
                 rules,
@@ -1429,7 +1427,9 @@ public static class ProjectPipeline
                 piping,
                 PumpCatalog.Piping(normsDir)?.Source,
                 userTank,
-                design.Jockey),
+                design.Jockey,
+                [.. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+                    $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))]),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 

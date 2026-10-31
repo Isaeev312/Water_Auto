@@ -18,7 +18,7 @@ public sealed class ProjectPipelineTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, true);
 
     // Этаж 30 × 20 м: помещение с именем, колонна, ввод — по соглашению о слоях (README §7).
-    private string Drawing(bool withInlet = true, string name = "floor.dxf", double width = 30000, double depth = 20000)
+    private string Drawing(bool withInlet = true, string name = "floor.dxf", double width = 30000, double depth = 20000, double storeWidth = 0)
     {
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
@@ -39,6 +39,15 @@ public sealed class ProjectPipelineTests : IDisposable
         room.Layer = L(FloorPlanImporter.ContourLayer);
         doc.Entities.Add(room);
         doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(width / 2, depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        if (storeWidth > 0)
+        {
+            // Второе помещение справа через стену 200 мм — «Склад».
+            var store = Rect(width + 200, 0, width + 200 + storeWidth, depth);
+            store.Layer = L(FloorPlanImporter.ContourLayer);
+            doc.Entities.Add(store);
+            doc.Entities.Add(new TextEntity("Склад") { InsertPoint = new XYZ(width + (storeWidth / 2), depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        }
+
         var column = Rect(7300, 7300, 7700, 7700);
         column.Layer = L(FloorPlanImporter.ColumnLayer);
         doc.Entities.Add(column);
@@ -264,6 +273,42 @@ public sealed class ProjectPipelineTests : IDisposable
             Panel = alarm.Panel,
         }));
         noElevation.Issues.ShouldContain(i => i.Code == "aps.cable.noElevation");
+    }
+
+    [Fact]
+    public void Rooms_of_different_groups_are_laid_out_and_calculated_by_their_own_tables()
+    {
+        // Стоянка — группа 2 (табл. 6.1: 0,12 л/(с·м²), 120 м², шаг 4 м); склад — группа 5, складирование 3 м (табл. 6.2).
+        // Насос — по огибающей: наибольший расход и наибольший напор из расчётов групп; бак — наибольший объём воды.
+        Drawing(storeWidth: 15000);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Стоянка и склад",
+            Drawing = "floor.dxf",
+            Design = new ProjectDesign
+            {
+                RoomGroup = "2",
+                SprinklerK = 0.47,
+                SprinklerModel = "по каталогу",
+                PipeElevation = -1.5,
+                DictatingAboveAxis = 3.5,
+                SupplyLength = 30,
+                SupplyDn = 125,
+                InletPressure = 0.1,
+                DesignVelocity = 5,
+                Rooms = [new ProjectRoomGroup { Room = "Склад", Group = "5", StorageHeight = 3 }],
+            },
+        });
+        var result = Run(Write("groups.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        var envelope = result.Issues.Single(i => i.Code == "design.groups.envelope");
+        envelope.Message.ShouldContain("группа 2");
+        envelope.Message.ShouldContain("группа 5");
+        // Склад группы 5 требует большего расхода, чем стоянка группы 2: насос — не меньше расхода склада.
+        result.Pump.ShouldNotBeNull();
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("табл. 6.2");
     }
 
     [Fact]

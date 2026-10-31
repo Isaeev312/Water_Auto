@@ -48,6 +48,18 @@ public static class SprinklerSelection
         IReadOnlyList<SprinklerCandidate> candidates)
     {
         ArgumentNullException.ThrowIfNull(routes);
+        return Select([.. routes.Select(r => (r, rules, parameters))], norms, settings, hydrants, candidates);
+    }
+
+    /// <summary>Подбор для трасс с разными правилами и параметрами (помещения разных групп): модель должна подходить всем.</summary>
+    public static SprinklerSelectionResult Select(
+        IReadOnlyList<(PipeRoute Route, LayoutRules Rules, FireParameters? Parameters)> routes,
+        INormsProvider norms,
+        DesignSettings settings,
+        HydrantInput? hydrants,
+        IReadOnlyList<SprinklerCandidate> candidates)
+    {
+        ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(candidates);
         var byK = new Dictionary<double, List<DesignResult>>();
         var rows = new List<(SprinklerOption Row, List<DesignResult> Designs)>();
@@ -55,7 +67,7 @@ public static class SprinklerSelection
         {
             if (!byK.TryGetValue(c.K, out var designs))
             {
-                designs = routes.Select(r => DesignCalculation.Run(r, norms, rules, settings with { SprinklerK = new KFactor(c.K) }, parameters, hydrants)).ToList();
+                designs = routes.Select(r => DesignCalculation.Run(r.Route, norms, r.Rules, settings with { SprinklerK = new KFactor(c.K) }, r.Parameters, hydrants)).ToList();
                 byK[c.K] = designs;
             }
 

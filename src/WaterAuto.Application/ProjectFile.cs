@@ -131,6 +131,9 @@ public sealed record ProjectDesign
     /// <summary>Высота складирования, м — для складов (группы 5–7, табл. 6.2).</summary>
     public double? StorageHeight { get; init; }
 
+    /// <summary>Помещения другой группы, чем <see cref="RoomGroup"/>, со своими высотами; остальные — по RoomGroup.</summary>
+    public IReadOnlyList<ProjectRoomGroup> Rooms { get; init; } = [];
+
     /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
     public double? FloorElevation { get; init; }
 
@@ -180,6 +183,20 @@ public sealed record ProjectDesign
 /// Комплектная насосная установка проекта: конкретная установка каталога вместо автоподбора по требуемым подаче и напору.
 /// Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — количество насосов в выпуске берётся по ней.
 /// </summary>
+/// <summary>Помещение со своей группой по приложению А СП 485 (имя — текст внутри контура ПТ_КОНТУР) и высотами для табл. 6.2, 6.3.</summary>
+public sealed record ProjectRoomGroup
+{
+    public string Room { get; init; } = "";
+
+    public string Group { get; init; } = "";
+
+    /// <summary>Высота помещения, м; null — design.roomHeight.</summary>
+    public double? RoomHeight { get; init; }
+
+    /// <summary>Высота складирования, м (группы 5–7).</summary>
+    public double? StorageHeight { get; init; }
+}
+
 public sealed record ProjectPumpStation
 {
     /// <summary>

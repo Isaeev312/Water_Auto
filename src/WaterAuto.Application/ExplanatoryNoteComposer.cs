@@ -35,7 +35,8 @@ public sealed record NoteInputs(
     PipingResult? Piping = null,
     string? PipingSource = null,
     UserTank? Tank = null,
-    ProjectJockey? Jockey = null);
+    ProjectJockey? Jockey = null,
+    IReadOnlyList<string>? Groups = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -116,6 +117,12 @@ public static class ExplanatoryNoteComposer
         {
             new NoteParagraph($"Параметры приняты для группы помещений {i.RoomGroup} по {p.Source} СП 485 (п. 6.1.4), расстояния — по п. 6.2.21{(heights.Count > 0 ? "; " + string.Join(", ", heights) : "")}."),
         };
+        if (i.Groups is { Count: > 1 } groups)
+        {
+            blocks.Add(new NoteParagraph("Установка защищает помещения разных групп; раскладка оросителей и расчёт каждого помещения выполнены по параметрам его группы:"));
+            blocks.Add(new NoteList(groups));
+            blocks.Add(new NoteParagraph("Как определять расчётный режим установки для помещений разных групп, СП 485 прямо не устанавливает (для пенных установок — по помещению с наибольшим расходом раствора). Принято в запас: насос — по наибольшему расходу и наибольшему требуемому напору из расчётов групп, запас воды — по наибольшему объёму. Ниже приведён расчёт помещения с наибольшим требуемым напором."));
+        }
         if (Math.Abs(p.HeightFactor - 1) > 1e-12 && p.RoomHeight is { } h)
         {
             var baseI = p.Intensity / p.HeightFactor;
