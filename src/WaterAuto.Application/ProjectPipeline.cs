@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using WaterAuto.Alarm;
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Calc.Layout;
@@ -89,6 +90,7 @@ public static class ProjectPipeline
     public const string SignalListFile = "aps_signals.xlsx";
     public const string BatteryFile = "aps_battery.xlsx";
     public const string InteractionFile = "aps_interaction.docx";
+    public const string AddressTableFile = "aps_addresses.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -311,8 +313,11 @@ public static class ProjectPipeline
             }
         }
 
+        // Число вводов в насосную — одно для сигналов, спецификации и схемы.
+        var inletCount = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0;
         IReadOnlyList<ControlPoint> controlPoints = [];
         PowerBudget? powerBudget = null;
+        IReadOnlyList<AddressRow> addressRows = [];
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -327,7 +332,7 @@ public static class ProjectPipeline
                 ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                 ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
             };
-            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 };
+            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount };
             stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
 
             // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,
@@ -350,11 +355,32 @@ public static class ProjectPipeline
 
             // АКБ приборов автоматики АУПТ (ADR 0012, этап 1): по одному входу модуля на точку управления.
             var powerSet = EquipmentSet.PathFor(normsDir, AlarmPowerCatalog.File);
-            if (controlPoints.Count > 0 && File.Exists(powerSet))
+            if (controlPoints.Count > 0 && !File.Exists(powerSet))
             {
-                var power = PowerBudgets.Build(controlPoints.Count, AlarmPowerCatalog.Load(powerSet), norms);
-                powerBudget = power.Budget;
-                issues.AddRange(power.Issues);
+                issues.Add(new Issue("aps.power.noCatalog", IssueLevel.Warning,
+                    $"Нет каталога приборов питания {Path.GetFileName(powerSet)}: расчёт АКБ и таблица адресов не выпускаются."));
+            }
+            else if (controlPoints.Count > 0)
+            {
+                // АПС — надстройка над АУПТ: ошибка её каталога не должна останавливать выпуск гидравлики и чертежей.
+                AlarmPowerSet? alarmSet = null;
+                try
+                {
+                    alarmSet = AlarmPowerCatalog.Load(powerSet);
+                }
+                catch (Exception ex) when (ex is InvalidDataException or JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
+                {
+                    issues.Add(new Issue("aps.power.catalogError", IssueLevel.Error,
+                        $"Каталог {Path.GetFileName(powerSet)} не прочитан: {ex.Message} Расчёт АКБ и таблица адресов не выпускаются."));
+                }
+
+                if (alarmSet is not null)
+                {
+                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms);
+                    powerBudget = power.Budget;
+                    issues.AddRange(power.Issues);
+                    addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module).Rows;
+                }
             }
         }
 
@@ -719,15 +745,19 @@ public static class ProjectPipeline
                 [
                     "Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении (п. 6.10.3 СП 485).",
                     "Марки агрегатов, жокей-насоса и шкафа управления — по каталогу производителя по требуемым Q и H; DN обвязки — по скорости воды (п. 6.7.1.37).",
-                    "Затворы на линиях агрегатов и перед узлом управления — с контролем положения; приборы — через трёхходовые краны (пп. 6.8.7, 6.8.10).",
+                    setChoice?.Chosen is null
+                        ? "Затворы на линиях агрегатов и перед узлом управления — с контролем положения; приборы — через трёхходовые краны (пп. 6.8.7, 6.8.10)."
+                        : "Затворы перед узлом управления — с контролем положения (п. 6.8.7); арматура обвязки и её датчики — по паспорту комплектной установки (А-05); приборы — через трёхходовые краны (п. 6.8.10).",
                     "Оборудование, кроме оросителей, приборов и трубопроводов, окрашивается в красный цвет (п. 6.8.11).",
                     "Номера позиций — по спецификации насосной станции ПТ2.СО; фланцы и крепёж — по месту (ГОСТ 21.601, п. 9.4).",
                 ],
                 schemePositions,
                 sections,
-                Marks: controlPoints.Where(cp => cp.Role is not null).GroupBy(cp => cp.Role!)
+                // Обозначения — только у устройств с буквенной частью в каталоге; без неё на чертёж попал бы сырой id.
+                Marks: controlPoints.Where(cp => cp.Role is not null && cp.Designation != cp.Id).GroupBy(cp => cp.Role!)
                     .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)[.. g.Select(cp => cp.Designation).Distinct()]),
-                Inlets: plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 1),
+                Inlets: Math.Max(1, inletCount),
+                PumpLineSensors: setChoice?.Chosen is null),
             SheetStamp(project, "Принципиальная", "Принципиальная схема насосной станции пожаротушения"),
             project.Font));
         // План насосной: оборудование по расстановке, номера позиций ПТ2.СО, принятые проходы и допущения.
@@ -983,6 +1013,11 @@ public static class ProjectPipeline
         if (powerBudget is not null)
         {
             Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
+        }
+
+        if (addressRows.Count > 0)
+        {
+            Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов сигналов АУПТ в АПС", project.Font));
         }
 
         if (controlPoints.Count > 0)

@@ -21,12 +21,40 @@ public class PowerBudgetsTests
         new() { [TimeSpan.FromHours(1)] = new(oneHour), [TimeSpan.FromHours(24)] = new(day) };
 
     [Fact]
-    public void Addresses_count_used_inputs_not_module_capacity()
+    public void Set_with_zero_denominators_is_an_error_not_a_crash()
     {
-        // 121 вход — 16 АР8, но адресов 121 ≤ 127: замечания о линии по адресам нет (остаётся только по числу модулей).
-        var codes = PowerBudgets.Build(121, Set with { Module = Set.Module with { MaxPerLoop = 20, LoopCurrent = new Current(0.001) } }, Norms).Issues.Select(i => i.Code);
+        var bad = Set with { Controller = Set.Controller with { LoadOfLoaded = Current.Zero } };
 
-        codes.ShouldNotContain("aps.power.loopLoad");
+        var result = PowerBudgets.Build(8, bad, Norms);
+
+        result.Budget.Required.ShouldBeNull();
+        result.Budget.Lines.ShouldBeEmpty();
+        result.Issues.ShouldContain(i => i.Code == "aps.power.badSet" && i.Level == IssueLevel.Error);
+        Should.NotThrow(() => PowerBudgets.Build(8, Set with { Module = Set.Module with { Inputs = 0 } }, Norms));
+    }
+
+    [Fact]
+    public void Zero_inputs_still_count_one_controller_and_report_aging()
+    {
+        var b = PowerBudgets.Build(0, Set, Norms).Budget;
+
+        b.Lines.Single(l => l.Name == "С2000-КДЛ").Count.ShouldBe(1);
+        b.Lines.Single(l => l.Name == "С2000-АР8").Count.ShouldBe(0);
+        b.AgingFactor!.Value.ShouldBe(1.25, 1e-12);
+    }
+
+    [Fact]
+    public void Second_controller_doubles_alarm_current_and_adds_its_idle_current()
+    {
+        // 16 АР8 — 15 на первой линии, 1 на второй. Iп = 2·400 мА; Iд = (80 + 80·60/63,5) + (80 + 80·4/63,5) мА.
+        var result = PowerBudgets.Build(16 * 8, Set, Norms);
+
+        var b = result.Budget;
+        b.Lines.Single(l => l.Name == "С2000-КДЛ").Count.ShouldBe(2);
+        b.Alarm.Amperes.ShouldBe(0.8, 1e-12);
+        b.Standby.Amperes.ShouldBe(0.16 + (0.08 * 0.064 / 0.0635), 1e-12);
+        result.Issues.ShouldContain(i => i.Code == "aps.power.controllers" && i.Level == IssueLevel.Info);
+        result.Issues.ShouldNotContain(i => i.Code == "aps.power.loopModules" || i.Code == "aps.power.loopLoad");
     }
 
     [Fact]
@@ -84,16 +112,14 @@ public class PowerBudgetsTests
     }
 
     [Fact]
-    public void Load_above_battery_or_loop_limits_is_a_warning()
+    public void Load_above_battery_capacity_is_a_warning()
     {
-        // 16 АР8 — больше 15 на линии и 127 адресов. Kн ∝ C20, поэтому нехватку ёмкости задаёт таблица разряда:
+        // Kн ∝ C20, поэтому нехватку ёмкости задаёт таблица разряда:
         // 1,25·((Iд + Iибэ)/I24ч + (Iп + Iибэ)/I1ч) > 1 при токах разряда выше нагрузки (без dischargeLimit).
         var small = Set with { Battery = Set.Battery with { Discharge = Table(0.5, 0.25) } };
 
-        var codes = PowerBudgets.Build(16 * 8, small, Norms).Issues.Where(i => i.Level == IssueLevel.Warning).Select(i => i.Code).ToList();
+        var codes = PowerBudgets.Build(8, small, Norms).Issues.Where(i => i.Level == IssueLevel.Warning).Select(i => i.Code).ToList();
 
-        codes.ShouldContain("aps.power.loopModules");
-        codes.ShouldContain("aps.power.loopLoad");
         codes.ShouldContain("aps.power.capacity");
     }
 

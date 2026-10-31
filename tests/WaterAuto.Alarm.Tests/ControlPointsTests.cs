@@ -103,6 +103,22 @@ public class ControlPointsTests
     }
 
     [Fact]
+    public void Two_devices_with_several_signals_each_get_numbered_designations()
+    {
+        var result = ControlPoints.Build(
+        [
+            new SignalSource("cabinet", "Шкаф", SignalKind.PumpStart, 2, "п. 1", Mark: "ШУН"),
+            new SignalSource("cabinet", "Шкаф", SignalKind.PumpFault, 2, "п. 1", Mark: "ШУН"),
+        ]);
+
+        result.Points.Select(p => (p.Id, p.Designation)).ShouldBe(
+        [
+            ("cabinet.pumpStart.1", "ШУН1"), ("cabinet.pumpStart.2", "ШУН2"),
+            ("cabinet.pumpFault.1", "ШУН1"), ("cabinet.pumpFault.2", "ШУН2"),
+        ]);
+    }
+
+    [Fact]
     public void Section_bound_devices_get_the_section_number_in_plan_order()
     {
         // Две секции: на секцию узел управления и два затвора (до и после узла), как на схеме насосной.

@@ -48,7 +48,7 @@ public static class InteractionSpec
             sections.Add(new("3", "Приборы и электропитание",
             [
                 new NoteParagraph("Предусмотреть адресное пространство и программирование приборов:"),
-                new NoteList([.. budget.Lines.Where(l => l.Standby is null || l.Count > 0).Select(l => $"{l.Name} — {l.Count} шт.")]),
+                new NoteList([.. budget.Lines.Where(l => l.Count > 0).Select(l => $"{l.Name} — {l.Count} шт.")]),
                 new NoteParagraph(string.Create(ru, $"Питание приборов — {budget.Voltage.Volts:0.#} В от резервированного источника с АКБ. Ток потребления в дежурном режиме — {budget.Standby.Amperes * 1000:0.#} мА, в режиме «Пожар» — {budget.Alarm.Amperes * 1000:0.#} мА, собственный ток источника от АКБ — {budget.SupplyOwn.Amperes * 1000:0.#} мА.")),
                 new NoteParagraph(budget.Required is { } r
                     ? string.Create(ru, $"Требуемая ёмкость АКБ по прил. Б СП 6.13130.2025 — {r.AmpereHours:0.##} А·ч; принята {b.Name} ({b.Nominal.AmpereHours:0.##} А·ч). Расчёт — aps_battery.xlsx.")
