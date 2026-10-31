@@ -20,6 +20,27 @@ public sealed record DetectorRules(Length Radius, Length MaxRoomHeight, Length M
     public const string CoverageAbId = "sp484.p6_6_1.coverageAB";
     public const string CoverageCId = "sp484.p6_6_2.coverageC";
 
+    /// <summary>
+    /// Табл. 6.2: наибольшее расстояние поперёк балок между ИП и от ИП до стены (грани балки). Строка — по доле высоты
+    /// балки от высоты перекрытия (менее 10 % — одна строка для любой высоты) и по высоте перекрытия, округлённой до целого.
+    /// </summary>
+    public static (Length Across, Length ToWall, string RecordId)? BeamSpacing(INormsProvider norms, DetectorKind kind, Length ceilingHeight, Length beamHeight)
+    {
+        ArgumentNullException.ThrowIfNull(norms);
+        var low = beamHeight.Meters < 0.1 * ceilingHeight.Meters;
+        var h = Math.Round(ceilingHeight.Meters, MidpointRounding.AwayFromZero);
+        var rows = norms.ByClause("табл. 6.2").Where(r => r.Doc == "СП 484.1311500.2020" && r.Attributes.GetValueOrDefault("beam") == (low ? "lt10" : "gt10"));
+        var row = rows.FirstOrDefault(r =>
+            (r.Values.GetValueOrDefault("hMin") is not { } min || h > min) && (r.Values.GetValueOrDefault("hMax") is not { } max || h <= max));
+        if (row is null)
+        {
+            return null;
+        }
+
+        var prefix = kind == DetectorKind.Smoke ? "smoke" : "heat";
+        return (new Length(row.Values[prefix]!.Value), new Length(row.Values[prefix + "ToWall"]!.Value), row.Id);
+    }
+
     public static string Clause(DetectorKind kind) => kind == DetectorKind.Smoke ? "СП 484.1311500.2020, п. 6.6.16" : "СП 484.1311500.2020, п. 6.6.15";
 
     /// <summary>Правила для вида ИП, алгоритма и адресности; null с замечанием — если записи норм нет.</summary>

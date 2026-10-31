@@ -19,7 +19,11 @@ public enum DetectionAlgorithm
 /// Зона раскладки извещателей — помещение, для которого проектировщик задал тип ИП, алгоритм и адресность (решения
 /// проекта, ADR 0012 п. 6; нужна ли здесь АПС — вопрос А-02, программа не решает). Высота — до перекрытия в зоне.
 /// </summary>
-public sealed record DetectorZone(string RoomId, string RoomName, Polygon Outline, Length CeilingHeight, DetectorKind Kind, DetectionAlgorithm Algorithm, bool Addressable);
+public sealed record DetectorZone(string RoomId, string RoomName, Polygon Outline, Length CeilingHeight, DetectorKind Kind, DetectionAlgorithm Algorithm, bool Addressable)
+{
+    /// <summary>Балки в помещении (слой ПТ_БАЛКИ): высота балки — для табл. 6.2 и 6.3 СП 484.</summary>
+    public IReadOnlyList<Beam> Beams { get; init; } = [];
+}
 
 /// <summary>Извещатель раскладки; ID — «ID помещения.D номер».</summary>
 public sealed record PlacedDetector(string Id, string RoomId, PlanPoint Location, DetectorKind Kind);

@@ -1479,7 +1479,8 @@ public static class ProjectPipeline
                     continue;
                 }
 
-                zones.Add(new DetectorZone(room.Id, room.Name, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable));
+                var beams = plan.Beams.Where(b => b.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint).ToList();
+                zones.Add(new DetectorZone(room.Id, room.Name, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable) { Beams = beams });
             }
         }
 
