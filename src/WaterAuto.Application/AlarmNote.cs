@@ -198,6 +198,7 @@ public static class AlarmNote
     private static string VolumeFileText(string file) => Path.GetFileName(file) switch
     {
         "aps_plan.dxf" => "aps_plan.dxf — план расстановки извещателей (слои АПС_)",
+        "aps_scheme.dxf" => "aps_scheme.dxf — структурная схема: РИП, контроллеры с кольцами ДПЛС и устройствами, реле, усилитель с линиями оповещения",
         "aps_signals.xlsx" => "aps_signals.xlsx — перечень сигналов АУПТ в АПС",
         "aps_addresses.xlsx" => "aps_addresses.xlsx — таблица адресов",
         "aps_battery.xlsx" => "aps_battery.xlsx — расчёт ёмкости АКБ",

@@ -247,6 +247,15 @@ public sealed class ProjectPipelineTests : IDisposable
         speechJournal.Single(r => r[1] == "ЛО2")[5].ShouldStartWith("КПСнг(А)-FRLS 1×2×");
         double.Parse(speechJournal.Single(r => r[1] == "ЛО2")[6], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(double.Parse(speechJournal.Single(r => r[1] == "ЛО1")[6], System.Globalization.CultureInfo.InvariantCulture) - 60);
 
+        // Структурная схема: лист в рамке, контроллеры и все адресные устройства обоих уровней условными знаками; в журнале — участки кольца.
+        var scheme = DxfReader.Read(speech.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSchemeFile, StringComparison.Ordinal)));
+        scheme.Entities.ShouldContain(e => e.Layer.Name == GostSheet.Layer);
+        scheme.Entities.OfType<TextEntity>().ShouldContain(t => t.Value.StartsWith("С2000-КДЛ №1", StringComparison.Ordinal));
+        scheme.Entities.OfType<TextEntity>().ShouldContain(t => t.Value.StartsWith("Рупор-300", StringComparison.Ordinal));
+        scheme.Entities.OfType<TextEntity>().Count(t => t.Value.Contains(".D", StringComparison.Ordinal) && t.Layer.Name == AlarmSchemeDxfWriter.TextLayer).ShouldBe(21);
+        speechJournal.Select(r => r[1]).ShouldContain("ДПЛС1.1");
+        speechJournal.Count(r => r[1].StartsWith("ДПЛС1.", StringComparison.Ordinal)).ShouldBeGreaterThanOrEqualTo(22);
+
         // Без отметок — предупреждение, что стояки не учтены.
         var noElevation = Run(Project(alarm: new ProjectAlarm
         {

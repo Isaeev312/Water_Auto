@@ -96,6 +96,7 @@ public static class ProjectPipeline
     /// <summary>План АПС уровня n при нескольких уровнях (alarm.levels): aps_plan_1.dxf, aps_plan_2.dxf…</summary>
     public static string AlarmPlanLevelFile(int level) => string.Create(CultureInfo.InvariantCulture, $"aps_plan_{level}.dxf");
     public const string AlarmNoteFile = "aps_pz.docx";
+    public const string AlarmSchemeFile = "aps_scheme.dxf";
     public const string AlarmSpecFile = "aps_spec.xlsx";
     public const string CableJournalFile = "aps_cables.xlsx";
     public const string CableJournalDocxFile = "aps_cables.docx";
@@ -516,6 +517,7 @@ public static class ProjectPipeline
         IReadOnlyList<AddressRow> addressRows = [];
         IReadOnlyList<AlarmSpecItem> alarmSpec = [];
         List<CableLine> cableLines = [];
+        List<LoopLine> schemeLoops = [];
         AlarmPowerSet? alarmSetForDocs = null;
         if (File.Exists(stationSet))
         {
@@ -625,7 +627,6 @@ public static class ProjectPipeline
 
                     // Кабельный журнал — только при заданной точке пожарного поста: без неё длин линий нет.
                     var cablesPath = EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File);
-                    if (project.Alarm?.Panel is { } panelPoint && File.Exists(cablesPath))
                     {
                         var loopPlan = LoopLayout.Plan(controlPoints.Count, alarmSet.Controller, alarmSet.Module,
                             addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
@@ -652,6 +653,9 @@ public static class ProjectPipeline
                             issues.Add(new Issue("aps.cable.noElevation", IssueLevel.Warning, "Кабельный журнал: у уровней не заданы отметки (alarm.levels[].elevation) — стояки ДПЛС между уровнями в длинах линий не учтены."));
                         }
 
+                        schemeLoops = loops;
+                        if (project.Alarm?.Panel is { } panelPoint && File.Exists(cablesPath))
+                        {
                         var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
                             plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
                         issues.AddRange(journal.Issues);
@@ -674,10 +678,27 @@ public static class ProjectPipeline
                         }
 
                         cableLines = allLines;
+                        }
                     }
-                    else if (project.Alarm is not null && project.Alarm.Panel is null)
+
+                    if (project.Alarm is not null && project.Alarm.Panel is null)
                     {
                         issues.Add(new Issue("aps.cable.noPanel", IssueLevel.Warning, "Кабельный журнал АПС не выпущен: не задана точка установки приборов (alarm.panel — координаты пожарного поста на плане, мм)."));
+                    }
+
+                    // Структурная схема: контроллеры с кольцами в порядке обхода, модуль насосной и реле, РИП, усилитель с линиями.
+                    if (schemeLoops.Count > 0 && detectorLayout is not null)
+                    {
+                        var labelOf = addressDevices.GroupBy(d => d.Designation, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Equipment, StringComparer.Ordinal);
+                        var relayCount = poweredDevices.Where(x => relayModel is not null && x.Device == relayModel.Device).Sum(x => x.Count);
+                        var schemeLoopList = schemeLoops.Select((l, i) => new SchemeLoop(l.Number, alarmSet.Controller.Name,
+                            [.. (l.DeviceIds ?? []).Select(id => new SchemeDevice(id, labelOf.GetValueOrDefault(id, ""), SchemeKind(id)))],
+                            l.HasPumpModules ? alarmSet.Module.Name : null, i == 0 ? relayCount : 0, relayModel?.Name)).ToList();
+                        var speechLines = speechPlan?.Lines.Select(l => new SchemeSpeechLine(l.Number, l.Group, l.Speakers, sounderEntry?.Model.Name ?? "", l.ConsumedW, lineMonitor?.Name)).ToList() ?? [];
+                        var scheme = new AlarmScheme(schemeLoopList, alarmSet.Supply.Name, powerBudget?.Supplies ?? 1, alarmSet.Battery.Name, amplifier?.Name, speechPlan?.Amplifiers ?? 0, speechLines,
+                            "Порядок устройств на линии — по обходу кольца из кабельного журнала; изоляторы КЗ (БРИЗ) расставляются по линии проектировщиком (п. 6.3.5 СП 484). Пульт и линия RS-485 — по проекту.");
+                        var schemeSheet = alarmSheets.FirstOrDefault(sh => sh.Name.StartsWith("Структурная", StringComparison.OrdinalIgnoreCase));
+                        Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = schemeSheet?.Sheet }, project.Font));
                     }
                 }
             }
@@ -1922,6 +1943,20 @@ public static class ProjectPipeline
         }
 
         return zones;
+    }
+
+    /// <summary>Вид устройства для условного знака схемы — по суффиксу обозначения с плана (D — ИП, M — ИПР, S — оповещатель, L — табло).</summary>
+    private static SchemeDeviceKind SchemeKind(string id)
+    {
+        var tail = id[(id.LastIndexOf('.') + 1)..];
+        return tail.Length == 0 ? SchemeDeviceKind.Module : tail[0] switch
+        {
+            'D' => SchemeDeviceKind.SmokeDetector,
+            'M' => SchemeDeviceKind.ManualCallPoint,
+            'S' => SchemeDeviceKind.Sounder,
+            'L' => SchemeDeviceKind.Light,
+            _ => SchemeDeviceKind.Module,
+        };
     }
 
     private static string WriteIssues(string dir, List<Issue> issues)
