@@ -14,6 +14,15 @@ public static class EquipmentSet
     public const string FlushingFile = "flushing_set.json";
     public const string PumpStationFile = "pump_station.json";
 
+    /// <summary>
+    /// Роли строк шаблона насосной, которые входят в комплектную установку: при её подборе строки заменяются одной
+    /// строкой установки, а сигналы этих позиций не выдаются.
+    /// </summary>
+    public static readonly IReadOnlySet<string> PumpSetRoles = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD",
+    };
+
     public static string PathFor(string normsDir, string file) => Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, file);
 
     /// <param name="places">DN каждого места установки.</param>
@@ -85,8 +94,10 @@ public static class EquipmentSet
     /// <summary>
     /// Сигналы в АПС по полю signals шаблона (ADR 0012): по одному источнику на сигнал позиции, количество — как у строки
     /// спецификации (per × множитель count). Подстановки и множители — как в <see cref="Items(string, TakeoffGroup, IReadOnlyDictionary{string, string}, IReadOnlyDictionary{string, int})"/>.
+    /// Позиции с ролью из <paramref name="excludedRoles"/> пропускаются — так сигналы совпадают со спецификацией,
+    /// когда строки заменены комплектной установкой (<see cref="PumpSetRoles"/>).
     /// </summary>
-    public static IReadOnlyList<SignalSource> Signals(string path, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts)
+    public static IReadOnlyList<SignalSource> Signals(string path, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts, IReadOnlySet<string>? excludedRoles = null)
     {
         ArgumentNullException.ThrowIfNull(tokens);
         ArgumentNullException.ThrowIfNull(counts);
@@ -94,7 +105,8 @@ public static class EquipmentSet
         var signals = new List<SignalSource>();
         foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
         {
-            if (!t.TryGetProperty("signals", out var list))
+            var role = t.TryGetProperty("role", out var r) ? r.GetString() : null;
+            if (!t.TryGetProperty("signals", out var list) || (role is not null && excludedRoles?.Contains(role) == true))
             {
                 continue;
             }
@@ -110,7 +122,7 @@ public static class EquipmentSet
             foreach (var s in list.EnumerateArray())
             {
                 signals.Add(new SignalSource(
-                    t.TryGetProperty("role", out var r) ? r.GetString() : null,
+                    role,
                     name,
                     s.GetProperty("kind").GetString() switch
                     {
@@ -127,6 +139,10 @@ public static class EquipmentSet
     }
 
     /// <summary>Сигналы комплекта на каждое место установки (<paramref name="places"/> — DN мест), сложенные по DN.</summary>
+    /// <remarks>
+    /// Сквозной расчёт узлы управления берёт из шаблона насосной (роли cu, cuValve); control_unit.json вместе с ним
+    /// не читается, иначе сигналы узлов посчитались бы дважды.
+    /// </remarks>
     public static IReadOnlyList<SignalSource> Signals(string path, IEnumerable<int> places)
     {
         ArgumentNullException.ThrowIfNull(places);

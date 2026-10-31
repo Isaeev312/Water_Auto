@@ -353,7 +353,6 @@ public static class ProjectPipeline
         // шаблона заменяются (при автоподборе и при выборе вручную из каталога одинаково).
         if (setChoice?.Chosen is { } chosenSetRow && stationTakeoff.Items.Count > 0)
         {
-            string[] covered = ["pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD"];
             var row = new TakeoffItem(
                 TakeoffGroup.PumpStation,
                 string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Установка пожаротушения {chosenSetRow.Designation}: {chosenSetRow.MainPumps} основн. + {chosenSetRow.StandbyPumps} резервн. насос {chosenSetRow.Pump}, P2 = {chosenSetRow.PowerKw:0.##} кВт, прибор управления Control MX-II, обвязка с арматурой и КИП; H = {setChoice.HeadAtDuty:0.0} м при Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч"),
@@ -363,7 +362,7 @@ public static class ProjectPipeline
                 $"коллекторы DN{chosenSetRow.CollectorDn}; или аналог",
                 Supplier: chosenSetRow.Maker,
                 Role: "pumpSet");
-            stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !covered.Contains(i.Role))] };
+            stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !EquipmentSet.PumpSetRoles.Contains(i.Role))] };
         }
 
         // Расстановка оборудования в помещении насосной (слой ПТ_НС) с проходами п. 6.10.16.

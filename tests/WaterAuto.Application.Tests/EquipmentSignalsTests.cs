@@ -31,6 +31,19 @@ public class EquipmentSignalsTests
     }
 
     [Fact]
+    public void Pump_set_roles_drop_signals_of_rows_replaced_by_the_set()
+    {
+        var tokens = new Dictionary<string, string> { ["dnS"] = "150", ["dnD"] = "125", ["dnC"] = "100" };
+        var counts = new Dictionary<string, int> { ["pumps"] = 2, ["sections"] = 1, ["inlets"] = 2 };
+
+        var signals = EquipmentSet.Signals(Catalog(EquipmentSet.PumpStationFile), tokens, counts, EquipmentSet.PumpSetRoles);
+
+        signals.ShouldNotContain(s => s.Role == "valveS" || s.Role == "valveD");
+        signals.Single(s => s.Role == "inletValve").Count.ShouldBe(2);
+        signals.ShouldContain(s => s.Role == "cuValve");
+    }
+
+    [Fact]
     public void Template_without_signals_gives_none_and_zero_count_is_skipped()
     {
         var dir = Directory.CreateTempSubdirectory();
