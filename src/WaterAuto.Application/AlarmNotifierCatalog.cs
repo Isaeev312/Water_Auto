@@ -12,8 +12,14 @@ public sealed record NotifierEntry(string Id, string Designation, string Manufac
 /// <summary>Усилитель речевого оповещения из каталога.</summary>
 public sealed record AmplifierEntry(string Id, SpeechAmplifier Model);
 
-/// <summary>Каталог оповещателей: оповещатели, релейные блоки, усилители речевого оповещения и модули контроля линий.</summary>
-public sealed record NotifierCatalog(IReadOnlyList<NotifierEntry> Notifiers, IReadOnlyList<RelayModel> Relays, IReadOnlyList<AmplifierEntry> Amplifiers, IReadOnlyList<LineMonitor> LineMonitors);
+/// <summary>Блок пуска АУП из каталога: модель для расчёта цепей и паспорт питания.</summary>
+public sealed record PowderStartUnitEntry(string Id, string Designation, string Manufacturer, PowderStartUnit Model, PoweredDevice Device);
+
+/// <summary>Каталог оповещателей: оповещатели, релейные блоки, усилители речевого оповещения, модули контроля линий, блоки пуска АУП.</summary>
+public sealed record NotifierCatalog(IReadOnlyList<NotifierEntry> Notifiers, IReadOnlyList<RelayModel> Relays, IReadOnlyList<AmplifierEntry> Amplifiers, IReadOnlyList<LineMonitor> LineMonitors)
+{
+    public IReadOnlyList<PowderStartUnitEntry> StartUnits { get; init; } = [];
+}
 
 /// <summary>Чтение каталога оповещателей и релейных блоков (data/catalog/alarm_notifiers.json); схему проверяет tools/ValidateData.</summary>
 public static class AlarmNotifierCatalog
@@ -73,7 +79,18 @@ public static class AlarmNotifierCatalog
             }
         }
 
-        return new NotifierCatalog(notifiers, relays, amplifiers, monitors);
+        var startUnits = new List<PowderStartUnitEntry>();
+        if (root.TryGetProperty("startUnits", out var units))
+        {
+            foreach (var u in units.EnumerateArray())
+            {
+                startUnits.Add(new PowderStartUnitEntry(Text(u, "id"), Text(u, "designation"), Text(u, "manufacturer"),
+                    new PowderStartUnit(Text(u, "name"), u.GetProperty("outputs").GetInt32(), u.GetProperty("maxOutputCurrent").GetDouble(), u.GetProperty("maxTotalCurrent").GetDouble(), u.GetProperty("monitorCurrent").GetDouble()),
+                    new PoweredDevice(Text(u, "name"), Current.Zero, 0, new Current(u.GetProperty("standbyCurrent").GetDouble()), new Current(u.GetProperty("alarmCurrent").GetDouble()), Text(u, "source"), u.TryGetProperty("certificate", out var c) ? c.GetString() : null)));
+            }
+        }
+
+        return new NotifierCatalog(notifiers, relays, amplifiers, monitors) { StartUnits = startUnits };
     }
 
     private static PoweredDevice Device(JsonElement e, string name) => new(

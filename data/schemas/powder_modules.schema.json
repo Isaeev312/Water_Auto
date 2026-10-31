@@ -161,7 +161,7 @@
           "startCurrent": {
             "type": "number",
             "exclusiveMinimum": 0,
-            "description": "Ток пуска, А."
+            "description": "Ток пуска, не менее, А (по паспорту)."
           },
           "startDuration": {
             "type": "number",
@@ -171,7 +171,7 @@
           "monitorCurrent": {
             "type": "number",
             "minimum": 0,
-            "description": "Ток контроля цепи пуска, А."
+            "description": "Безопасный ток проверки цепи пуска по паспорту, А (ток контроля прибора пуска должен быть не больше)."
           },
           "selfStartTemperature": {
             "type": "number"

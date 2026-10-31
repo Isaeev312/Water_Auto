@@ -12,7 +12,7 @@ public static class PowderNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<PowderRoom> rooms, PowderModuleEntry module, PowderResult result, IReadOnlyList<Issue> issues)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<PowderRoom> rooms, PowderModuleEntry module, PowderResult result, IReadOnlyList<Issue> issues, PowderStartPlan? start = null, PowderStartUnit? unit = null)
     {
         ArgumentNullException.ThrowIfNull(rooms);
         ArgumentNullException.ThrowIfNull(module);
@@ -52,9 +52,9 @@ public static class PowderNote
                     "устройства ручного, дистанционного и местного пуска опломбированы, кроме устройств на пожарном посту (п. 10.4.2);",
                     "крепления модулей — на пятикратный вес (п. 10.2.14); вход после подачи порошка — только в изолирующих СИЗОД (п. 10.4.6).",
                 ]),
-                new NotePending(module.StartCurrent is { } sc
-                    ? string.Create(Ru, $"Цепи пуска: ток пуска {sc:0.##} А{(module.StartDuration is { } sd ? $", импульс {sd:0.##} с" : "")} на модуль — выбор приборов пуска и расчёт их питания выполняются в разделе АПС (не автоматизировано).")
-                    : "Цепи пуска: ток пуска модуля в каталоге не указан — приборы пуска и их питание подобрать по паспорту модуля в разделе АПС."),
+                start is { Units: > 0 } && unit is not null && module.StartCurrent is { } sc
+                    ? new NoteParagraph(string.Create(Ru, $"Цепи пуска: модули включаются параллельно по {start.ModulesPerOutput} на выход {unit.Name} (ток выхода до {unit.MaxOutputCurrent:0.#} А при токе пуска модуля не менее {sc:0.##} А); выходов — {string.Join(", ", start.OutputsByRoom.Select(kv => $"{rooms.First(r => r.Id == kv.Key).Name} — {kv.Value}"))}; блоков — {start.Units}. Ток контроля цепей блока {unit.MonitorCurrent * 1000:0.#} мА{(module.MonitorCurrent is { } mc ? $" при безопасном токе проверки модуля {mc * 1000:0.#} мА" : "")}. Блоки питаются от РИП АПС и учтены в расчёте АКБ; управление — от пульта по RS-485 программой «Запуск АУП»."))
+                    : new NotePending("Цепи пуска не рассчитаны: нет блока пуска в каталоге или тока пуска модуля — подобрать по паспорту модуля в разделе АПС."),
             ]),
         };
         var problems = issues.Where(i => i.Code.StartsWith("powder.", StringComparison.Ordinal) && i.Level != IssueLevel.Info).ToList();

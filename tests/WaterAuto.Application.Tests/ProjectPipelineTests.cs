@@ -376,6 +376,12 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Files.Where(f => Path.GetFileName(f).StartsWith("apt_", StringComparison.Ordinal)).ShouldAllBe(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.PowderVolume);
         var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
         spec.Single(r => r[2] == "Буран-8У")[5].ShouldBe("48");
+        // Пуск: ток пуска Буран-8У 0,7 А, выход С2000-КПБ до 2,5 А → 3 модуля на выход; 24 модуля → 8 выходов → 2 блока по 6 выходов.
+        spec.Single(r => r[2] == "С2000-КПБ")[5].ShouldBe("2");
+        // Блоки пуска питаются от РИП — расчёт АКБ выпускается и без раздела alarm.
+        names.ShouldContain(ProjectPipeline.BatteryFile);
+        var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.BatteryFile, StringComparison.Ordinal)));
+        battery.ShouldContain(r => r.Any(c => c.StartsWith("С2000-КПБ", StringComparison.Ordinal)));
         using (var doc = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.PowderNoteFile, StringComparison.Ordinal)), false))
         {
             doc.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("600/26·1·1·1·1 = 23,08 → 24");
