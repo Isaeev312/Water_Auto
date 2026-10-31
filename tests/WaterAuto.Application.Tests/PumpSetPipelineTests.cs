@@ -135,6 +135,24 @@ public sealed class PumpSetPipelineTests : IDisposable
         result.Files.Single(f => f.EndsWith(name, StringComparison.Ordinal));
 
     [Fact]
+    public void Signal_list_follows_the_station_specification()
+    {
+        Drawing();
+        var result = Run(Project());
+        result.Success.ShouldBeTrue(IssueText(result));
+        result.Pump.ShouldNotBeNull();
+
+        var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.SignalListFile));
+        var ids = rows.Skip(WaterAuto.Reports.SignalListXlsx.HeaderRow).Select(r => r[1]).ToList();
+
+        // Два ввода в насосную — две задвижки; одна секция — затворы до и после узла и его сигнализатор давления.
+        ids.ShouldBe(["inletValve.1", "inletValve.2", "cu.1", "cuValve.1", "cuValve.2"], ignoreOrder: true);
+        // Затворы обвязки входят в комплектную установку и в перечень не попадают, как и в ПТ2.СО.
+        ids.ShouldNotContain(id => id.StartsWith("valveS", StringComparison.Ordinal) || id.StartsWith("valveD", StringComparison.Ordinal));
+        result.Issues.ShouldContain(i => i.Code == "aps.signals.incomplete");
+    }
+
+    [Fact]
     public void Auto_selection_fills_the_pump_summary()
     {
         Drawing();

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using WaterAuto.Alarm;
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Calc.Layout;
 using WaterAuto.Calc.Routing;
@@ -85,6 +86,7 @@ public static class ProjectPipeline
     public const string InletRouteFile = "inlet_route.dxf";
     public const string PumpRoomAxonometryFile = "pump_room_axonometry.dxf";
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
+    public const string SignalListFile = "aps_signals.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -307,27 +309,33 @@ public static class ProjectPipeline
             }
         }
 
+        IReadOnlyList<ControlPoint> controlPoints = [];
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
             var ruPs = CultureInfo.GetCultureInfo("ru-RU");
-            stationTakeoff = stationTakeoff with
+            var stationTokens = new Dictionary<string, string>
             {
-                Items = [.. EquipmentSet.Items(
-                    stationSet,
-                    TakeoffGroup.PumpStation,
-                    new Dictionary<string, string>
-                    {
-                        ["q"] = (worst.PumpFlow.LitersPerSecond * 3.6).ToString("0.0", ruPs),
-                        ["h"] = worst.PumpHead.Meters.ToString("0.0", ruPs),
-                        ["dnS"] = station.Suction.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
-                        ["dnD"] = station.Discharge.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
-                        ["dnC"] = design.SupplyDn.ToString(CultureInfo.InvariantCulture),
-                        ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
-                        ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
-                    },
-                    new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 })],
+                ["q"] = (worst.PumpFlow.LitersPerSecond * 3.6).ToString("0.0", ruPs),
+                ["h"] = worst.PumpHead.Meters.ToString("0.0", ruPs),
+                ["dnS"] = station.Suction.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
+                ["dnD"] = station.Discharge.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
+                ["dnC"] = design.SupplyDn.ToString(CultureInfo.InvariantCulture),
+                ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
+                ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
             };
+            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 };
+            stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
+
+            // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают.
+            var points = ControlPoints.Build(EquipmentSet.Signals(stationSet, stationTokens, stationCounts, setChoice?.Chosen is not null ? EquipmentSet.PumpSetRoles : null));
+            controlPoints = points.Points;
+            issues.AddRange(points.Issues);
+            if (controlPoints.Count > 0)
+            {
+                issues.Add(new Issue("aps.signals.incomplete", IssueLevel.Info,
+                    "Перечень сигналов АУПТ в АПС неполный: сигналов шкафа управления насосами, жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+            }
         }
 
         // Диагностика неполного выпуска: молча пропускать листы и данные нельзя (аудит PD-14, PS-6/PS-7).
@@ -936,6 +944,11 @@ public static class ProjectPipeline
         {
             Write(outDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
             Write(outDir, PumpStationSpecXlsxFile, files, p => SpecificationXlsx.Write(p, stationTakeoff, new SpecificationHeader($"{project.Name}. Насосная станция. Спецификация оборудования, изделий и материалов"), project.Font, continuous: true));
+        }
+
+        if (controlPoints.Count > 0)
+        {
+            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font));
         }
 
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
