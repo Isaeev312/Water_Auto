@@ -99,8 +99,12 @@ public sealed record PowerBudget(
 /// <summary>Строка спецификации оборудования АПС.</summary>
 public sealed record AlarmSpecItem(string Name, string Designation, string Manufacturer, string Unit, int Quantity, string? Certificate, string? Note);
 
-/// <summary>Строка кабельного журнала: откуда, куда, назначение, марка, длина (0 — не определена) и примечание.</summary>
-public sealed record CableLine(string Id, string From, string To, string Purpose, string Cable, double LengthM, string Note);
+/// <summary>
+/// Строка кабельного журнала: откуда, куда, назначение, марка, длина с запасом (0 — не определена) и примечание;
+/// <paramref name="BaseLengthM"/> — длина по плану без запаса (для графы «Общая длина»), null — не выделена.
+/// Сегмент линии (от устройства к устройству) обозначается «линия.номер» (ДПЛС1.3), итог по линии — «ДПЛС1».
+/// </summary>
+public sealed record CableLine(string Id, string From, string To, string Purpose, string Cable, double LengthM, string Note, double? BaseLengthM = null);
 
 /// <summary>Сечение ДПЛС и наибольшая длина линии, м, по суммарному току адресных устройств, мА (паспорт контроллера).</summary>
 public sealed record LoopCableSection(double SectionMm2, IReadOnlyDictionary<double, double> MaxLengthMByLoadMa);

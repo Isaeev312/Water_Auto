@@ -7,7 +7,7 @@ namespace WaterAuto.Alarm;
 /// Линия контроллера для журнала: устройства на ней (точки плана) и суммарный ток адресных устройств.
 /// <paramref name="RiserMm"/> — длина вертикальных участков (стояков) между уровнями, туда и обратно по кольцу, мм.
 /// </summary>
-public sealed record LoopLine(int Number, IReadOnlyList<PlanPoint> Devices, Current Load, bool HasPumpModules, double RiserMm = 0);
+public sealed record LoopLine(int Number, IReadOnlyList<PlanPoint> Devices, Current Load, bool HasPumpModules, double RiserMm = 0, IReadOnlyList<string>? DeviceIds = null);
 
 public sealed record CableJournalResult(IReadOnlyList<CableLine> Lines, IReadOnlyList<Issue> Issues);
 
@@ -48,7 +48,25 @@ public static class CableJournal
             }
 
             lines.Add(new CableLine($"ДПЛС{loop.Number}", $"{controllerName} №{loop.Number}", $"{loop.Devices.Count} адресных устройств{(loop.HasPumpModules ? $", {moduleName} в насосной" : "")}", "адресная линия связи (кольцо)", mark, Math.Round(lengthM, 0),
-                string.Create(Ru, $"ток линии {loadMa:0.#} мА; длина кольца по плану{(loop.RiserMm > 0 ? $" и стояков {loop.RiserMm / 1000:0.#} м" : "")} с запасом {cables.Reserve:0.##}; сечение по табл. длин ДПЛС")));
+                string.Create(Ru, $"ток линии {loadMa:0.#} мА; длина кольца по плану{(loop.RiserMm > 0 ? $" и стояков {loop.RiserMm / 1000:0.#} м" : "")} с запасом {cables.Reserve:0.##}; сечение по табл. длин ДПЛС"),
+                Math.Round(lengthM / cables.Reserve, 0)));
+
+            // Сегменты кольца от устройства к устройству (как в таблице прокладки): порядок — тот же обход ближайшего соседа.
+            if (loop.DeviceIds is { } ids && ids.Count == loop.Devices.Count && ids.Count > 0)
+            {
+                var controller = $"{controllerName} №{loop.Number}";
+                var k = 0;
+                foreach (var (fromIndex, toIndex, segmentMm) in Segments(panel, loop.Devices))
+                {
+                    k++;
+                    var from = fromIndex < 0 ? controller : ids[fromIndex];
+                    var to = toIndex < 0 ? controller : ids[toIndex];
+                    var extra = fromIndex < 0 || toIndex < 0 ? loop.RiserMm / 2 : 0; // стояк — на участках от поста и к посту
+                    var baseM = (segmentMm + extra) / 1000;
+                    lines.Add(new CableLine($"ДПЛС{loop.Number}.{k}", from, to, "", mark, Math.Round(baseM * cables.Reserve, 0), extra > 0 ? "со стояком между уровнями" : "", Math.Round(baseM, 0)));
+                }
+            }
+
             n++;
         }
 
@@ -89,6 +107,31 @@ public static class CableJournal
         }
 
         return total + (points.Count > 0 ? Manhattan(at, start) : 0);
+    }
+
+    /// <summary>Участки того же обхода: индексы устройств (−1 — пост) и длина участка по осям, мм; последний — возврат к посту.</summary>
+    public static IReadOnlyList<(int From, int To, double Mm)> Segments(PlanPoint start, IReadOnlyList<PlanPoint> points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        var left = Enumerable.Range(0, points.Count).ToList();
+        var at = start;
+        var atIndex = -1;
+        var result = new List<(int, int, double)>();
+        while (left.Count > 0)
+        {
+            var next = left.MinBy(i => Manhattan(at, points[i]));
+            result.Add((atIndex, next, Manhattan(at, points[next])));
+            left.Remove(next);
+            at = points[next];
+            atIndex = next;
+        }
+
+        if (points.Count > 0)
+        {
+            result.Add((atIndex, -1, Manhattan(at, start)));
+        }
+
+        return result;
     }
 
     private static double Manhattan(PlanPoint a, PlanPoint b) => Math.Abs(a.XMm - b.XMm) + Math.Abs(a.YMm - b.YMm);

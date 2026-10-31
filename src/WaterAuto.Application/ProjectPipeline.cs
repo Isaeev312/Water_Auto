@@ -602,7 +602,8 @@ public static class ProjectPipeline
                             addressDevices.Add(new(manual.Id, $"ИПР {manualModel?.Name ?? ""} — {zoneById[manual.RoomId].RoomName}".Trim(), "Пожар (ручной)", "", manualModel?.LoopCurrent ?? Current.Zero));
                         }
 
-                        foreach (var s in soue?.Sounders ?? [])
+                        // Громкоговорители линии 100 В — не адресные устройства: в таблицу адресов и ДПЛС не идут.
+                        foreach (var s in sounderEntry?.Speaker is null ? soue?.Sounders ?? [] : [])
                         {
                             addressDevices.Add(new(s.Id, $"{sounderEntry?.Model.Name} — {zoneById[s.RoomId].RoomName}", "Оповещение (выход)", "", sounderEntry?.Device.LoopCurrent ?? Current.Zero));
                         }
@@ -630,8 +631,8 @@ public static class ProjectPipeline
                             addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
                         // Устройства с уровнем: кольцо на другом уровне идёт стояком от поста и обратно — к длине по плану прибавляется 2·Δотм.
                         var levelOf = levels.SelectMany(l => l.Zones.Select(z => (z.RoomId, l))).ToDictionary(x => x.RoomId, x => x.l);
-                        var devicePoints = (detectorLayout?.Detectors.Select(d => (d.Location, d.RoomId)) ?? []).Concat(zoning?.Manuals.Select(m => (m.Location, m.RoomId)) ?? [])
-                            .Concat(soue?.Sounders.Select(s => (s.Location, s.RoomId)) ?? []).Concat(soue?.Lights.Select(l => (l.Location, l.RoomId)) ?? []).ToList();
+                        var devicePoints = (detectorLayout?.Detectors.Select(d => (d.Location, d.RoomId, d.Id)) ?? []).Concat(zoning?.Manuals.Select(m => (m.Location, m.RoomId, m.Id)) ?? [])
+                            .Concat(soue?.Sounders.Where(_ => sounderEntry?.Speaker is null).Select(s => (s.Location, s.RoomId, s.Id)) ?? []).Concat(soue?.Lights.Select(l => (l.Location, l.RoomId, l.Id)) ?? []).ToList();
                         var loops = new List<LoopLine>();
                         var offset = 0;
                         var baseElevation = levels[0].Elevation;
@@ -642,7 +643,7 @@ public static class ProjectPipeline
                             var onLoop = devicePoints.Skip(offset).Take(take).ToList();
                             var riserMm = onLoop.Select(d => levelOf.GetValueOrDefault(d.RoomId)).Where(l => l is not null && l.Index > 0).Distinct()
                                 .Sum(l => l!.Elevation is { } e && baseElevation is { } b ? 2 * Math.Abs(e - b) * 1000 : 0);
-                            loops.Add(new LoopLine(k + 1, onLoop.Select(d => d.Location).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0, riserMm));
+                            loops.Add(new LoopLine(k + 1, onLoop.Select(d => d.Location).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0, riserMm, onLoop.Select(d => d.Id).ToList()));
                             offset += take;
                         }
 
