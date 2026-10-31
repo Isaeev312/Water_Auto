@@ -1,0 +1,18 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 484.1311500.2020",
+  "edition": "с изм. № 1 (утв. приказом МЧС России от 27.03.2025)",
+  "clause": "табл. 6.1",
+  "title": "Аспирационные дымовые ИП: максимальная высота помещения по классу чувствительности",
+  "source": "sp4841311500-izm1.pdf, табл. 6.1 и текст после неё (высокостеллажные склады).",
+  "verified": false,
+  "footnotes": {
+    "Склады до 40 м": "воздухозаборные отверстия в два уровня: класса не ниже B — не выше 30 м (под ярусами), класса A — не выше 40 м (под перекрытием). Высота помещения — по самой высокой части."
+  },
+  "records": [
+    { "id": "sp484.t6_1.classA", "clause": "табл. 6.1", "values": { "maxRoomHeight": 30 }, "units": { "maxRoomHeight": "м" }, "attrs": { "class": "A" } },
+    { "id": "sp484.t6_1.classB", "clause": "табл. 6.1", "values": { "maxRoomHeight": 18 }, "units": { "maxRoomHeight": "м" }, "attrs": { "class": "B" } },
+    { "id": "sp484.t6_1.classC", "clause": "табл. 6.1", "values": { "maxRoomHeight": 12 }, "units": { "maxRoomHeight": "м" }, "attrs": { "class": "C" } }
+  ]
+}

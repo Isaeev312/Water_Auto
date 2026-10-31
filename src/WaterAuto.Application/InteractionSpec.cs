@@ -51,7 +51,7 @@ public static class InteractionSpec
                 new NoteList([.. budget.Lines.Where(l => l.Count > 0).Select(l => $"{l.Name} — {l.Count} шт.")]),
                 new NoteParagraph(string.Create(ru, $"Питание приборов — {budget.Voltage.Volts:0.#} В от резервированного источника с АКБ. Ток потребления в дежурном режиме — {budget.Standby.Amperes * 1000:0.#} мА, в режиме «Пожар» — {budget.Alarm.Amperes * 1000:0.#} мА, собственный ток источника от АКБ — {budget.SupplyOwn.Amperes * 1000:0.#} мА.")),
                 new NoteParagraph(budget.Required is { } r
-                    ? string.Create(ru, $"Требуемая ёмкость АКБ по прил. Б СП 6.13130.2025 — {r.AmpereHours:0.##} А·ч; принята {b.Name} ({b.Nominal.AmpereHours:0.##} А·ч). Расчёт — aps_battery.xlsx.")
+                    ? string.Create(ru, $"Требуемая ёмкость АКБ по прил. Б СП 6.13130.2025 — {r.AmpereHours:0.##} А·ч{(budget.Supplies > 1 ? $" на каждый из {budget.Supplies} источников" : "")}; принята {b.Name} ({b.Nominal.AmpereHours:0.##} А·ч). Расчёт — aps_battery.xlsx.")
                     : "Ёмкость АКБ не определена — см. замечания расчёта (aps_battery.xlsx)."),
                 new NotePending("Помещение установки приборов, линия связи с пультом (RS-485) и питание от сети — указать проектировщику АПС."),
             ]));

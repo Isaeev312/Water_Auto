@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "name": "Подземная автостоянка (пример)",
+  "drawing": "floor.dxf",
+  "design": {
+    "roomGroup": "2",
+    "sprinklerK": 0.47,
+    "sprinklerModel": "по каталогу",
+    "pipeElevation": -1.5,
+    "dictatingAboveAxis": 3.5,
+    "supplyLength": 30,
+    "supplyDn": 125,
+    "inletPressure": 0.1,
+    "designVelocity": 5,
+    "roomHeight": 3.0,
+    "pumpRoom": {
+      "floorElevation": -3,
+      "groundElevation": 0,
+      "height": 4.5,
+      "underground": true
+    },
+    "pumpStation": {
+      "setDesignation": ""
+    }
+  },
+  "title": {
+    "organization": "ОсОО «Пример»",
+    "subject": "Подземная автостоянка",
+    "document": "Проект",
+    "author": "Исаев А.",
+    "supervisor": "",
+    "cityYear": "Бишкек 2026",
+    "code": "2026-01",
+    "building": "Подземная автостоянка на 45 машино-мест"
+  },
+  "alarm": {
+    "zones": [
+      {
+        "room": "Автостоянка",
+        "detector": "Smoke",
+        "algorithm": "C",
+        "addressable": true,
+        "ceilingHeight": 3.0,
+        "model": "bolid.dip34a_03"
+      }
+    ],
+    "manualModel": "bolid.ipr513_3am",
+    "levels": [
+      { "name": "−1 этаж", "elevation": -3.0 },
+      { "name": "−2 этаж", "drawing": "floor_m2.dxf", "elevation": -6.0 }
+    ],
+    "panel": {
+      "x": 14000,
+      "y": 2000
+    },
+    "warning": {
+      "method": "Speech",
+      "methodRow": "sp3.tB_1m.undergroundParking",
+      "indicator": 90,
+      "backgroundRow": "sp3.tB_1.parking",
+      "backgroundDba": 60,
+      "sounder": "bolid.opr_s103_1",
+      "speakerTap": 3
+    },
+    "hvac": {
+      "generalVentilation": [
+        "П-1",
+        "П-2",
+        "В-1",
+        "В-2"
+      ],
+      "smokeZones": [
+        {
+          "name": "ДЗ-1",
+          "exhaustSystem": "ВДУ-1",
+          "supplySystem": "ПД-1",
+          "smokeDampers": 2
+        },
+        {
+          "name": "ДЗ-2",
+          "exhaustSystem": "ВДУ-2",
+          "supplySystem": "ПД-2",
+          "smokeDampers": 2
+        }
+      ],
+      "normallyOpenDampers": 4
+    }
+  }
+}

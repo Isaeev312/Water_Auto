@@ -1,0 +1,242 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 484.1311500.2020",
+  "edition": "с изм. № 1 (утв. приказом МЧС России от 27.03.2025)",
+  "title": "Размещение пожарных извещателей: зоны контроля, отступы, ИПР",
+  "source": "sp4841311500-izm1.pdf (текст с Изменением № 1), пп. 6.2.3, 6.6.1, 6.6.2, 6.6.36, 6.6.39, 6.6.40, 6.5.1, 6.6.9, 6.6.12, 6.6.15, 6.6.16, 6.6.18, 6.6.27, 6.6.32, 6.6.35, 6.6.41; сверено с aps_norms_review_2026-10.md, разд. 2.",
+  "verified": false,
+  "records": [
+    {
+      "id": "sp484.p6_6_1.coverageAB",
+      "clause": "6.6.1",
+      "values": {
+        "nonAddressable": 2,
+        "addressable": 1
+      },
+      "units": {
+        "nonAddressable": "ИП на каждую точку",
+        "addressable": "ИП на каждую точку"
+      },
+      "note": "Алгоритмы A и B: помещение контролируется не менее чем двумя безадресными ИП, каждая точка — двумя ИП; либо одним адресным ИП, каждая точка — одним ИП."
+    },
+    {
+      "id": "sp484.p6_6_2.coverageC",
+      "clause": "6.6.2",
+      "values": {
+        "detectors": 2
+      },
+      "units": {
+        "detectors": "ИП на каждую точку"
+      },
+      "note": "Алгоритм C: не менее двух автоматических ИП, каждая точка помещения контролируется не менее чем двумя ИП."
+    },
+    {
+      "id": "sp484.p6_6_36.wallOffset",
+      "clause": "6.6.36",
+      "values": {
+        "minToWall": 0.5,
+        "minToWallForced": 0.1,
+        "lowProtrusion": 0.25,
+        "lowProtrusionHeights": 2
+      },
+      "units": {
+        "minToWall": "м",
+        "minToWallForced": "м",
+        "lowProtrusion": "м",
+        "lowProtrusionHeights": "высот конструкции"
+      },
+      "note": "От ИП до стен и конструкций, выступающих от перекрытия более 0,25 м, — не менее 0,5 м; между близкими стенами — по центру; при невозможности совместить с другими требованиями — не менее 0,1 м. До конструкций, выступающих на 0,25 м и менее, — не менее двух их высот."
+    },
+    {
+      "id": "sp484.p6_6_39.underDucts",
+      "clause": "6.6.39",
+      "values": {
+        "minWidthHeat": 1.0,
+        "minWidthSmoke": 2.0,
+        "minBelowCeiling": 0.4,
+        "minAboveFloor": 1.3
+      },
+      "units": {
+        "minWidthHeat": "м",
+        "minWidthSmoke": "м",
+        "minBelowCeiling": "м",
+        "minAboveFloor": "м"
+      },
+      "note": "Под сплошными коробами и площадками шириной от L (тепловые — 1,0 м, дымовые — 2,0 м), низ которых ниже потолка более чем на 0,4 м и не ниже 1,3 м от пола, — дополнительные ИП."
+    },
+    {
+      "id": "sp484.p6_6_40.tallStorage",
+      "clause": "6.6.40",
+      "values": {
+        "maxGapToCeiling": 0.6
+      },
+      "units": {
+        "maxGapToCeiling": "м"
+      },
+      "note": "Штабели, стеллажи, оборудование на полу, верх которых ближе 0,6 м к потолку, — сплошные перегородки на всю высоту при размещении ИП."
+    },
+    {
+      "id": "sp484.p6_6_15.heatPoint",
+      "clause": "6.6.15",
+      "values": {
+        "maxRoomHeight": 9,
+        "radius": 3.5
+      },
+      "units": {
+        "maxRoomHeight": "м",
+        "radius": "м"
+      },
+      "note": "Точечные тепловые ИП — помещения высотой до 9 м включительно; радиус зоны контроля не более 3,5 м. Изм. № 1 убрало зависимость радиуса от высоты."
+    },
+    {
+      "id": "sp484.p6_6_16.smokePoint",
+      "clause": "6.6.16",
+      "values": {
+        "maxRoomHeight": 12,
+        "radius": 6.4
+      },
+      "units": {
+        "maxRoomHeight": "м",
+        "radius": "м"
+      },
+      "note": "Точечные дымовые ИП — помещения высотой до 12 м включительно; радиус зоны контроля не более 6,4 м."
+    },
+    {
+      "id": "sp484.p6_6_18.smokeLinear",
+      "clause": "6.6.18",
+      "values": {
+        "maxRoomHeight": 21,
+        "axisToWall": 4.5,
+        "axisToAxis": 9.0,
+        "belowCeilingMin": 25,
+        "belowCeilingMax": 600
+      },
+      "units": {
+        "maxRoomHeight": "м",
+        "axisToWall": "м",
+        "axisToAxis": "м",
+        "belowCeilingMin": "мм",
+        "belowCeilingMax": "мм"
+      },
+      "note": "Линейные дымовые ИП — до 21 м; ось — не более 4,5 м от стены, между осями не более 9 м; от перекрытия до оси 25–600 мм. Размещение ниже 600 мм — по долям высоты установки (25 % и 12,5 %), не формализовано."
+    },
+    {
+      "id": "sp484.p6_6_9.cornerOffset",
+      "clause": "6.6.9",
+      "values": {
+        "ceilingToWallCorner": 500,
+        "wallToCorner": 100
+      },
+      "units": {
+        "ceilingToWallCorner": "мм",
+        "wallToCorner": "мм"
+      },
+      "note": "ИП на потолке — не менее 500 мм от угла между стеной и потолком; ИП на стене — не менее 100 мм от угла между стенами и от угла стена–потолок."
+    },
+    {
+      "id": "sp484.p6_6_12.belowCeiling",
+      "clause": "6.6.12",
+      "values": {
+        "min": 25,
+        "maxSmoke": 600,
+        "maxHeat": 150
+      },
+      "units": {
+        "min": "мм",
+        "maxSmoke": "мм",
+        "maxHeat": "мм"
+      },
+      "note": "Чувствительный элемент точечного ИП ниже перекрытия: не менее 25 мм; не более 600 мм — дымовые, 150 мм — тепловые. Не для аспирационных."
+    },
+    {
+      "id": "sp484.p6_6_32.ventOpening",
+      "clause": "6.6.32",
+      "values": {
+        "minDistance": 1,
+        "maxAirSpeed": 1.0
+      },
+      "units": {
+        "minDistance": "м",
+        "maxAirSpeed": "м/с"
+      },
+      "note": "От точечного ИП до вентиляционного отверстия — не менее 1 м; ближе допустимо, если расчётная скорость потока в месте установки не более 1,0 м/с."
+    },
+    {
+      "id": "sp484.p6_6_35.slopedCeiling",
+      "clause": "6.6.35",
+      "values": {
+        "radiusGainPerDegree": 1,
+        "radiusGainMax": 25
+      },
+      "units": {
+        "radiusGainPerDegree": "% на 1°",
+        "radiusGainMax": "%"
+      },
+      "note": "ИП в самой высокой точке наклонного потолка: радиус зоны контроля увеличивается на 1 % на каждый градус наклона, но не более чем на 25 %. Для фигурного профиля — средний наклон."
+    },
+    {
+      "id": "sp484.p6_6_41.lowSpace",
+      "clause": "6.6.41",
+      "values": {
+        "maxSpaceHeight": 1.7,
+        "radiusFactor": 1.5
+      },
+      "units": {
+        "maxSpaceHeight": "м",
+        "radiusFactor": "коэффициент"
+      },
+      "note": "Под фальшполом, над фальшпотолком и в других пространствах высотой менее 1,7 м радиус зоны контроля дымовых и газовых точечных ИП допускается увеличивать в 1,5 раза."
+    },
+    {
+      "id": "sp484.p6_5_1.minSpacingAlgorithmC",
+      "clause": "6.5.1",
+      "values": {
+        "minSpacing": 1.2
+      },
+      "units": {
+        "minSpacing": "м"
+      },
+      "note": "При алгоритме C — равномерное распределение ИП и расстояние между ИП не менее 1,2 м (меньше — только если иначе не выполнить другие требования размещения)."
+    },
+    {
+      "id": "sp484.p6_6_27.manual",
+      "clause": "6.6.27",
+      "values": {
+        "maxToAnyPointUnknownLayout": 30,
+        "maxBetweenIndoor": 45,
+        "maxBetweenOutdoor": 100,
+        "maxToRoomExit": 30,
+        "mountHeight": 1.5,
+        "mountHeightTolerance": 0.1,
+        "minProtrusion": 15
+      },
+      "units": {
+        "maxToAnyPointUnknownLayout": "м",
+        "maxBetweenIndoor": "м",
+        "maxBetweenOutdoor": "м",
+        "maxToRoomExit": "м",
+        "mountHeight": "м",
+        "mountHeightTolerance": "м",
+        "minProtrusion": "мм"
+      },
+      "note": "ИПР — на путях эвакуации, у выходов, в вестибюлях и холлах; не на лестничных клетках (кроме ИПР, формирующих сигналы управления). Планировка не установлена — до ближайшего ИПР не более 30 м по прямой от любой точки здания; установлена — не более 45 м между ИПР внутри, 100 м снаружи, 30 м от ИПР до выхода из любого помещения. Высота органа управления (1,5 ± 0,1) м; при углублённом монтаже корпус выступает не менее 15 мм."
+    },
+    {
+      "id": "sp484.p6_2_3.heatClassHighRoom",
+      "clause": "6.2.3",
+      "values": {
+        "roomHeightAbove": 6,
+        "minResponseTemperature": 54
+      },
+      "units": {
+        "roomHeightAbove": "м",
+        "minResponseTemperature": "°С"
+      },
+      "attrs": {
+        "classes": "A1, A1R, PR"
+      },
+      "note": "В помещениях высотой свыше 6 м точечные тепловые ИП — классов A1, A1R или PR (температура срабатывания от 54 °С) по ГОСТ 34698."
+    }
+  ]
+}

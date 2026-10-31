@@ -22,7 +22,7 @@
 |---|---|---|
 | WaterAuto.Core | Доменная модель, единицы, интерфейсы (`INormsProvider`, `ICatalog`) | ничего |
 | WaterAuto.Calc | Этапы расчёта: параметры, раскладка, гидравлика, диктующая зона, насос, РЧВ, проверки, прил. В | Core |
-| WaterAuto.Alarm | АПС, СОУЭ и охрана (ADR 0012): точки управления АУПТ, таблица адресов, АКБ, падение напряжения. Calc и Alarm друг на друга не ссылаются, связывает их Application | Core |
+| WaterAuto.Alarm | АПС, СОУЭ и охрана (ADR 0012): точки управления АУПТ, таблица адресов, АКБ, раскладка извещателей по СП 484. Calc и Alarm друг на друга не ссылаются, связывает их Application | Core |
 | WaterAuto.Norms | Загрузка и проверка `data/norms/*.json` | Core |
 | WaterAuto.Catalog | Оросители, насосы, «своё оборудование» | Core |
 | WaterAuto.Import | Чтение DWG/DXF по соглашению о слоях (раздел 8) | Core |
@@ -51,6 +51,8 @@ WaterAuto/
 │  └─ WaterAuto.App/      # WPF: App/Themes (темы, акценты, стили), Ui (ThemeManager, WindowChrome), InputData (мастер: поля, проверка чертежа, статусы разделов), QuickProject, SettingsWindow, MainWindow, PumpSetWindow
 ├─ data/
 │  ├─ norms/sp485/        # табл. 6.1–6.4, А.1, Б.1–Б.4, В.1, правила 6.2, 6.7
+│  ├─ norms/sp484/        # АПС: зоны контроля ИП, табл. 6.1–6.3, ЗКСПС, ёмкость ППКП (этап 2 ADR 0012)
+│  ├─ norms/sp6/          # прил. Б: время работы от АКБ
 │  ├─ catalog/            # sprinklers.json, pumps.json
 │  └─ templates/          # docx записки, A3 спецификации, DWG-шаблон слоёв
 ├─ tests/

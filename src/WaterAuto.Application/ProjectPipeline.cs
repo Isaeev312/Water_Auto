@@ -91,11 +91,29 @@ public static class ProjectPipeline
     public const string BatteryFile = "aps_battery.xlsx";
     public const string InteractionFile = "aps_interaction.docx";
     public const string AddressTableFile = "aps_addresses.xlsx";
+    public const string AlarmPlanFile = "aps_plan.dxf";
+
+    /// <summary>План АПС уровня n при нескольких уровнях (alarm.levels): aps_plan_1.dxf, aps_plan_2.dxf…</summary>
+    public static string AlarmPlanLevelFile(int level) => string.Create(CultureInfo.InvariantCulture, $"aps_plan_{level}.dxf");
+    public const string AlarmNoteFile = "aps_pz.docx";
+    public const string AlarmSchemeFile = "aps_scheme.dxf";
+    public const string AlarmSpecFile = "aps_spec.xlsx";
+    public const string CableJournalFile = "aps_cables.xlsx";
+    public const string CableJournalDocxFile = "aps_cables.docx";
+    public const string AlarmGeneralDataFile = "aps_general_data.docx";
+    public const string HvacSpecFile = "aps_hvac.docx";
+    public const string SouePlanLayer = "СОУЭ_ОПОВЕЩАТЕЛИ";
     public const string IssuesFile = "issues.txt";
+
+    /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
+    public const string AuptVolume = "АУПТ";
+    public const string AlarmVolume = "АПС";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
     {
         Directory.CreateDirectory(outDir);
+        var auptDir = Path.Combine(outDir, AuptVolume);
+        var alarmDir = Path.Combine(outDir, AlarmVolume);
         var issues = new List<Issue>();
         var files = new List<string>();
         PipelineResult Stop()
@@ -138,6 +156,185 @@ public static class ProjectPipeline
 
         var layout = SprinklerLayouter.Layout(plan, rules, design.FloorElevation is { } floor ? new Length(floor) : null);
         issues.AddRange(layout.Issues);
+
+        // АПС, этап 2 (ADR 0012): извещатели — только в помещениях и с параметрами, заданными проектировщиком.
+        // Уровни (alarm.levels): зоны собираются по чертежу каждого уровня с уникальными ID помещений; раскладка, ЗКСПС, СОУЭ,
+        // питание и спецификация считаются по всем зонам разом, лист плана — на каждый уровень, стояки — в кабельный журнал.
+        var levels = AlarmLevels(project, plan, projectPath, issues);
+        var detectorZones = new List<DetectorZone>();
+        foreach (var level in levels)
+        {
+            level.Zones.AddRange(AlarmZones(project, level, design, normsDir, issues, levels.Count > 1));
+            detectorZones.AddRange(level.Zones);
+        }
+
+        var alarmSheets = AlarmSheets(project, levels);
+        var detectorLayout = detectorZones.Count > 0 ? DetectorLayouter.Layout(detectorZones, norms) : null;
+        AlarmZoningResult? zoning = null;
+        SoueLayout? soue = null;
+        var poweredDevices = new List<(PoweredDevice Device, int Count)>();
+        RelayModel? relayModel = null;
+        var soueRelayOutputs = 0;
+        NotifierEntry? sounderEntry = null;
+        NotifierEntry? lightEntry = null;
+        SpeakerTap? speakerTap = null;
+        SpeechAmplifier? amplifier = null;
+        LineMonitor? lineMonitor = null;
+        SpeechPlan? speechPlan = null;
+        DetectorModel? manualModel = null;
+        var detectorModels = new Dictionary<string, DetectorModel>();
+        if (detectorLayout is not null)
+        {
+            issues.AddRange(detectorLayout.Issues);
+            issues.AddRange(ZoneChecks.Check(detectorZones, detectorLayout, norms));
+            // Состав СПС: ИПР, ЗКСПС, изоляторы. Модель ИПР — выбор проектировщика, иначе первая ручная в каталоге.
+            var detectorCatalogPath = EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File);
+            if (File.Exists(detectorCatalogPath))
+            {
+                var models = AlarmDetectorCatalog.Load(detectorCatalogPath);
+                detectorModels = models.ToDictionary(m => m.Id);
+                manualModel = project.Alarm?.ManualModel is { } mm
+                    ? models.FirstOrDefault(m => m.Id == mm && m.IsManual)
+                    : models.FirstOrDefault(m => m.IsManual);
+                if (project.Alarm?.ManualModel is { } wanted && manualModel is null)
+                {
+                    issues.Add(new Issue("aps.detector.unknown", IssueLevel.Error, $"АПС: ручного извещателя «{wanted}» нет в каталоге {AlarmDetectorCatalog.File}."));
+                }
+                else if (project.Alarm?.ManualModel is null && manualModel is not null)
+                {
+                    issues.Add(new Issue("aps.detector.default", IssueLevel.Info, $"АПС: модель ИПР не выбрана — принят {manualModel.Name}, первый ручной в каталоге; задайте alarm.manualModel, если нужен другой."));
+                }
+            }
+
+            zoning = AlarmZoning.Build(detectorZones, detectorLayout, norms, manualModel?.Isolator ?? false);
+            issues.AddRange(zoning.Issues);
+
+            // СОУЭ (этап 3): способ по табл. Б.1 — решение проектировщика, фон по табл. В.1, модели — из каталога оповещателей.
+            var notifierPath = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
+            if (project.Alarm?.Warning is { } warning && File.Exists(notifierPath))
+            {
+                var notifierCatalog = AlarmNotifierCatalog.Load(notifierPath);
+                var notifiers = notifierCatalog.Notifiers;
+                var wantKind = warning.Method == WarningMethod.Speech ? NotifierKind.Speech : NotifierKind.Sound;
+                sounderEntry = warning.Sounder is { } sid ? notifiers.FirstOrDefault(n => n.Id == sid) : notifiers.FirstOrDefault(n => n.Model.Kind == wantKind);
+                lightEntry = warning.Light is { } lid ? notifiers.FirstOrDefault(n => n.Id == lid) : notifiers.FirstOrDefault(n => n.Model.Kind == NotifierKind.Light);
+                if (sounderEntry is null || lightEntry is null)
+                {
+                    issues.Add(new Issue("soue.noModel", IssueLevel.Error, $"СОУЭ: в каталоге {AlarmNotifierCatalog.File} нет {(sounderEntry is null ? (warning.Method == WarningMethod.Speech ? "речевого" : "звукового") : "светового")} оповещателя (или задан неизвестный ID)."));
+                }
+                else
+                {
+                    // Громкоговоритель линии 100 В: уровень на 1 м — по В.1 от чувствительности и отвода (паспорт), усилитель — из каталога.
+                    if (sounderEntry.Speaker is { } speaker)
+                    {
+                        speakerTap = SpeechLines.ChooseTap(speaker, warning.SpeakerTap);
+                        if (speakerTap is null)
+                        {
+                            issues.Add(new Issue("soue.speech.tap", IssueLevel.Error, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"СОУЭ: у {sounderEntry.Model.Name} нет отвода {warning.SpeakerTap:0.##} Вт; отводы по паспорту — {string.Join(", ", speaker.Taps.Select(t => t.AcousticW.ToString("0.##", CultureInfo.GetCultureInfo("ru-RU"))))} Вт (alarm.warning.speakerTap).")));
+                            speakerTap = SpeechLines.ChooseTap(speaker, null);
+                        }
+
+                        var l1 = SpeechLines.LevelAt1m(speaker, speakerTap!, norms);
+                        sounderEntry = sounderEntry with { Model = sounderEntry.Model with { LevelAt1m = double.IsNaN(l1) ? null : l1 } };
+                        amplifier = warning.Amplifier is { } aid ? notifierCatalog.Amplifiers.FirstOrDefault(a => a.Id == aid)?.Model : (notifierCatalog.Amplifiers.Count > 0 ? notifierCatalog.Amplifiers[0].Model : null);
+                        lineMonitor = notifierCatalog.LineMonitors.Count > 0 ? notifierCatalog.LineMonitors[0] : null;
+                        if (amplifier is null)
+                        {
+                            issues.Add(new Issue("soue.speech.noAmplifier", IssueLevel.Error, $"СОУЭ: в каталоге {AlarmNotifierCatalog.File} нет усилителя речевого оповещения (amplifiers{(warning.Amplifier is { } wa ? $", задан «{wa}»" : "")}) — линии и усилители не рассчитаны."));
+                        }
+                    }
+                    else if (warning.Method == WarningMethod.Speech)
+                    {
+                        issues.Add(new Issue("soue.speech.noSpeaker", IssueLevel.Warning, $"СОУЭ: у {sounderEntry.Model.Name} в каталоге нет чувствительности и отводов (sensitivityDb, taps) — уровень взят из levelAt1m, линии 100 В и усилители не рассчитаны."));
+                    }
+
+                    if (sounderEntry.Model.Kind != wantKind)
+                    {
+                        issues.Add(new Issue("soue.model.kind", IssueLevel.Warning, $"СОУЭ: оповещатель {sounderEntry.Model.Name} — {sounderEntry.Model.Kind}, а способ оповещения — {warning.Method}."));
+                    }
+
+                    if (warning.MethodRow is { } row)
+                    {
+                        issues.AddRange(SoueMethod.Check(warning.Method, row, warning.Indicator, norms));
+                    }
+
+                    var background = warning.BackgroundDba ?? norms.Find(warning.BackgroundRow ?? "sp3.tB_1.parking")?.Values["background"];
+                    if (background is null)
+                    {
+                        issues.Add(new Issue("soue.noBackground", IssueLevel.Error, $"СОУЭ: фоновый шум не задан и строки «{warning.BackgroundRow}» нет в табл. В.1 СП 3."));
+                    }
+                    else
+                    {
+                        var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)).ToList();
+                        soue = SoueLayouter.Layout(soueZones, sounderEntry.Model, lightEntry.Model, norms);
+                        issues.AddRange(soue.Issues);
+                        var speakersOnLine = sounderEntry.Speaker is not null;
+                        if (soue.Sounders.Count > 0 && !speakersOnLine) { poweredDevices.Add((sounderEntry.Device, soue.Sounders.Count)); }
+                        if (soue.Lights.Count > 0) { poweredDevices.Add((lightEntry.Device, soue.Lights.Count)); }
+                        // Неадресные оповещатели включаются выходом реле: по выходу на линию звуковых и на линию световых в каждом помещении.
+                        // Громкоговорители линии 100 В включает усилитель — реле им не нужны.
+                        soueRelayOutputs = soueZones.Count * ((sounderEntry.Device.Addresses == 0 && !speakersOnLine && soue.Sounders.Count > 0 ? 1 : 0) + (lightEntry.Device.Addresses == 0 && soue.Lights.Count > 0 ? 1 : 0));
+                        if (speakersOnLine && amplifier is { } amp && speakerTap is { } tap && sounderEntry.Speaker is { } spk && File.Exists(EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File)))
+                        {
+                            // Линии речевого оповещения — по уровню: громкоговорители уровня, стояк от поста (первый уровень) до уровня.
+                            var baseElev = levels[0].Elevation;
+                            var groups = levels.Select(l =>
+                            {
+                                var rooms = l.Zones.Select(z => z.RoomId).ToHashSet(StringComparer.Ordinal);
+                                var riser = l.Index > 0 && l.Elevation is { } e && baseElev is { } b ? Math.Abs(e - b) * 1000 : 0;
+                                return (l.Name.Length > 0 ? l.Name : "линия", (IReadOnlyList<PlanPoint>)[.. soue.Sounders.Where(s => rooms.Contains(s.RoomId)).Select(s => s.Location)], riser);
+                            }).ToList();
+                            speechPlan = SpeechLines.Build(groups, spk, tap, amp, lineMonitor, AlarmCableCatalog.Load(EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File)),
+                                project.Alarm?.Panel is { } pp ? new PlanPoint(pp.X, pp.Y) : null, norms);
+                            issues.AddRange(speechPlan.Issues);
+                        }
+
+                        if (soueRelayOutputs > 0)
+                        {
+                            issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — {soueRelayOutputs} выходов реле на линии оповещения (по помещениям); учтены в релейных блоках и питании."));
+                        }
+                    }
+                }
+            }
+
+            // Релейный блок для команд АППЗ — из того же каталога, независимо от СОУЭ.
+            if ((project.Alarm?.Hvac is not null || soueRelayOutputs > 0) && File.Exists(notifierPath))
+            {
+                var relays = AlarmNotifierCatalog.Load(notifierPath).Relays;
+                relayModel = project.Alarm?.Hvac?.Relay is { } rid ? relays.FirstOrDefault(r => r.Id == rid) : (relays.Count > 0 ? relays[0] : null);
+            }
+
+            if (soueRelayOutputs > 0 && relayModel is not null && project.Alarm?.Hvac is null)
+            {
+                poweredDevices.Add((relayModel.Device, (soueRelayOutputs + relayModel.Outputs - 1) / relayModel.Outputs));
+            }
+        }
+
+        if (project.Alarm?.Hvac is { } hvac)
+        {
+            // АППЗ: команды СПС в вентиляцию — ТЗ разделу ОВ; состав систем — исходные данные проекта.
+            var hvacInputs = new HvacInputs(hvac.GeneralVentilation, [.. hvac.SmokeZones.Select(z => new SmokeZone(z.Name, z.ExhaustSystem, z.SupplySystem, z.SmokeDampers))], hvac.NormallyOpenDampers);
+            var hvacCommands = HvacCommands.Build(hvacInputs, norms);
+            issues.AddRange(hvacCommands.Issues);
+            if (hvacCommands.Outputs > 0)
+            {
+                if (relayModel is null)
+                {
+                    issues.Add(new Issue("aps.hvac.noRelay", IssueLevel.Warning, $"АППЗ: релейный блок не выбран (каталог {AlarmNotifierCatalog.File}) — {hvacCommands.Outputs} выходов не учтены в питании и спецификации."));
+                }
+                else
+                {
+                    poweredDevices.Add((relayModel.Device, (hvacCommands.Outputs + soueRelayOutputs + relayModel.Outputs - 1) / relayModel.Outputs));
+                }
+            }
+            if (hvacCommands.Commands.Count > 0)
+            {
+                var th = project.Title;
+                var hvacSpec = HvacSpec.Build(new NoteTitle(th.Organization, th.Subject, th.Document, th.Author, th.Supervisor, th.CityYear, project.Name), hvacInputs, hvacCommands.Commands);
+                Write(alarmDir, HvacSpecFile, files, p => NoteDocx.Write(p, hvacSpec, Stamp(project, "АПС.ТЗ-ОВ", "Техническое задание на автоматизацию вентиляции при пожаре"), project.Font));
+            }
+        }
+
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
         var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero, design.Ring);
@@ -318,6 +515,10 @@ public static class ProjectPipeline
         IReadOnlyList<ControlPoint> controlPoints = [];
         PowerBudget? powerBudget = null;
         IReadOnlyList<AddressRow> addressRows = [];
+        IReadOnlyList<AlarmSpecItem> alarmSpec = [];
+        List<CableLine> cableLines = [];
+        List<LoopLine> schemeLoops = [];
+        AlarmPowerSet? alarmSetForDocs = null;
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -376,10 +577,129 @@ public static class ProjectPipeline
 
                 if (alarmSet is not null)
                 {
-                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms);
+                    // Извещатели — по выбранным моделям: ток, адреса и сертификат из каталога извещателей, количество — из раскладки и состава СПС.
+                    Dictionary<string, int>? detectorCounts = null;
+                    var addressDevices = new List<AddressTable.AddressDevice>();
+                    if (detectorLayout is not null && zoning is not null)
+                    {
+                        detectorCounts = detectorZones.Where(z => z.ModelId is not null)
+                            .GroupBy(z => z.ModelId!)
+                            .ToDictionary(g => g.Key, g => g.Sum(z => detectorLayout.CountByRoom.GetValueOrDefault(z.RoomId)));
+                        if (manualModel is not null && zoning.Manuals.Count > 0)
+                        {
+                            detectorCounts[manualModel.Id] = zoning.Manuals.Count;
+                        }
+
+                        alarmSet = alarmSet with { Detectors = detectorCounts.Keys.Where(detectorModels.ContainsKey).ToDictionary(id => id, id => detectorModels[id].AsLoopDevice()) };
+                        var zoneById = detectorZones.ToDictionary(z => z.RoomId);
+                        foreach (var d in detectorLayout.Detectors)
+                        {
+                            var z = zoneById[d.RoomId];
+                            var model = z.ModelId is not null && detectorModels.TryGetValue(z.ModelId, out var dm) ? dm : null;
+                            addressDevices.Add(new(d.Id, $"{(d.Kind == DetectorKind.Smoke ? "ИП дымовой" : "ИП тепловой")} {model?.Name ?? ""} — {z.RoomName}".Trim(), "Пожар", zoning.ZoneOf.GetValueOrDefault(d.Id, ""), model?.LoopCurrent ?? Current.Zero));
+                        }
+
+                        foreach (var manual in zoning.Manuals)
+                        {
+                            addressDevices.Add(new(manual.Id, $"ИПР {manualModel?.Name ?? ""} — {zoneById[manual.RoomId].RoomName}".Trim(), "Пожар (ручной)", "", manualModel?.LoopCurrent ?? Current.Zero));
+                        }
+
+                        // Громкоговорители линии 100 В — не адресные устройства: в таблицу адресов и ДПЛС не идут.
+                        foreach (var s in sounderEntry?.Speaker is null ? soue?.Sounders ?? [] : [])
+                        {
+                            addressDevices.Add(new(s.Id, $"{sounderEntry?.Model.Name} — {zoneById[s.RoomId].RoomName}", "Оповещение (выход)", "", sounderEntry?.Device.LoopCurrent ?? Current.Zero));
+                        }
+
+                        foreach (var l in soue?.Lights ?? [])
+                        {
+                            addressDevices.Add(new(l.Id, $"{lightEntry?.Model.Name} — {zoneById[l.RoomId].RoomName}", "Оповещение (табло)", "", lightEntry?.Device.LoopCurrent ?? Current.Zero));
+                        }
+                    }
+
+                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0, poweredDevices);
                     powerBudget = power.Budget;
+                    alarmSetForDocs = alarmSet;
                     issues.AddRange(power.Issues);
-                    addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module).Rows;
+                    addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module, addressDevices).Rows;
+                    alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0,
+                        [.. soue is null ? [] : new[] { (sounderEntry!, soue.Sounders.Count), (lightEntry!, soue.Lights.Count) }], relayModel, poweredDevices.FirstOrDefault(x => relayModel is not null && x.Device == relayModel.Device).Count,
+                        speechPlan, amplifier, lineMonitor);
+
+                    // Кабельный журнал — только при заданной точке пожарного поста: без неё длин линий нет.
+                    var cablesPath = EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File);
+                    {
+                        var loopPlan = LoopLayout.Plan(controlPoints.Count, alarmSet.Controller, alarmSet.Module,
+                            addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
+                        // Устройства с уровнем: кольцо на другом уровне идёт стояком от поста и обратно — к длине по плану прибавляется 2·Δотм.
+                        var levelOf = levels.SelectMany(l => l.Zones.Select(z => (z.RoomId, l))).ToDictionary(x => x.RoomId, x => x.l);
+                        var devicePoints = (detectorLayout?.Detectors.Select(d => (d.Location, d.RoomId, d.Id)) ?? []).Concat(zoning?.Manuals.Select(m => (m.Location, m.RoomId, m.Id)) ?? [])
+                            .Concat(soue?.Sounders.Where(_ => sounderEntry?.Speaker is null).Select(s => (s.Location, s.RoomId, s.Id)) ?? []).Concat(soue?.Lights.Select(l => (l.Location, l.RoomId, l.Id)) ?? []).ToList();
+                        var loops = new List<LoopLine>();
+                        var offset = 0;
+                        var baseElevation = levels[0].Elevation;
+                        for (var k = 0; k < Math.Max(1, loopPlan.Controllers); k++)
+                        {
+                            var take = k < loopPlan.DevicesByController.Count ? loopPlan.DevicesByController[k] : 0;
+                            var load = k < loopPlan.LoadByController.Count ? loopPlan.LoadByController[k] : Current.Zero;
+                            var onLoop = devicePoints.Skip(offset).Take(take).ToList();
+                            var riserMm = onLoop.Select(d => levelOf.GetValueOrDefault(d.RoomId)).Where(l => l is not null && l.Index > 0).Distinct()
+                                .Sum(l => l!.Elevation is { } e && baseElevation is { } b ? 2 * Math.Abs(e - b) * 1000 : 0);
+                            loops.Add(new LoopLine(k + 1, onLoop.Select(d => d.Location).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0, riserMm, onLoop.Select(d => d.Id).ToList()));
+                            offset += take;
+                        }
+
+                        if (levels.Count > 1 && (baseElevation is null || levels.Any(l => l.Elevation is null)))
+                        {
+                            issues.Add(new Issue("aps.cable.noElevation", IssueLevel.Warning, "Кабельный журнал: у уровней не заданы отметки (alarm.levels[].elevation) — стояки ДПЛС между уровнями в длинах линий не учтены."));
+                        }
+
+                        schemeLoops = loops;
+                        if (project.Alarm?.Panel is { } panelPoint && File.Exists(cablesPath))
+                        {
+                        var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
+                            plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
+                        issues.AddRange(journal.Issues);
+                        var allLines = journal.Lines.ToList();
+                        if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
+                        {
+                            // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
+                            var speechCables = AlarmCableCatalog.Load(cablesPath);
+                            foreach (var line in sp.Lines)
+                            {
+                                var mark = speechCables.SpeechName is { } sn ? sn.Replace("{section}", (line.SectionMm2 ?? speechCables.SpeechSections?.Max() ?? 0).ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")), StringComparison.Ordinal) : "по проекту";
+                                allLines.Add(new CableLine($"ЛО{line.Number}", ampl.Name, $"{line.Speakers} громкоговорителей {sounderEntry?.Model.Name} ({line.Group}){(lineMonitor is not null ? $", {lineMonitor.Name} в конце" : "")}", "линия речевого оповещения 100 В (дерево)", mark, line.LengthM,
+                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{line.ConsumedW:0.#} Вт от линии, I = {line.ConsumedW / ampl.LineVoltage:0.###} А; сечение по формуле РЭ при ΔU ≤ 10 % (В.3.4); отдельно от ДПЛС")));
+                            }
+
+                            for (var k = 1; k <= sp.Amplifiers; k++)
+                            {
+                                allLines.Add(new CableLine($"С{k + 2}", "ВРУ (ввод 1)", $"{ampl.Name} №{k}", "питание 220 В, I категория", speechCables.MainsName, 0, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"до {ampl.MainsW:0} Вт; встроенные АКБ {ampl.Batteries} × {ampl.BatteryName}; длина — по месту ВРУ")));
+                            }
+                        }
+
+                        cableLines = allLines;
+                        }
+                    }
+
+                    if (project.Alarm is not null && project.Alarm.Panel is null)
+                    {
+                        issues.Add(new Issue("aps.cable.noPanel", IssueLevel.Warning, "Кабельный журнал АПС не выпущен: не задана точка установки приборов (alarm.panel — координаты пожарного поста на плане, мм)."));
+                    }
+
+                    // Структурная схема: контроллеры с кольцами в порядке обхода, модуль насосной и реле, РИП, усилитель с линиями.
+                    if (schemeLoops.Count > 0 && detectorLayout is not null)
+                    {
+                        var labelOf = addressDevices.GroupBy(d => d.Designation, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Equipment, StringComparer.Ordinal);
+                        var relayCount = poweredDevices.Where(x => relayModel is not null && x.Device == relayModel.Device).Sum(x => x.Count);
+                        var schemeLoopList = schemeLoops.Select((l, i) => new SchemeLoop(l.Number, alarmSet.Controller.Name,
+                            [.. (l.DeviceIds ?? []).Select(id => new SchemeDevice(id, labelOf.GetValueOrDefault(id, ""), SchemeKind(id)))],
+                            l.HasPumpModules ? alarmSet.Module.Name : null, i == 0 ? relayCount : 0, relayModel?.Name)).ToList();
+                        var speechLines = speechPlan?.Lines.Select(l => new SchemeSpeechLine(l.Number, l.Group, l.Speakers, sounderEntry?.Model.Name ?? "", l.ConsumedW, lineMonitor?.Name)).ToList() ?? [];
+                        var scheme = new AlarmScheme(schemeLoopList, alarmSet.Supply.Name, powerBudget?.Supplies ?? 1, alarmSet.Battery.Name, amplifier?.Name, speechPlan?.Amplifiers ?? 0, speechLines,
+                            "Порядок устройств на линии — по обходу кольца из кабельного журнала; изоляторы КЗ (БРИЗ) расставляются по линии проектировщиком (п. 6.3.5 СП 484). Пульт и линия RS-485 — по проекту.");
+                        var schemeSheet = alarmSheets.FirstOrDefault(sh => sh.Name.StartsWith("Структурная", StringComparison.OrdinalIgnoreCase));
+                        Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = schemeSheet?.Sheet }, project.Font));
+                    }
                 }
             }
         }
@@ -717,9 +1037,26 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
-        Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(
+        Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        if (detectorLayout is not null)
+        {
+            // Лист плана на каждый уровень: извещатели, ИПР и оповещатели уровня — по ID его помещений; один уровень — aps_plan.dxf.
+            var planSheets = alarmSheets.Where(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var level in levels.Where(l => l.Zones.Count > 0))
+            {
+                var rooms = level.Zones.Select(z => z.RoomId).ToHashSet(StringComparer.Ordinal);
+                var planSheet = level.Index < planSheets.Count ? planSheets[level.Index] : planSheets.LastOrDefault();
+                var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
+                var levelLayout = new DetectorLayout([.. detectorLayout.Detectors.Where(d => rooms.Contains(d.RoomId))], detectorLayout.CountByRoom.Where(kv => rooms.Contains(kv.Key)).ToDictionary(), []);
+                var levelIssues = outIssues.Where(i => i.ElementId is null || rooms.Contains(i.ElementId)).ToList();
+                var levelNotifiers = soue is null ? null : soue.Sounders.Concat(soue.Lights).Where(n => rooms.Contains(n.RoomId)).ToList();
+                Write(alarmDir, levels.Count > 1 ? AlarmPlanLevelFile(level.Index + 1) : AlarmPlanFile, files,
+                    p => AlarmPlanDxfWriter.Write(p, levelLayout, level.Zones, levelIssues, project.Font, manuals: zoning?.Manuals.Where(m => rooms.Contains(m.RoomId)).ToList(), zoneOf: zoning?.ZoneOf, stamp: planStamp, notifiers: levelNotifiers));
+            }
+        }
+
+        Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        Write(auptDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(
             p,
             routes,
             new Length(design.PipeElevation),
@@ -728,7 +1065,7 @@ public static class ProjectPipeline
             new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers)));
         // Принципиальная схема насосной станции (лист основного комплекта).
         var fromTank = design.InletPressure < Need(norms, "sp485.p6_9_12.minNetworkPressure").Values["pressure"]!.Value;
-        Write(outDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
+        Write(auptDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
             p,
             new PumpSchemeData(
                 setChoice?.Chosen is { } schemeSet ? schemeSet.MainPumps + schemeSet.StandbyPumps : station.WorkingPumps + station.StandbyPumps,
@@ -852,7 +1189,7 @@ public static class ProjectPipeline
             ];
             if (piping is not null)
             {
-                Write(outDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
+                Write(auptDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
                     p,
                     roomDrawing with
                     {
@@ -929,7 +1266,7 @@ public static class ProjectPipeline
                 }
             }
 
-            Write(outDir, PumpRoomAxonometryFile, files, p => PumpRoomAxonometryDxfWriter.Write(
+            Write(auptDir, PumpRoomAxonometryFile, files, p => PumpRoomAxonometryDxfWriter.Write(
                 p,
                 new PumpRoomAxonometry(axoPipes, axoBlocks, axoValves, [
                     "Фронтальная изометрия (ГОСТ 2.317): ось Y — под 45°, без сокращения; отметки — оси труб от пола насосной.",
@@ -940,7 +1277,7 @@ public static class ProjectPipeline
                 SheetStamp(project, "Аксонометрическая схема обвязки", "Аксонометрическая схема обвязки насосной станции") with { Name = "Аксонометрия обвязки насосной" },
                 project.Font));
 
-            Write(outDir, PumpRoomSectionFile, files, p => PumpRoomSectionDxfWriter.Write(
+            Write(auptDir, PumpRoomSectionFile, files, p => PumpRoomSectionDxfWriter.Write(
                 p,
                 new PumpRoomSection(
                     rv.Min(q => q.XMm), rv.Max(q => q.XMm), pr1.WallThickness * 1000, pr1.FloorElevation, pr1.Height, pr1.GroundElevation - pr1.FloorElevation,
@@ -957,7 +1294,7 @@ public static class ProjectPipeline
                 SheetStamp(project, "Разрез", "Разрез 1-1 насосной станции") with { Name = "Разрез 1-1 насосной станции" },
                 project.Font));
 
-            Write(outDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
+            Write(auptDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
                 p,
                 roomDrawing,
                 SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
@@ -969,7 +1306,7 @@ public static class ProjectPipeline
         {
             var prI = design.PumpRoom;
             var (elevI, inletElevI) = (inletRouteZ, inletWallZ);
-            Write(outDir, InletRouteFile, files, p => InletRouteDxfWriter.Write(
+            Write(auptDir, InletRouteFile, files, p => InletRouteDxfWriter.Write(
                 p,
                 new InletRouteDrawing(
                     [.. plan.Rooms.Select(r => r.Contour)],
@@ -994,8 +1331,8 @@ public static class ProjectPipeline
 
         if (stationTakeoff.Items.Count > 0)
         {
-            Write(outDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
-            Write(outDir, PumpStationSpecXlsxFile, files, p => SpecificationXlsx.Write(p, stationTakeoff, new SpecificationHeader($"{project.Name}. Насосная станция. Спецификация оборудования, изделий и материалов"), project.Font, continuous: true));
+            Write(auptDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
+            Write(auptDir, PumpStationSpecXlsxFile, files, p => SpecificationXlsx.Write(p, stationTakeoff, new SpecificationHeader($"{project.Name}. Насосная станция. Спецификация оборудования, изделий и материалов"), project.Font, continuous: true));
         }
 
         if (controlPoints.Count > 0)
@@ -1007,28 +1344,55 @@ public static class ProjectPipeline
                 signalPositions["cabinet"] = setPosition;
             }
 
-            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
+            Write(alarmDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
         }
 
         if (powerBudget is not null)
         {
-            Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
+            Write(alarmDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
         }
 
         if (addressRows.Count > 0)
         {
-            Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов сигналов АУПТ в АПС", project.Font));
+            Write(alarmDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов АПС", project.Font));
+        }
+
+        if (cableLines.Count > 0)
+        {
+            Write(alarmDir, CableJournalFile, files, p => CableJournalXlsx.Write(p, cableLines, $"{project.Name}. Кабельный журнал АПС", project.Font));
+            Write(alarmDir, CableJournalDocxFile, files, p => CableJournalDocx.Write(p, cableLines, Stamp(project, "АПС.КЖ", "Кабельный журнал"), project.Font));
+        }
+
+        if (alarmSpec.Count > 0)
+        {
+            Write(alarmDir, AlarmSpecFile, files, p => AlarmSpecXlsx.Write(p, alarmSpec, $"{project.Name}. Спецификация оборудования АПС", project.Font));
         }
 
         if (controlPoints.Count > 0)
         {
             var ti = project.Title;
             var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
-            Write(outDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
+            Write(alarmDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "АПС.ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
         }
 
-        Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
-        Write(outDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
+        if (detectorLayout is not null && project.Alarm is not null)
+        {
+            var alarmGeneral = AlarmGeneralData.Build(project.Name, alarmSheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code);
+            Write(alarmDir, AlarmGeneralDataFile, files, p => GeneralDataDocx.Write(p, alarmGeneral, Stamp(project, "АПС", "Общие данные") with { SheetCount = alarmSheets.Count, Sheet = alarmSheets.Count > 0 ? alarmSheets[0].Sheet : null }, project.Font));
+        }
+
+        if (detectorLayout is not null || controlPoints.Count > 0)
+        {
+            // Записка АПС — объяснение хода расчёта для проектировщика: исходные данные, выбор ИП, размещение, ЗКСПС, сигналы, АКБ.
+            var tn = project.Title;
+            var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
+                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning, soue,
+                [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile], speechPlan, amplifier);
+            Write(alarmDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
+        }
+
+        Write(auptDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
+        Write(auptDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
 
         var literature = registryPath is not null && File.Exists(registryPath)
             ? LiteratureRegistry.Parse(new StringReader(File.ReadAllText(registryPath)))
@@ -1067,14 +1431,14 @@ public static class ProjectPipeline
                 userTank,
                 design.Jockey),
             norms);
-        Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
+        Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
             new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
-        Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
+        Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet
             ? new PumpSetSummary(
@@ -1430,9 +1794,169 @@ public static class ProjectPipeline
 
     private static void Write(string dir, string name, List<string> files, Action<string> write)
     {
+        Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, name);
         write(path);
         files.Add(path);
+    }
+
+
+    /// <summary>Зоны раскладки ИП из раздела alarm проекта: помещение по имени с чертежа («*» — все), высота — из зоны или design.roomHeight.</summary>
+    /// <summary>Уровень АПС в прогоне: чертёж уровня, его зоны (ID помещений с префиксом уровня, кроме первого) и отметка.</summary>
+    private sealed class AlarmLevel
+    {
+        public required int Index { get; init; }
+
+        public required string Name { get; init; }
+
+        public double? Elevation { get; init; }
+
+        public required FloorPlan Plan { get; init; }
+
+        public List<DetectorZone> Zones { get; } = [];
+    }
+
+    /// <summary>
+    /// Уровни по alarm.levels: первый без своего чертежа — основной план проекта; остальные чертежи читаются тем же импортом.
+    /// Без списка — один уровень на основном чертеже. Нечитаемый чертёж уровня — ошибка, уровень пропускается.
+    /// </summary>
+    private static List<AlarmLevel> AlarmLevels(ProjectFile project, FloorPlan plan, string projectPath, List<Issue> issues)
+    {
+        var declared = project.Alarm?.Levels ?? [];
+        if (declared.Count == 0)
+        {
+            return [new AlarmLevel { Index = 0, Name = "", Plan = plan }];
+        }
+
+        var levels = new List<AlarmLevel>();
+        var dir = Path.GetDirectoryName(Path.GetFullPath(projectPath))!;
+        foreach (var (l, i) in declared.Select((l, i) => (l, i)))
+        {
+            FloorPlan? levelPlan = plan;
+            if (l.Drawing is { Length: > 0 } file && !string.Equals(file, project.Drawing, StringComparison.OrdinalIgnoreCase))
+            {
+                var import = FloorPlanImporter.Import(Path.GetFullPath(Path.Combine(dir, file)), requireInlet: false);
+                issues.AddRange(import.Issues.Select(x => x with { Message = $"Уровень «{l.Name}»: {x.Message}" }));
+                levelPlan = import.Plan;
+            }
+
+            if (levelPlan is null)
+            {
+                issues.Add(new Issue("aps.level.noDrawing", IssueLevel.Error, $"АПС: чертёж уровня «{l.Name}» ({l.Drawing}) не прочитан — уровень пропущен."));
+                continue;
+            }
+
+            levels.Add(new AlarmLevel { Index = levels.Count, Name = l.Name.Length > 0 ? l.Name : string.Create(CultureInfo.InvariantCulture, $"уровень {i + 1}"), Elevation = l.Elevation, Plan = levelPlan });
+        }
+
+        if (levels.Count == 0)
+        {
+            levels.Add(new AlarmLevel { Index = 0, Name = "", Plan = plan });
+        }
+
+        return levels;
+    }
+
+    /// <summary>
+    /// Ведомость чертежей тома АПС: при нескольких уровнях лист «План…» повторяется на каждый уровень с его именем,
+    /// номера следующих листов сдвигаются. Один уровень — ведомость проекта как есть.
+    /// </summary>
+    private static IReadOnlyList<ProjectSheet> AlarmSheets(ProjectFile project, List<AlarmLevel> levels)
+    {
+        var sheets = project.Alarm?.Sheets ?? [];
+        if (levels.Count <= 1 || sheets.Count(s => s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase)) != 1)
+        {
+            return sheets;
+        }
+
+        var result = new List<ProjectSheet>();
+        var shift = 0;
+        foreach (var s in sheets)
+        {
+            var number = int.TryParse(s.Sheet, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : (int?)null;
+            if (s.Name.StartsWith("План", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var level in levels)
+                {
+                    result.Add(new ProjectSheet(number is { } p ? (p + level.Index).ToString(CultureInfo.InvariantCulture) : s.Sheet, $"{s.Name}. {level.Name}", s.Note));
+                }
+
+                shift = levels.Count - 1;
+            }
+            else
+            {
+                result.Add(number is { } p ? s with { Sheet = (p + shift).ToString(CultureInfo.InvariantCulture) } : s);
+            }
+        }
+
+        return result;
+    }
+
+    private static List<DetectorZone> AlarmZones(ProjectFile project, AlarmLevel level, ProjectDesign design, string normsDir, List<Issue> issues, bool multiLevel)
+    {
+        var plan = level.Plan;
+        var zones = new List<DetectorZone>();
+        var catalogPath = EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File);
+        var catalog = (project.Alarm?.Zones.Count ?? 0) > 0 && File.Exists(catalogPath) ? AlarmDetectorCatalog.Load(catalogPath) : [];
+        if ((project.Alarm?.Zones.Count ?? 0) > 0 && catalog.Count == 0 && level.Index == 0)
+        {
+            issues.Add(new Issue("aps.detector.noCatalog", IssueLevel.Warning, $"Нет каталога извещателей {AlarmDetectorCatalog.File}: модели ИП не выбраны, их ток в расчёте АКБ не учтён."));
+        }
+
+        var levelTag = multiLevel ? $" ({level.Name})" : "";
+        foreach (var z in (project.Alarm?.Zones ?? []).Where(z => z.Level is null || string.Equals(z.Level, level.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            var rooms = z.Room == "*" ? plan.Rooms : plan.Rooms.Where(r => string.Equals(r.Name, z.Room, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (rooms.Count == 0)
+            {
+                issues.Add(new Issue("aps.layout.noRoom", IssueLevel.Warning, $"АПС: помещение «{z.Room}» на чертеже{levelTag} не найдено (слой ПТ_КОНТУР, имя — текст внутри контура)."));
+                continue;
+            }
+
+            var height = z.CeilingHeight ?? design.RoomHeight;
+            if (height is null)
+            {
+                issues.Add(new Issue("aps.layout.noHeight", IssueLevel.Error, $"АПС: для помещения «{z.Room}» не задана высота до перекрытия (alarm.zones[].ceilingHeight или design.roomHeight) — тип ИП и радиус зоны контроля зависят от неё."));
+                continue;
+            }
+
+            foreach (var room in rooms)
+            {
+                // ID помещения уникален по всем уровням: на втором и дальше — с префиксом уровня (L2-R1), имя — с именем уровня.
+                var roomId = level.Index == 0 ? room.Id : string.Create(CultureInfo.InvariantCulture, $"L{level.Index + 1}-{room.Id}");
+                if (zones.Any(existing => existing.RoomId == roomId))
+                {
+                    issues.Add(new Issue("aps.layout.duplicateRoom", IssueLevel.Warning, $"АПС: помещение «{room.Name}»{levelTag} задано в разделе alarm дважды — взята первая зона.", roomId));
+                    continue;
+                }
+
+                // Модель ИП — выбор проектировщика; без выбора — первая в каталоге, об этом Info. Паспорт модели идёт в расчёт АКБ.
+                var model = catalog.Count > 0 ? AlarmDetectorCatalog.Choose(catalog, z.Detector, z.Model, room.Name + levelTag, issues) : null;
+                var beams = plan.Beams.Where(b => b.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint).ToList();
+                zones.Add(new DetectorZone(roomId, room.Name + levelTag, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable)
+                {
+                    Beams = beams,
+                    ModelId = model?.Id,
+                    ModelName = model is null ? null : $"{model.Name} ({model.Designation})",
+                });
+            }
+        }
+
+        return zones;
+    }
+
+    /// <summary>Вид устройства для условного знака схемы — по суффиксу обозначения с плана (D — ИП, M — ИПР, S — оповещатель, L — табло).</summary>
+    private static SchemeDeviceKind SchemeKind(string id)
+    {
+        var tail = id[(id.LastIndexOf('.') + 1)..];
+        return tail.Length == 0 ? SchemeDeviceKind.Module : tail[0] switch
+        {
+            'D' => SchemeDeviceKind.SmokeDetector,
+            'M' => SchemeDeviceKind.ManualCallPoint,
+            'S' => SchemeDeviceKind.Sounder,
+            'L' => SchemeDeviceKind.Light,
+            _ => SchemeDeviceKind.Module,
+        };
     }
 
     private static string WriteIssues(string dir, List<Issue> issues)

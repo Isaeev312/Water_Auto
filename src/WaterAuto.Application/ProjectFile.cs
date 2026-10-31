@@ -37,6 +37,9 @@ public sealed record ProjectFile
     /// <summary>ID реестра литературы для списка источников; пусто — действующие нормы реестра.</summary>
     public IReadOnlyList<string> Literature { get; init; } = [];
 
+    /// <summary>Пожарная сигнализация (ADR 0012, этап 2); null — раскладка ИП не выполняется.</summary>
+    public ProjectAlarm? Alarm { get; init; }
+
     private static readonly JsonSerializerOptions Options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -346,3 +349,129 @@ public sealed record ProjectSignature(string Role, string Name);
 
 /// <summary>Лист основного комплекта: номер, наименование, примечание.</summary>
 public sealed record ProjectSheet(string Sheet, string Name, string Note = "");
+
+/// <summary>Исходные данные АПС: где ставить извещатели и какие — решения проектировщика (ADR 0012, п. 6; вопрос А-02 программа не решает).</summary>
+public sealed class ProjectAlarm
+{
+    public IReadOnlyList<ProjectAlarmZone> Zones { get; init; } = [];
+
+    /// <summary>ID модели ручного извещателя из каталога извещателей; null — первая ручная модель (с замечанием).</summary>
+    public string? ManualModel { get; init; }
+
+    /// <summary>Точка установки приборов (пожарный пост: контроллеры, РИП) на плане, мм; null — кабельный журнал не выпускается.</summary>
+    public ProjectPoint? Panel { get; init; }
+
+    /// <summary>Системы вентиляции от раздела ОВ для команд АППЗ; null — ТЗ на вентиляцию не выпускается.</summary>
+    public ProjectHvac? Hvac { get; init; }
+
+    /// <summary>СОУЭ: способ оповещения и модели оповещателей для помещений из zones; null — СОУЭ не проектируется.</summary>
+    public ProjectWarning? Warning { get; init; }
+
+    /// <summary>
+    /// Уровни (этажи) объекта для АПС: у каждого свой чертёж и отметка пола; пусто — один уровень на основном чертеже проекта.
+    /// Раскладка и лист плана — по каждому уровню, питание, адреса, спецификация и кабельный журнал — общие.
+    /// </summary>
+    public IReadOnlyList<ProjectAlarmLevel> Levels { get; init; } = [];
+
+    /// <summary>Ведомость рабочих чертежей тома АПС (лист «Общие данные»); при нескольких уровнях лист плана повторяется на каждый.</summary>
+    public IReadOnlyList<ProjectSheet> Sheets { get; init; } =
+    [
+        new("1", "Общие данные"),
+        new("2", "План расстановки извещателей и ручных извещателей"),
+        new("3", "Структурная схема"),
+    ];
+}
+
+/// <summary>Уровень (этаж) для АПС: имя для листа и ведомости, чертёж (null — основной чертёж проекта), отметка пола, м.</summary>
+public sealed class ProjectAlarmLevel
+{
+    public string Name { get; init; } = "";
+
+    public string? Drawing { get; init; }
+
+    /// <summary>Отметка пола уровня, м — длина стояков ДПЛС между уровнями в кабельном журнале; null — стояк не учтён (замечание).</summary>
+    public double? Elevation { get; init; }
+}
+
+/// <summary>Исходные данные АППЗ от раздела ОВ: общеобменные системы, дымовые зоны, нормально открытые клапаны.</summary>
+public sealed class ProjectHvac
+{
+    public IReadOnlyList<string> GeneralVentilation { get; init; } = [];
+
+    public IReadOnlyList<ProjectSmokeZone> SmokeZones { get; init; } = [];
+
+    public int NormallyOpenDampers { get; init; }
+
+    /// <summary>ID релейного блока из каталога оповещателей для команд; null — первый в каталоге.</summary>
+    public string? Relay { get; init; }
+}
+
+/// <summary>СОУЭ (СП 3.13130.2026): способ оповещения — решение проектировщика по табл. Б.1, фон — по табл. В.1, модели — из каталога.</summary>
+public sealed class ProjectWarning
+{
+    public Core.WarningMethod Method { get; init; } = Core.WarningMethod.Sound;
+
+    /// <summary>ID строки табл. Б.1 (data/norms/sp3/table_B_1_method.json), по которой проверяется способ; null — не проверять.</summary>
+    public string? MethodRow { get; init; } = "sp3.tB_1m.undergroundParking";
+
+    /// <summary>Показатель строки табл. Б.1: машино-мест, м² или человек.</summary>
+    public double Indicator { get; init; }
+
+    /// <summary>ID строки табл. В.1 с фоновым шумом; null — автостоянка (70 дБА).</summary>
+    public string? BackgroundRow { get; init; } = "sp3.tB_1.parking";
+
+    /// <summary>Фоновый шум по заданию, дБА; задан — важнее строки таблицы.</summary>
+    public double? BackgroundDba { get; init; }
+
+    /// <summary>ID моделей оповещателей из каталога; null — первая подходящего вида.</summary>
+    public string? Sounder { get; init; }
+
+    public string? Light { get; init; }
+
+    /// <summary>Речевое оповещение: отвод громкоговорителя — акустическая мощность, Вт (из паспорта модели); null — наибольший.</summary>
+    public double? SpeakerTap { get; init; }
+
+    /// <summary>Речевое оповещение: ID усилителя (блока речевого оповещения) из каталога; null — первый.</summary>
+    public string? Amplifier { get; init; }
+}
+
+/// <summary>Дымовая зона: вытяжная система, подпор (может отсутствовать), число клапанов дымоудаления.</summary>
+public sealed class ProjectSmokeZone
+{
+    public string Name { get; init; } = "";
+
+    public string ExhaustSystem { get; init; } = "";
+
+    public string? SupplySystem { get; init; }
+
+    public int SmokeDampers { get; init; }
+}
+
+/// <summary>Точка плана в координатах чертежа, мм.</summary>
+public sealed class ProjectPoint
+{
+    public double X { get; init; }
+
+    public double Y { get; init; }
+}
+
+/// <summary>Зона раскладки ИП: помещение по имени с чертежа («*» — все помещения), тип ИП, алгоритм, адресность, высота до перекрытия.</summary>
+public sealed class ProjectAlarmZone
+{
+    public string Room { get; init; } = "*";
+
+    public Core.DetectorKind Detector { get; init; } = Core.DetectorKind.Smoke;
+
+    public Core.DetectionAlgorithm Algorithm { get; init; } = Core.DetectionAlgorithm.A;
+
+    public bool Addressable { get; init; } = true;
+
+    /// <summary>Высота до перекрытия, м; null — design.roomHeight.</summary>
+    public double? CeilingHeight { get; init; }
+
+    /// <summary>ID модели извещателя из data/catalog/alarm_detectors.json; null — первая модель нужного типа (с замечанием).</summary>
+    public string? Model { get; init; }
+
+    /// <summary>Имя уровня из alarm.levels, к которому относится зона; null — ко всем уровням.</summary>
+    public string? Level { get; init; }
+}

@@ -74,6 +74,11 @@ public static class PlanDxfWriter
         {
             doc.Header.InsUnits = UnitsType.Millimeters;
         }
+        else if (!doc.DimensionStyles.TryGetValue(doc.Header.CurrentDimensionStyleName, out _))
+        {
+            // Подложка из другой САПР: заголовок ссылается на текущий стиль размеров, которого нет в таблице, — запись DWG падает.
+            doc.DimensionStyles.Add(new DimensionStyle(doc.Header.CurrentDimensionStyleName));
+        }
 
         var sprinklers = DxfDrawing.AddLayer(doc, SprinklerLayer, 1);
         var pipes = DxfDrawing.AddLayer(doc, PipeLayer, 4, LineWeightType.W40); // трубопроводы — 0,40 мм

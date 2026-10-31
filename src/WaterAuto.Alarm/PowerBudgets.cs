@@ -14,9 +14,14 @@ public static class PowerBudgets
     private const string Doc = "СП 6.13130.2025, прил. Б";
 
     /// <param name="inputs">Число входов модулей — по одному на точку управления.</param>
-    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms)
+    /// <param name="detectors">Число извещателей по ключам каталога набора (smoke, heat, manual); null — без извещателей.</param>
+    /// <param name="isolators">Изоляторов КЗ на линиях (ток без адреса).</param>
+    /// <param name="powered">Устройства с питанием от РИП (оповещатели, релейные блоки) и их число.</param>
+    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null, int isolators = 0, IReadOnlyList<(PoweredDevice Device, int Count)>? powered = null)
     {
         ArgumentNullException.ThrowIfNull(set);
+        detectors ??= new Dictionary<string, int>();
+        powered ??= [];
         var issues = new List<Issue>();
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var c = set.Controller;
@@ -29,64 +34,128 @@ public static class PowerBudgets
             return new(new PowerBudget(set.Voltage, [], Current.Zero, Current.Zero, set.Supply.OwnCurrent, set.Battery, null, null, null, null), issues);
         }
 
-        var layout = LoopLayout.Plan(inputs, c, m);
+        var deviceLines = new List<PowerLine>();
+        var devices = new List<(int Count, Current Current, int Addresses)>();
+        foreach (var (key, count) in detectors.Where(kv => kv.Value > 0))
+        {
+            if (!set.Detectors.TryGetValue(key, out var device))
+            {
+                issues.Add(new Issue("aps.power.noDetector", IssueLevel.Error,
+                    $"В каталоге приборов питания нет извещателя с ключом «{key}» — {count} ИП в нагрузке линии не учтены."));
+                continue;
+            }
+
+            devices.Add((count, device.LoopCurrent, device.Addresses));
+            deviceLines.Add(new PowerLine(device.Name, count, null, null, $"питание от линии {c.Name}, входит в его ток; {device.Addresses} адрес", device.Source));
+        }
+
+        var poweredStandby = 0.0;
+        var poweredAlarm = 0.0;
+        foreach (var (device, count) in powered.Where(x => x.Count > 0))
+        {
+            devices.Add((count, device.LoopCurrent, device.Addresses));
+            poweredStandby += count * device.Standby.Amperes;
+            poweredAlarm += count * device.Alarm.Amperes;
+            deviceLines.Add(new PowerLine(device.Name, count, new Current(count * device.Standby.Amperes), new Current(count * device.Alarm.Amperes),
+                $"адресное устройство ({device.Addresses} адр.) с питанием от РИП: дежурный и «Пожар» — всего на {count} шт.", device.Source));
+        }
+
+        if (isolators > 0)
+        {
+            if (set.Isolator is { } iso)
+            {
+                devices.Add((isolators, iso.LoopCurrent, iso.Addresses));
+                deviceLines.Add(new PowerLine(iso.Name, isolators, null, null, $"изолятор КЗ, питание от линии {c.Name}; адреса не занимает", iso.Source));
+            }
+            else
+            {
+                issues.Add(new Issue("aps.power.noIsolator", IssueLevel.Warning, $"Нужно {isolators} изоляторов КЗ (п. 6.3.5 СП 484), а в каталоге приборов питания изолятора нет — их ток и состав не учтены."));
+            }
+        }
+
+        var layout = LoopLayout.Plan(inputs, c, m, devices);
         var modules = layout.Modules;
         var controllers = Math.Max(1, layout.Controllers);
+
+        // Сертификаты соответствия, действующие на объекте (А-12): без них изделие в проект не попадает — предупреждение одно на набор.
+        var uncertified = new ICertified[] { c, m, set.Supply, set.Battery }.Concat(set.Detectors.Where(kv => detectors.GetValueOrDefault(kv.Key) > 0).Select(kv => (ICertified)kv.Value))
+            .Concat(powered.Where(x => x.Count > 0).Select(x => (ICertified)x.Device))
+            .Concat(isolators > 0 && set.Isolator is not null ? [set.Isolator] : [])
+            .Where(d => string.IsNullOrWhiteSpace(d.Certificate)).Select(d => d.Name).Distinct().ToList();
+        if (uncertified.Count > 0)
+        {
+            issues.Add(new Issue("aps.power.noCertificate", IssueLevel.Warning,
+                $"В каталоге не указан сертификат соответствия для: {string.Join(", ", uncertified)}. Для применения в КР нужен действующий сертификат (вопрос А-12) — проверить и внести в alarm_power.json."));
+        }
 
         issues.Add(new Issue("aps.power.defaultSet", IssueLevel.Info,
             $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Name}), только приборы автоматики АУПТ; пульт и приборы АПС, СОУЭ (этапы 2–3) не учтены."));
         if (controllers > 1)
         {
             issues.Add(new Issue("aps.power.controllers", IssueLevel.Info,
-                $"{m.Name}: {modules} шт. — на одну линию {c.Name} по паспорту не больше {layout.ModulesPerLine}; принято {controllers} контроллера, модули по линиям: {string.Join(", ", layout.ModulesByController)}."));
+                string.Create(ru, $"Принято {controllers} контроллера {c.Name}: на одну линию по паспорту не больше {layout.ModulesPerLine} модулей {m.Name}, {c.MaxAddresses} адресов и {c.MaxLoopLoad.Amperes * 1000:0.#} мА; модули по линиям: {string.Join(", ", layout.ModulesByController)}, извещатели: {string.Join(", ", layout.DevicesByController)}.")));
         }
 
         // Ток каждого контроллера в дежурном режиме — линейно между двумя точками паспорта по нагрузке его линии
         // (адресов у модуля столько, сколько входов использовано — паспорт АР8, п. 2.2.5.3); сумма — по всем контроллерам.
-        var loads = layout.Controllers == 0 ? [0.0] : layout.ModulesByController.Select(n => n * m.LoopCurrent.Amperes).ToList();
-        var standby = new Current(loads.Sum(load => c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * load / c.LoadOfLoaded.Amperes)));
-        var alarm = new Current(c.Max.Amperes * controllers);
+        var loads = layout.Controllers == 0 ? [0.0] : layout.LoadByController.Select(l => l.Amperes).ToList();
+        var standby = new Current(loads.Sum(load => c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * load / c.LoadOfLoaded.Amperes)) + poweredStandby);
+        var alarm = new Current((c.Max.Amperes * controllers) + poweredAlarm);
         issues.Add(new Issue("aps.power.controllerStandby", IssueLevel.Info,
             string.Create(ru, $"Ток {c.Name} в дежурном режиме — по нагрузке линии ({string.Join("; ", loads.Select(l => (l * 1000).ToString("0.#", ru)))} мА) линейно между двумя точками паспорта (допущение программы).")));
         issues.Add(new Issue("aps.power.controllerAlarm", IssueLevel.Info,
             $"Отдельного тока режима «Пожар» у {c.Name} в паспорте нет — принят максимальный (в запас; вопрос А-10)."));
 
-        var lines = new List<PowerLine>
-        {
-            new(c.Name, controllers, standby, alarm, "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
+        List<PowerLine> lines =
+        [
+            new(c.Name, controllers, new Current(standby.Amperes - poweredStandby), new Current(alarm.Amperes - poweredAlarm), "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
             new(m.Name, modules, null, null, $"питание от линии {c.Name}, входит в его ток", m.Source),
-            new(set.Supply.Name, 1, set.Supply.OwnCurrent, set.Supply.OwnCurrent, "собственный ток от АКБ (Iибэ)", set.Supply.Source),
-        };
+            .. deviceLines,
+        ];
+
+        // Число РИП — по току нагрузки в режиме «Пожар» против паспортного; нагрузка делится между источниками поровну
+        // (у каждого своя АКБ), а какие приборы на какой источник — решает проектировщик.
+        var supplies = 1;
+        if (set.Supply.MaxOutput is { } maxOut && alarm.Amperes > maxOut.Amperes + 1e-12)
+        {
+            supplies = (int)Math.Ceiling(alarm.Amperes / maxOut.Amperes);
+            issues.Add(new Issue("aps.power.supplyOverload", IssueLevel.Warning,
+                string.Create(ru, $"Ток в режиме «Пожар» {alarm.Amperes:0.##} А больше номинального тока нагрузки {set.Supply.Name} ({maxOut.Amperes:0.##} А по паспорту): нужно не менее {supplies} источников; принято {supplies}, нагрузка поделена поровну, ёмкость АКБ рассчитана на один источник; распределение приборов по источникам — проектировщик.")));
+        }
+
+        lines.Add(new(set.Supply.Name, supplies, set.Supply.OwnCurrent, set.Supply.OwnCurrent, supplies > 1 ? "собственный ток от АКБ (Iибэ) каждого источника" : "собственный ток от АКБ (Iибэ)", set.Supply.Source));
 
         var own = set.Supply.OwnCurrent;
+        var standbyPer = new Current(standby.Amperes / supplies);
+        var alarmPer = new Current(alarm.Amperes / supplies);
         var hourIssues = new List<Issue>();
         var td = BatteryCapacity.Hours(norms, BatteryCapacity.StandbyTimeId, hourIssues);
         var tp = BatteryCapacity.Hours(norms, BatteryCapacity.AlarmTimeId, hourIssues);
         issues.AddRange(hourIssues);
-        var kd = td is { } hd ? LoadFactor(set.Battery, hd, standby.Amperes + own.Amperes, "дежурного режима", issues) : null;
-        var kp = tp is { } hp ? LoadFactor(set.Battery, hp, alarm.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
+        var kd = td is { } hd ? LoadFactor(set.Battery, hd, standbyPer.Amperes + own.Amperes, "дежурного режима", issues) : null;
+        var kp = tp is { } hp ? LoadFactor(set.Battery, hp, alarmPer.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
 
         var aging = BatteryCapacity.Aging(set.Battery.EndOfLifePercent, []);
         Charge? required = null;
         TimeSpan? backup = null;
         if (kd is { } kStandby && kp is { } kAlarm)
         {
-            var capacity = BatteryCapacity.Required(new BatteryLoad(standby, alarm, own), new BatteryFactors(kStandby, kAlarm, set.Battery.EndOfLifePercent), norms);
+            var capacity = BatteryCapacity.Required(new BatteryLoad(standbyPer, alarmPer, own), new BatteryFactors(kStandby, kAlarm, set.Battery.EndOfLifePercent), norms);
             issues.AddRange(capacity.Issues);
             required = capacity.Required;
             if (required is { } r && r.AmpereHours > set.Battery.Nominal.AmpereHours)
             {
                 issues.Add(new Issue("aps.power.capacity", IssueLevel.Warning,
-                    string.Create(ru, $"Требуется АКБ не менее {r.AmpereHours:0.##} А·ч, {set.Battery.Name} — {set.Battery.Nominal.AmpereHours:0.##} А·ч: нужна АКБ большей ёмкости или дополнительный бокс."),
+                    string.Create(ru, $"Требуется АКБ не менее {r.AmpereHours:0.##} А·ч{(supplies > 1 ? $" на каждый из {supplies} источников" : "")}, {set.Battery.Name} — {set.Battery.Nominal.AmpereHours:0.##} А·ч: нужна АКБ большей ёмкости или дополнительный бокс."),
                     Clause: Doc));
             }
 
-            var time = BatteryCapacity.Backup(set.Battery.Nominal, alarm, set.Battery.EndOfLifePercent);
+            var time = BatteryCapacity.Backup(set.Battery.Nominal, alarmPer, set.Battery.EndOfLifePercent);
             issues.AddRange(time.Issues);
             backup = time.Time;
         }
 
-        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging), issues);
+        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging, supplies), issues);
     }
 
     /// <summary>

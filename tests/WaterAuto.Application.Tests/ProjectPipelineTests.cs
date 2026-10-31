@@ -5,6 +5,8 @@ using ACadSharp.Tables;
 using ACadSharp.Types.Units;
 using CSMath;
 using DocumentFormat.OpenXml.Packaging;
+using WaterAuto.Core;
+using WaterAuto.Export;
 using WaterAuto.Import;
 
 namespace WaterAuto.Application.Tests;
@@ -16,7 +18,7 @@ public sealed class ProjectPipelineTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, true);
 
     // Этаж 30 × 20 м: помещение с именем, колонна, ввод — по соглашению о слоях (README §7).
-    private string Drawing(bool withInlet = true)
+    private string Drawing(bool withInlet = true, string name = "floor.dxf", double width = 30000, double depth = 20000)
     {
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
@@ -33,10 +35,10 @@ public sealed class ProjectPipelineTests : IDisposable
 
         LwPolyline Rect(double x0, double y0, double x1, double y1) =>
             new([new XY(x0, y0), new XY(x1, y0), new XY(x1, y1), new XY(x0, y1)]) { IsClosed = true };
-        var room = Rect(0, 0, 30000, 20000);
+        var room = Rect(0, 0, width, depth);
         room.Layer = L(FloorPlanImporter.ContourLayer);
         doc.Entities.Add(room);
-        doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(15000, 10000, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(width / 2, depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
         var column = Rect(7300, 7300, 7700, 7700);
         column.Layer = L(FloorPlanImporter.ColumnLayer);
         doc.Entities.Add(column);
@@ -45,16 +47,17 @@ public sealed class ProjectPipelineTests : IDisposable
             doc.Entities.Add(new Point(new XYZ(500, 500, 0)) { Layer = L(FloorPlanImporter.InletLayer) });
         }
 
-        var path = Path.Combine(_dir, "floor.dxf");
+        var path = Path.Combine(_dir, name);
         DxfWriter.Write(path, doc, false);
         return path;
     }
 
-    private string Project(double k = 0.47, ProjectHydrants? hydrants = null, bool ring = false) =>
+    private string Project(double k = 0.47, ProjectHydrants? hydrants = null, bool ring = false, ProjectAlarm? alarm = null) =>
         Write("project.waproj", ProjectFile.ToJson(new ProjectFile
         {
             Name = "Тестовая автостоянка",
             Drawing = "floor.dxf",
+            Alarm = alarm,
             Design = new ProjectDesign
             {
                 RoomGroup = "2",
@@ -82,6 +85,188 @@ public sealed class ProjectPipelineTests : IDisposable
         ProjectPipeline.Run(project, Path.Combine(_dir, "out"), RepoPaths.Norms, RepoPaths.Registry);
 
     [Fact]
+    public void Alarm_zones_in_the_project_produce_the_detector_plan()
+    {
+        Drawing();
+        // Стоянка 30 × 20 м, H = 3 м, дымовые адресные, алгоритм A: шаг 9,05 м → 4 × 3 = 12 ИП.
+        var alarm = new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }] };
+        var result = Run(Project(alarm: alarm));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+
+        var plan = result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+        // Тома: раздел АПС — своей папкой, АУПТ — своей; журнал замечаний — в корне.
+        Path.GetFileName(Path.GetDirectoryName(plan)).ShouldBe(ProjectPipeline.AlarmVolume);
+        result.Files.Where(f => Path.GetFileName(f).StartsWith("aps_", StringComparison.Ordinal)).ShouldAllBe(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.AlarmVolume);
+        Path.GetFileName(Path.GetDirectoryName(result.Files.Single(f => f.EndsWith(ProjectPipeline.PlanFile, StringComparison.Ordinal)))).ShouldBe(ProjectPipeline.AuptVolume);
+        Path.GetFileName(Path.GetDirectoryName(result.Files.Single(f => f.EndsWith(ProjectPipeline.IssuesFile, StringComparison.Ordinal)))).ShouldNotBe(ProjectPipeline.AlarmVolume);
+        var doc = DxfReader.Read(plan);
+        doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
+        // Лист в рамке со штампом и общие данные тома АПС.
+        doc.Entities.ShouldContain(e => e.Layer.Name == GostSheet.Layer);
+        var general = result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmGeneralDataFile, StringComparison.Ordinal));
+        using (var gd = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(general, false))
+        {
+            var text = gd.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("Ведомость рабочих чертежей");
+            text.ShouldContain("Извещатели пожарные автоматические");
+            text.ShouldContain("12");
+        }
+
+        result.Issues.ShouldNotContain(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
+        // ИПР на стенах и спецификация АПС с извещателями, ИПР, изоляторами и приборами питания.
+        doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.ManualLayer).ShouldBeGreaterThanOrEqualTo(1);
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Select(r => r[2]).ShouldContain("ДИП-34А-03");
+        spec.Select(r => r[2]).ShouldContain("ИПР 513-3АМ");
+        spec.Select(r => r[2]).ShouldContain("БРИЗ исп.03");
+        spec.Single(r => r[2] == "ДИП-34А-03")[5].ShouldBe("12");
+        spec.ShouldAllBe(r => r[6] != "не указан");
+        // Таблица адресов: после входов АР8 — извещатели своими адресами с ЗКСПС.
+        var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
+        addresses.Count(r => r[4].StartsWith("Автостоянка", StringComparison.Ordinal) || r[7] == "ЗКСПС-1").ShouldBeGreaterThanOrEqualTo(12);
+
+        // СОУЭ: раздел warning — оповещатели на плане, в спецификации и расчёте питания; фон автостоянки 70 дБА → 85 дБА,
+        // МАЯК-12-ЗМ (105 дБ) даёт радиус 10 м; неадресные оповещатели — через выходы реле.
+        var soueRun = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+            Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40 },
+        }));
+        soueRun.Success.ShouldBeTrue(string.Join("; ", soueRun.Issues.Select(i => i.Message)));
+        var souePlan = DxfReader.Read(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal)));
+        souePlan.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.NotifierLayer).ShouldBeGreaterThanOrEqualTo(2);
+        var soueSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        soueSpec.Select(r => r[2]).ShouldContain("МАЯК-12-ЗМ");
+        soueSpec.Select(r => r[2]).ShouldContain("ЛЮКС-12 («Выход»)");
+        soueSpec.Select(r => r[2]).ShouldContain("С2000-СП2 исп.02");
+        soueRun.Issues.ShouldContain(i => i.Code == "soue.relayOutputs");
+        soueRun.Issues.ShouldNotContain(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
+
+        // АППЗ: раздел hvac даёт ТЗ на вентиляцию с командами.
+        var hvacRun = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+            Hvac = new ProjectHvac { GeneralVentilation = ["П-1", "В-1"], SmokeZones = [new ProjectSmokeZone { Name = "ДЗ-1", ExhaustSystem = "ВДУ-1", SupplySystem = "ПД-1", SmokeDampers = 2 }], NormallyOpenDampers = 3 },
+        }));
+        var hvacDoc = hvacRun.Files.Single(f => f.EndsWith(ProjectPipeline.HvacSpecFile, StringComparison.Ordinal));
+        using (var hd = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(hvacDoc, false))
+        {
+            var text = hd.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("Отключить общеобменную вентиляцию");
+            text.ShouldContain("ВДУ-1");
+            text.ShouldContain("20 с");
+        }
+
+        // Релейные блоки для 1 + 1 + 3 команд: по 2 выхода → 3 блока С2000-СП2 в спецификации.
+        var hvacSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(hvacRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        hvacSpec.Single(r => r[2] == "С2000-СП2 исп.02")[5].ShouldBe("3");
+
+        // Без точки поста кабельного журнала нет (предупреждение); с точкой — журнал с ДПЛС, питанием и сигналами.
+        result.Issues.ShouldContain(i => i.Code == "aps.cable.noPanel");
+        result.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal));
+        var withPanel = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }], Panel = new ProjectPoint { X = 1000, Y = 1000 } }));
+        var journal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(withPanel.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        journal.Select(r => r[1]).ShouldContain("ДПЛС1");
+        withPanel.Files.ShouldContain(f => f.EndsWith(ProjectPipeline.CableJournalDocxFile, StringComparison.Ordinal));
+        journal.Single(r => r[1] == "ДПЛС1")[5].ShouldStartWith("КПСнг(А)-FRLS 1×2×");
+        double.Parse(journal.Single(r => r[1] == "ДПЛС1")[6], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(50);
+
+        // Модель не выбрана — первая из каталога с замечанием; выбранная тепловая для дымовой зоны — ошибка.
+        result.Issues.ShouldContain(i => i.Code == "aps.detector.default" && i.Message.Contains("ДИП-34А-03"));
+        var mismatch = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3, Model = "bolid.s2000_ip_03" }] }));
+        mismatch.Issues.ShouldContain(i => i.Code == "aps.detector.kindMismatch");
+
+        // Без раздела alarm листа АПС нет; имя не с чертежа — предупреждение и нет листа.
+        Run(Project()).Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+        var missing = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Склад", CeilingHeight = 3 }] }));
+        missing.Issues.ShouldContain(i => i.Code == "aps.layout.noRoom");
+        missing.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Alarm_levels_give_a_plan_sheet_per_level_and_risers_in_the_cable_journal()
+    {
+        // Уровень −1 — основной чертёж 30 × 20 м (12 ИП), уровень −2 — свой чертёж 20 × 20 м (3 × 3 = 9 ИП), отметки −3 и −6 м.
+        Drawing();
+        Drawing(withInlet: false, name: "floor2.dxf", width: 20000, depth: 20000);
+        var alarm = new ProjectAlarm
+        {
+            Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
+            Levels = [new ProjectAlarmLevel { Name = "−1 этаж", Elevation = -3 }, new ProjectAlarmLevel { Name = "−2 этаж", Drawing = "floor2.dxf", Elevation = -6 }],
+            Panel = new ProjectPoint { X = 1000, Y = 1000 },
+        };
+        var result = Run(Project(alarm: alarm));
+        result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+
+        // Лист плана на каждый уровень, общего aps_plan.dxf нет; на листах — только извещатели своего уровня.
+        result.Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal), string.Join("; ", result.Issues.Select(i => i.Code + " " + i.Message)));
+        var plan1 = DxfReader.Read(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanLevelFile(1), StringComparison.Ordinal)));
+        var plan2 = DxfReader.Read(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanLevelFile(2), StringComparison.Ordinal)));
+        plan1.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
+        plan2.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(9);
+        plan2.Entities.OfType<Insert>().Where(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldAllBe(i => i.Attributes.Any(a => a.Value.StartsWith("L2-", StringComparison.Ordinal)));
+
+        // Спецификация и таблица адресов — по обоим уровням; имя помещения — с уровнем; ЗКСПС нумеруются сквозь.
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Single(r => r[2] == "ДИП-34А-03")[5].ShouldBe("21");
+        var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
+        addresses.Count(r => r[5].Contains("(−2 этаж)", StringComparison.Ordinal)).ShouldBeGreaterThanOrEqualTo(9);
+        addresses.Select(r => r[7]).Where(z => z.StartsWith("ЗКСПС", StringComparison.Ordinal)).Distinct().Count().ShouldBe(2);
+
+        // Ведомость чертежей: лист плана на каждый уровень с его именем.
+        using (var gd = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmGeneralDataFile, StringComparison.Ordinal)), false))
+        {
+            var text = gd.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("−1 этаж");
+            text.ShouldContain("−2 этаж");
+        }
+
+        // Кабельный журнал: кольцо через второй уровень длиннее на стояки 2 × 3 м — в примечании «стояков 6 м».
+        var journal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        journal.Where(r => r[1].StartsWith("ДПЛС", StringComparison.Ordinal)).ShouldContain(r => r[7].Contains("стояков 6 м", StringComparison.Ordinal));
+        result.Issues.ShouldNotContain(i => i.Code == "aps.cable.noElevation");
+
+        // Речевое оповещение на двух уровнях: ОПР-С103.1 на отводе 3 Вт (91 + 10·lg 3 = 95,8 дБ на 1 м), фон 60 → 70 дБА; линии 100 В
+        // по уровням, Рупор-300 и Рупор-300-МК в спецификации, линии ЛО1/ЛО2 в журнале; громкоговорители не идут через реле и РИП.
+        var speech = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = alarm.Zones,
+            Levels = alarm.Levels,
+            Panel = alarm.Panel,
+            Warning = new ProjectWarning { Method = WarningMethod.Speech, MethodRow = "sp3.tB_1m.undergroundParking", Indicator = 90, BackgroundDba = 60, Sounder = "bolid.opr_s103_1", SpeakerTap = 3 },
+        }));
+        speech.Issues.ShouldNotContain(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level == IssueLevel.Error, string.Join("; ", speech.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Message)));
+        speech.Issues.ShouldContain(i => i.Code == "soue.speech.amplifiers" && i.Message.Contains("95,8 дБ", StringComparison.Ordinal) && i.Message.Contains("2 линии", StringComparison.Ordinal));
+        var speechSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(speech.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        speechSpec.Single(r => r[2] == "Рупор-300")[5].ShouldBe("1");
+        speechSpec.Single(r => r[2] == "Рупор-300-МК")[5].ShouldBe("2");
+        speechSpec.Single(r => r[2] == "ОПР-С103.1")[1].ShouldContain("линия 100 В");
+        var speechJournal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(speech.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        speechJournal.Select(r => r[1]).ShouldContain("ЛО1");
+        speechJournal.Select(r => r[1]).ShouldContain("ЛО2");
+        speechJournal.Single(r => r[1] == "ЛО2")[5].ShouldStartWith("КПСнг(А)-FRLS 1×2×");
+        double.Parse(speechJournal.Single(r => r[1] == "ЛО2")[6], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(double.Parse(speechJournal.Single(r => r[1] == "ЛО1")[6], System.Globalization.CultureInfo.InvariantCulture) - 60);
+
+        // Структурная схема: лист в рамке, контроллеры и все адресные устройства обоих уровней условными знаками; в журнале — участки кольца.
+        var scheme = DxfReader.Read(speech.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSchemeFile, StringComparison.Ordinal)));
+        scheme.Entities.ShouldContain(e => e.Layer.Name == GostSheet.Layer);
+        scheme.Entities.OfType<TextEntity>().ShouldContain(t => t.Value.StartsWith("С2000-КДЛ №1", StringComparison.Ordinal));
+        scheme.Entities.OfType<TextEntity>().ShouldContain(t => t.Value.StartsWith("Рупор-300", StringComparison.Ordinal));
+        scheme.Entities.OfType<TextEntity>().Count(t => t.Value.Contains(".D", StringComparison.Ordinal) && t.Layer.Name == AlarmSchemeDxfWriter.TextLayer).ShouldBe(21);
+        speechJournal.Select(r => r[1]).ShouldContain("ДПЛС1.1");
+        speechJournal.Count(r => r[1].StartsWith("ДПЛС1.", StringComparison.Ordinal)).ShouldBeGreaterThanOrEqualTo(22);
+
+        // Без отметок — предупреждение, что стояки не учтены.
+        var noElevation = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = alarm.Zones,
+            Levels = [new ProjectAlarmLevel { Name = "−1 этаж" }, new ProjectAlarmLevel { Name = "−2 этаж", Drawing = "floor2.dxf" }],
+            Panel = alarm.Panel,
+        }));
+        noElevation.Issues.ShouldContain(i => i.Code == "aps.cable.noElevation");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();
@@ -89,7 +274,7 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
-            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.InteractionFile,
+            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
             ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);

@@ -1,0 +1,36 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 3.13130.2026",
+  "edition": "утв. приказом МЧС России от 26.02.2026 № 133, с 01.06.2026",
+  "clause": "прил. В, табл. В.1",
+  "title": "Эквивалентный уровень постоянного шума по помещениям (для выбора уровня звука оповещения)",
+  "source": "Текст приказа МЧС от 26.02.2026 № 133 (garant.ru 413717288, kontur-extern 500158); страницы печатного издания не указаны — А-08.",
+  "verified": false,
+  "columns": { "background": "эквивалентный уровень постоянного шума, дБА" },
+  "footnotes": {
+    "Коридоры": "коридоры и коммуникационные пространства — по уровню шума сообщающихся помещений (строка 21, числа нет).",
+    "Производственные": "в производственных помещениях шум может быть выше 85 дБА (прим. 1); уровни уточняются при вводе (прим. 2)."
+  },
+  "records": [
+    { "id": "sp3.tB_1.parking", "clause": "прил. В, табл. В.1", "values": { "background": 70 }, "units": { "background": "дБА" }, "attrs": { "room": "автостоянки", "row": "22" } },
+    { "id": "sp3.tB_1.pumpRoom", "clause": "прил. В, табл. В.1", "values": { "background": 80 }, "units": { "background": "дБА" }, "attrs": { "room": "компрессорные и насосные", "row": "24" } },
+    { "id": "sp3.tB_1.ventRoom", "clause": "прил. В, табл. В.1", "values": { "background": 80 }, "units": { "background": "дБА" }, "attrs": { "room": "венткамеры", "row": "23" } },
+    { "id": "sp3.tB_1.office", "clause": "прил. В, табл. В.1", "values": { "background": 50 }, "units": { "background": "дБА" }, "attrs": { "room": "офисы, кабинеты", "row": "11" } },
+    { "id": "sp3.tB_1.flat", "clause": "прил. В, табл. В.1", "values": { "background": 40 }, "units": { "background": "дБА" }, "attrs": { "room": "жилые комнаты квартир", "row": "8" } },
+    { "id": "sp3.tB_1.hotel", "clause": "прил. В, табл. В.1", "values": { "background": 50 }, "units": { "background": "дБА" }, "attrs": { "room": "номера гостиниц, общежития, палаты", "row": "9–10" } },
+    { "id": "sp3.tB_1.trade", "clause": "прил. В, табл. В.1", "values": { "background": 60 }, "units": { "background": "дБА" }, "attrs": { "room": "торговые залы", "row": "19" } },
+    { "id": "sp3.tB_1.catering", "clause": "прил. В, табл. В.1", "values": { "background": 65 }, "units": { "background": "дБА" }, "attrs": { "room": "залы кафе и ресторанов", "row": "12" } },
+    { "id": "sp3.tB_1.classroom", "clause": "прил. В, табл. В.1", "values": { "background": 60 }, "units": { "background": "дБА" }, "attrs": { "room": "классы, аудитории, конференц-залы, читальные залы", "row": "6" } },
+    { "id": "sp3.tB_1.doctor", "clause": "прил. В, табл. В.1", "values": { "background": 50 }, "units": { "background": "дБА" }, "attrs": { "room": "кабинеты врачей", "row": "5" } },
+    { "id": "sp3.tB_1.sport", "clause": "прил. В, табл. В.1", "values": { "background": 65 }, "units": { "background": "дБА" }, "attrs": { "room": "спортивные залы", "row": "18" } },
+    { "id": "sp3.tB_1.lobby", "clause": "прил. В, табл. В.1", "values": { "background": 60 }, "units": { "background": "дБА" }, "attrs": { "room": "фойе театров, кино, выставок; пассажирские залы вокзалов", "row": "13, 20" } },
+    { "id": "sp3.tB_1.hall", "clause": "прил. В, табл. В.1", "values": { "background": 70 }, "units": { "background": "дБА" }, "attrs": { "room": "выставочные и многоцелевые залы, кинотеатры, кухни ресторанов, музыкальные классы", "row": "7, 15–17, 26" } },
+    { "id": "sp3.tB_1.industrial", "clause": "прил. В, табл. В.1", "values": { "background": 80 }, "units": { "background": "дБА" }, "attrs": { "room": "производственные помещения с постоянными рабочими местами, территории предприятий, стадионы", "row": "4, 27" } },
+    { "id": "sp3.tB_1.control", "clause": "прил. В, табл. В.1", "values": { "background": 70 }, "units": { "background": "дБА" }, "attrs": { "room": "диспетчерские, кабины с телефонной связью, точная сборка, АТС", "row": "2" } },
+    { "id": "sp3.tB_1.lab", "clause": "прил. В, табл. В.1", "values": { "background": 75 }, "units": { "background": "дБА" }, "attrs": { "room": "лаборатории, измерительные, кабины без телефона", "row": "3" } },
+    { "id": "sp3.tB_1.aupRoom", "clause": "прил. В, табл. В.1", "values": { "background": 65 }, "units": { "background": "дБА" }, "attrs": { "room": "рабочие помещения аппаратов управления производств; серверные общественных зданий", "row": "1, 25" } },
+    { "id": "sp3.tB_1.bathroom", "clause": "прил. В, табл. В.1", "values": { "background": 55 }, "units": { "background": "дБА" }, "attrs": { "room": "ванные, душевые, санузлы", "row": "28" } },
+    { "id": "sp3.tB_1.datacenter", "clause": "прил. В, табл. В.1", "values": { "background": 95 }, "units": { "background": "дБА" }, "attrs": { "room": "машинные залы ЦОД", "row": "29" } }
+  ]
+}

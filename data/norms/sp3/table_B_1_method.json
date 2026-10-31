@@ -1,0 +1,30 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 3.13130.2026",
+  "edition": "утв. приказом МЧС России от 26.02.2026 № 133, с 01.06.2026",
+  "clause": "прил. Б, табл. Б.1",
+  "title": "Способ оповещения (звуковой или речевой) для стоянок автомобилей и смежных классов",
+  "source": "Текст приказа МЧС от 26.02.2026 № 133 (garant.ru 413717288, kontur-extern 500158); полная таблица — 24 строки, здесь строки для стоянок и классов Ф, встречающихся в объектах владельца; прим. 2 — площадь для звукового способа можно увеличить до 5 %; прим. 3 — в закрытых рампах стоянок, венткамерах, насосных речевой заменяется звуковым.",
+  "verified": false,
+  "columns": {
+    "threshold": "граница: до неё — звуковой способ, от неё — речевой (null — порога нет: attrs.sound/speech задают допустимость)",
+    "sound": "1 — звуковой допустим (ниже порога); 0 — запрещён",
+    "speech": "1 — речевой требуется (от порога) или допустим; 0 — не требуется"
+  },
+  "footnotes": {
+    "+*": "звуковой способ, заменяемый речевым по заданию на проектирование."
+  },
+  "records": [
+    { "id": "sp3.tB_1m.undergroundParking", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 50, "sound": 1, "speech": 1 }, "units": { "threshold": "машино-мест", "sound": "признак", "speech": "признак" }, "attrs": { "class": "подземные стоянки автомобилей", "row": "19", "unit": "машино-мест" }, "note": "До 50 машино-мест — звуковой; 50 и более — речевой." },
+    { "id": "sp3.tB_1m.abovegroundParking", "clause": "прил. Б, табл. Б.1", "values": { "threshold": null, "sound": 1, "speech": 0 }, "units": { "threshold": "этажей", "sound": "признак", "speech": "признак" }, "attrs": { "class": "наземные стоянки закрытого типа, два этажа и более", "row": "20", "replaceable": true }, "refs": { "threshold": "порога нет: звуковой (+*), заменяемый речевым по заданию" } },
+    { "id": "sp3.tB_1m.f5_2", "clause": "прил. Б, табл. Б.1", "values": { "threshold": null, "sound": 1, "speech": 0 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф5.2: склады, стоянки без ТО и ремонта, архивы", "row": "18", "replaceable": true }, "refs": { "threshold": "порога нет: звуковой (+*)" } },
+    { "id": "sp3.tB_1m.f1_1", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 3000, "sound": 1, "speech": 1 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф1.1: детские сады, дома престарелых, больницы", "row": "1", "unit": "м²" } },
+    { "id": "sp3.tB_1m.f1_2", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 3500, "sound": 1, "speech": 1 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф1.2: гостиницы, общежития", "row": "2", "unit": "м²" } },
+    { "id": "sp3.tB_1m.f3_1", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 3500, "sound": 1, "speech": 1 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф3.1: торговля", "row": "6", "unit": "м²" } },
+    { "id": "sp3.tB_1m.f3_4", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 1000, "sound": 1, "speech": 1 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф3.4: медицинские организации", "row": "9", "unit": "м²" } },
+    { "id": "sp3.tB_1m.f4_1", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 3000, "sound": 1, "speech": 1 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф4.1: школы, учебные заведения", "row": "13", "unit": "м²" } },
+    { "id": "sp3.tB_1m.f4_3", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 5000, "sound": 1, "speech": 1 }, "units": { "threshold": "м²", "sound": "признак", "speech": "признак" }, "attrs": { "class": "Ф4.3: офисы, банки", "row": "15", "unit": "м²" } },
+    { "id": "sp3.tB_1m.crowd50", "clause": "прил. Б, табл. Б.1", "values": { "threshold": 50, "sound": 0, "speech": 1 }, "units": { "threshold": "чел.", "sound": "признак", "speech": "признак" }, "attrs": { "class": "иные здания и помещения с одновременным пребыванием 50 и более человек", "row": "22", "unit": "чел." } }
+  ]
+}

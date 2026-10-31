@@ -29,7 +29,8 @@ public sealed record LayoutRules(
     {
         ArgumentNullException.ThrowIfNull(norms);
         var issues = new List<Issue>();
-        var table = norms.ByClause("табл. 6.1").FirstOrDefault(r => r.Attributes.GetValueOrDefault("group") == group);
+        // «Табл. 6.1» есть и в СП 484 (аспирационные ИП) — брать только строки СП 485.
+        var table = norms.ByClause("табл. 6.1").FirstOrDefault(r => r.Doc == "СП 485.1311500.2020" && r.Attributes.GetValueOrDefault("group") == group);
         var tableSpacing = table?.Values.GetValueOrDefault("maxSpacing");
         if (table is null || tableSpacing is null)
         {

@@ -31,18 +31,34 @@ public static class AlarmPowerCatalog
             }
         }
 
+        var detectors = new Dictionary<string, LoopDevice>();
+        if (root.TryGetProperty("detectors", out var list))
+        {
+            foreach (var d in list.EnumerateObject())
+            {
+                detectors[d.Name] = new LoopDevice(Text(d.Value, "name"), A(d.Value, "loopCurrent"), Text(d.Value, "source")) { Certificate = Cert(d.Value) };
+            }
+        }
+
+        LoopDevice? isolator = root.TryGetProperty("isolator", out var iso)
+            ? new LoopDevice(Text(iso, "name"), A(iso, "loopCurrent"), Text(iso, "source")) { Certificate = Cert(iso), Addresses = iso.TryGetProperty("addresses", out var ia) ? ia.GetInt32() : 0 }
+            : null;
+
         return new AlarmPowerSet(
             voltage,
             new LoopController(Text(c, "name"), A(c, "idle"), A(c, "loaded"), A(c, "loadOfLoaded"), A(c, "max"), A(c, "maxLoopLoad"),
-                c.GetProperty("maxAddresses").GetInt32(), Text(c, "source")),
-            new LoopModule(Text(m, "name"), m.GetProperty("inputs").GetInt32(), A(m, "loopCurrent"), m.GetProperty("maxPerLoop").GetInt32(), Text(m, "source")),
-            new PowerSupply(Text(s, "name"), A(s, "ownCurrent"), Text(s, "source")),
+                c.GetProperty("maxAddresses").GetInt32(), Text(c, "source")) { Certificate = Cert(c) },
+            new LoopModule(Text(m, "name"), m.GetProperty("inputs").GetInt32(), A(m, "loopCurrent"), m.GetProperty("maxPerLoop").GetInt32(), Text(m, "source")) { Certificate = Cert(m) },
+            new PowerSupply(Text(s, "name"), A(s, "ownCurrent"), Text(s, "source")) { Certificate = Cert(s), MaxOutput = s.TryGetProperty("maxOutput", out var mo) ? new Current(mo.GetDouble()) : null },
             new BatteryModel(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
                 b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
-                Text(b, "source")));
+                Text(b, "source")) { Certificate = Cert(b) })
+        { Detectors = detectors, Isolator = isolator };
     }
 
     private static Current A(JsonElement e, string name) => new(e.GetProperty(name).GetDouble());
 
     private static string Text(JsonElement e, string name) => e.GetProperty(name).GetString()!;
+
+    private static string? Cert(JsonElement e) => e.TryGetProperty("certificate", out var c) ? c.GetString() : null;
 }

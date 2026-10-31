@@ -45,6 +45,9 @@ public static class InputCatalog
     /// <summary>Строка табл. Ж.1 СН КР 40-04:2025: описание здания и потребный расход на внутреннее пожаротушение.</summary>
     public sealed record HydrantRowOption(string Id, string Label, int Jets, double JetFlow);
 
+    /// <summary>Модель извещателя для выбора в разделе alarm: ID каталога, подпись, вид (smoke/heat/manual).</summary>
+    public sealed record DetectorOption(string Id, string Label, string Kind);
+
     /// <summary>Документ и редакция норм, по которым считается проект (для строки состояния).</summary>
     public sealed record NormsInfo(string Document, string Edition);
 
@@ -149,6 +152,17 @@ public static class InputCatalog
     }
 
     /// <summary>Строки табл. Ж.1 СН КР 40-04:2025 для выбора расхода ВПВ (подпись — описание здания из данных норм).</summary>
+    public static IReadOnlyList<DetectorOption> Detectors(string normsDir)
+    {
+        var path = Path.Combine(CatalogDir(normsDir), AlarmDetectorCatalog.File);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        return [.. AlarmDetectorCatalog.Load(path).Select(m => new DetectorOption(m.Id, $"{m.Name} ({m.Designation}), {m.Manufacturer}", m.Kind switch { Core.DetectorKind.Smoke => "smoke", Core.DetectorKind.Heat => "heat", _ => "manual" }))];
+    }
+
     public static IReadOnlyList<HydrantRowOption> HydrantRows(string normsDir)
     {
         var norms = JsonNormsProvider.Load(normsDir);
