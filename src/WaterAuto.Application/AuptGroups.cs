@@ -51,7 +51,7 @@ public static class AuptGroups
         {
             var resolved = LayoutRules.Resolve(norms, g.Key.Group, design.ConstructionClass, design.MaxSpacing is { } m ? new Length(m) : null);
             issues.AddRange(resolved.Issues);
-            var fire = FireParameters.Resolve(norms, g.Key.Group, g.Key.RoomHeight is { } rh ? new Length(rh) : null, g.Key.StorageHeight is { } sh ? new Length(sh) : null);
+            var fire = FireParameters.Resolve(norms, g.Key.Group, g.Key.RoomHeight is { } rh ? new Length(rh) : null, g.Key.StorageHeight is { } sh ? new Length(sh) : null, foam: design.Foam is not null);
             issues.AddRange(fire.Issues);
             if (resolved.Rules is not { } rules || fire.Parameters is not { } parameters)
             {

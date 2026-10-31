@@ -113,6 +113,9 @@ public sealed record ProjectDesign
     /// <summary>Установка спринклерная воздухозаполненная (п. 3.90): питающие и распределительные трубопроводы — под давлением воздуха.</summary>
     public bool AirFilled { get; init; }
 
+    /// <summary>Пенная установка (раствор пенообразователя, столбцы «пена» табл. 6.1–6.3); null — водяная.</summary>
+    public ProjectFoam? Foam { get; init; }
+
     /// <summary>Дренчерные водяные завесы проёмов (пп. 6.3.6–6.3.14).</summary>
     public IReadOnlyList<ProjectCurtain> Curtains { get; init; } = [];
 
@@ -231,6 +234,14 @@ public sealed record ProjectCurtain
     public bool Combined { get; init; } = true;
 
     public string Model { get; init; } = "";
+}
+
+/// <summary>Пенообразователь: наименование и концентрация в растворе, % — по ТД пенообразователя (интенсивности табл. 6.1–6.3 — для типа S).</summary>
+public sealed record ProjectFoam
+{
+    public string Name { get; init; } = "";
+
+    public double Concentration { get; init; }
 }
 
 /// <summary>Этаж АУПТ: имя для листа, чертёж и отметка пола, м (основной этаж — design.floorElevation, по умолчанию 0).</summary>

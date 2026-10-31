@@ -18,6 +18,28 @@ public static class AirFilled
     private const string Doc = "СП 485.1311500.2020";
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
+    /// <summary>Внутренний объём труб трасс, м³, по сортаменту; DN вне сортамента — замечание, участок не учитывается.</summary>
+    public static double InnerVolume(IReadOnlyList<PipeRoute> routes, PipeSeries series, List<Issue> issues)
+    {
+        ArgumentNullException.ThrowIfNull(routes);
+        ArgumentNullException.ThrowIfNull(series);
+        ArgumentNullException.ThrowIfNull(issues);
+        var volume = 0.0;
+        foreach (var s in routes.SelectMany(r => r.Segments.Concat(r.Loops)))
+        {
+            if (series.Pick(s.Dn) is not { } pipe)
+            {
+                issues.Add(new Issue("pipes.noSize", IssueLevel.Warning, $"DN{s.Dn} нет в сортаменте — участок {s.Id} не вошёл в объём трубопроводов.", s.Id));
+                continue;
+            }
+
+            var d = (pipe.OuterDiameterMm - (2 * pipe.WallMm)) / 1000;
+            volume += Math.PI / 4 * d * d * s.Length.Meters;
+        }
+
+        return volume;
+    }
+
     public static AirFilledResult Check(IReadOnlyList<PipeRoute> routes, PipeSeries series, string deflector, double? minTemperatureC, INormsProvider norms)
     {
         ArgumentNullException.ThrowIfNull(routes);
@@ -34,18 +56,7 @@ public static class AirFilled
             return new(0, 0, 0, 0, issues);
         }
 
-        var volume = 0.0;
-        foreach (var s in routes.SelectMany(r => r.Segments.Concat(r.Loops)))
-        {
-            if (series.Pick(s.Dn) is not { } pipe)
-            {
-                issues.Add(new Issue("air.noPipe", IssueLevel.Warning, $"DN{s.Dn} нет в сортаменте — участок {s.Id} не вошёл в объём воздуха.", s.Id));
-                continue;
-            }
-
-            var d = (pipe.OuterDiameterMm - (2 * pipe.WallMm)) / 1000;
-            volume += Math.PI / 4 * d * d * s.Length.Meters;
-        }
+        var volume = InnerVolume(routes, series, issues);
 
         if (minTemperatureC is { } t && t < deflectorRule.Values["belowTemperature"]!.Value && deflector.Equals("down", StringComparison.OrdinalIgnoreCase))
         {

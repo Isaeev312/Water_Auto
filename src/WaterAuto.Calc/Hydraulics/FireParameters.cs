@@ -25,7 +25,10 @@ public sealed record FireParameters(
     Length? StorageHeight,
     IReadOnlyList<string> NormIds)
 {
-    public static FireParametersResult Resolve(INormsProvider norms, string group, Length? roomHeight, Length? storageHeight)
+    /// <summary>Параметры для раствора пенообразователя (столбцы «пена» таблиц 6.1–6.3), иначе — для воды.</summary>
+    public bool Foam { get; init; }
+
+    public static FireParametersResult Resolve(INormsProvider norms, string group, Length? roomHeight, Length? storageHeight, bool foam = false)
     {
         ArgumentNullException.ThrowIfNull(norms);
         var issues = new List<Issue>();
@@ -42,6 +45,10 @@ public sealed record FireParameters(
         }
 
         double V(NormRecord r, string key) => r.Values.GetValueOrDefault(key) ?? double.NaN;
+        // Пенная установка — столбцы раствора пенообразователя (типа S, прим. к табл. 6.1–6.3).
+        var iKey = foam ? "i_foam" : "i_water";
+        var qKey = foam ? "Q_foam" : "Q_water";
+        var agent = foam ? "раствором пенообразователя" : "водой";
         var s = V(t61, "S");
         var t = V(t61, "t_min");
         var spacing = new Length(V(t61, "maxSpacing"));
@@ -68,9 +75,11 @@ public sealed record FireParameters(
                     scope is null ? "табл. 6.2" : "п. 1.3");
             }
 
-            if (band.Values.GetValueOrDefault("i_water") is not { } i || band.Values.GetValueOrDefault("Q_water") is not { } q)
+            if (band.Values.GetValueOrDefault(iKey) is not { } i || band.Values.GetValueOrDefault(qKey) is not { } q)
             {
-                return Fail("params.noWater", $"Группа {group} водой не тушится (табл. 6.2: «-»); пенные установки — вне v1.", "табл. 6.2");
+                return Fail("params.noWater", foam
+                    ? $"Для группы {group} в табл. 6.2 нет параметров {agent}."
+                    : $"Группа {group} водой не тушится (табл. 6.2: «-») — нужна пенная установка (design.foam).", "табл. 6.2");
             }
 
             var factor = 1.0;
@@ -88,7 +97,7 @@ public sealed record FireParameters(
             }
 
             ids.Add(band.Id);
-            return new FireParametersResult(new FireParameters(group, i * factor, new Flow(q * factor), s, t, spacing, factor, source, roomHeight, storageHeight, ids), issues);
+            return new FireParametersResult(new FireParameters(group, i * factor, new Flow(q * factor), s, t, spacing, factor, source, roomHeight, storageHeight, ids) { Foam = foam }, issues);
         }
 
         // Группы 1–4: до 10 м — табл. 6.1, от 10 до 20 м — табл. 6.3 (строка «от 10» включает 10 м).
@@ -103,20 +112,20 @@ public sealed record FireParameters(
                 return Fail("params.roomTooHigh", $"Высота помещения {roomHeight} больше 20 м: спринклерные параметры табл. 6.3 не применяются (примечание 3 к табл. 6.1 — дренчерные АУП или АУП-ПП).", "табл. 6.3");
             }
 
-            if (row.Values.GetValueOrDefault("i_water") is not { } i3 || row.Values.GetValueOrDefault("Q_water") is not { } q3)
+            if (row.Values.GetValueOrDefault(iKey) is not { } i3 || row.Values.GetValueOrDefault(qKey) is not { } q3)
             {
-                return Fail("params.noWater", $"Для группы {group} в табл. 6.3 нет параметров водой.", "табл. 6.3");
+                return Fail("params.noWater", $"Для группы {group} в табл. 6.3 нет параметров {agent}{(foam ? "" : " — нужна пенная установка (design.foam)")}.", "табл. 6.3");
             }
 
             ids.Add(row.Id);
-            return new FireParametersResult(new FireParameters(group, i3, new Flow(q3), V(row, "S"), t, spacing, 1, "табл. 6.3", roomHeight, null, ids), issues);
+            return new FireParametersResult(new FireParameters(group, i3, new Flow(q3), V(row, "S"), t, spacing, 1, "табл. 6.3", roomHeight, null, ids) { Foam = foam }, issues);
         }
 
-        if (t61.Values.GetValueOrDefault("i_water") is not { } i1 || t61.Values.GetValueOrDefault("Q_water") is not { } q1)
+        if (t61.Values.GetValueOrDefault(iKey) is not { } i1 || t61.Values.GetValueOrDefault(qKey) is not { } q1)
         {
-            return Fail("params.noWater", $"Для группы {group} в табл. 6.1 нет параметров водой.", "табл. 6.1");
+            return Fail("params.noWater", $"Для группы {group} в табл. 6.1 нет параметров {agent}{(foam ? "" : " — нужна пенная установка (design.foam)")}.", "табл. 6.1");
         }
 
-        return new FireParametersResult(new FireParameters(group, i1, new Flow(q1), s, t, spacing, 1, "табл. 6.1", roomHeight, null, ids), issues);
+        return new FireParametersResult(new FireParameters(group, i1, new Flow(q1), s, t, spacing, 1, "табл. 6.1", roomHeight, null, ids) { Foam = foam }, issues);
     }
 }

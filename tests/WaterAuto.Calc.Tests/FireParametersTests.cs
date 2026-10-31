@@ -76,6 +76,22 @@ public class FireParametersTests
     }
 
     [Fact]
+    public void Foam_takes_the_solution_columns_and_opens_groups_water_cannot_extinguish()
+    {
+        // Группа 7, складирование 2–3 м: водой «-», раствором 0,3 л/(с·м²) и 54 л/с (табл. 6.2); группа 4.2 — 0,17 и 65 (табл. 6.1).
+        Error("7", room: 8, storage: 3).Code.ShouldBe("params.noWater");
+        var g7 = FireParameters.Resolve(Norms, "7", new Length(8), new Length(3), foam: true).Parameters!;
+        g7.Intensity.ShouldBe(0.3);
+        g7.Flow.LitersPerSecond.ShouldBe(54);
+        g7.Foam.ShouldBeTrue();
+        var g42 = FireParameters.Resolve(Norms, "4.2", null, null, foam: true).Parameters!;
+        g42.Intensity.ShouldBe(0.17);
+        g42.Flow.LitersPerSecond.ShouldBe(65);
+        // Группа 5 пеной — вдвое меньше воды (0,12 против 0,24).
+        FireParameters.Resolve(Norms, "5", new Length(8), new Length(3), foam: true).Parameters!.Intensity.ShouldBe(0.12);
+    }
+
+    [Fact]
     public void Warehouse_needs_storage_height_and_stays_within_the_table()
     {
         Error("5", room: 8).Code.ShouldBe("params.noStorageHeight");

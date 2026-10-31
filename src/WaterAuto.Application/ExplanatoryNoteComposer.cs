@@ -38,7 +38,9 @@ public sealed record NoteInputs(
     ProjectJockey? Jockey = null,
     IReadOnlyList<string>? Groups = null,
     AirFilledResult? Air = null,
-    IReadOnlyList<CurtainResult>? Curtains = null);
+    IReadOnlyList<CurtainResult>? Curtains = null,
+    FoamConcentrateResult? Foam = null,
+    string? FoamName = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -66,6 +68,7 @@ public static class ExplanatoryNoteComposer
                 .. i.Curtains is { Count: > 0 } c ? new[] { Curtains(i, c, norms) } : [],
                 Pump(i, norms),
                 Water(i, norms),
+                .. i.Foam is { } foam ? new[] { FoamSection(i, foam, norms) } : [],
                 Interfaces(),
                 Operation(i, norms),
                 ControlValve(norms, i.Air is not null),
@@ -74,6 +77,21 @@ public static class ExplanatoryNoteComposer
                 Conclusion(i),
             ],
             references);
+    }
+
+    // Пенообразователь (пп. 6.9.16–6.9.24).
+    private static NoteSection FoamSection(NoteInputs i, FoamConcentrateResult f, INormsProvider norms)
+    {
+        var reserve = norms.Find("sp485.p6_9_18.reserve")!.Values["reservePercent"]!.Value;
+        var d = i.Design;
+        return new NoteSection("7а", "Пенообразователь", [
+            new NoteParagraph($"Установка — пенная: интенсивность и расход приняты для раствора пенообразователя {(i.FoamName is { Length: > 0 } n ? $"«{n}» " : "")}по столбцам «раствор пенообразователя» таблиц 6.1–6.3 СП 485 (значения — для пенообразователя типа S; для другого типа — по огневым испытаниям, прим. к таблицам). Концентрация в растворе — {F(f.ConcentrationPercent, "0.#")} % по ТД пенообразователя."),
+            new NoteFormula($"*W*_{{р}} = *Q*·*t*·60 / 1000 + *V*_{{тр}} = {F(f.DosingMax.LitersPerSecond, "0.00")}·{F(d.Duration, "0")}·60 / 1000 + {F(f.PipesM3, "0.00")} = {F(f.SolutionM3, "0.0")} м³,", "7.4", [
+                "где *V*_{тр} — вместимость трубопроводов установки (п. 6.9.19).",
+            ]),
+            new NoteFormula($"*W*_{{по}} = *W*_{{р}}·*c* / 100 = {F(f.SolutionM3, "0.0")}·{F(f.ConcentrationPercent, "0.#")} / 100 = {F(f.ConcentrateM3, "0.00")} м³; с резервом {F(reserve, "0")} % (п. 6.9.18) — **{F(f.TotalM3, "0.00")} м³**.", "7.5", []),
+            new NoteParagraph($"Устройство дозирования обеспечивает заданную концентрацию в диапазоне расходов от {F(f.DosingMin.LitersPerSecond, "0.00")} л/с (один диктующий ороситель) до {F(f.DosingMax.LitersPerSecond, "0.00")} л/с (п. 6.9.23); бак-дозатор в дежурном режиме заполнен до номинального объёма (п. 6.9.22); хранить раствор в установке не допускается (п. 6.9.24); вода — из водопровода непитьевого назначения или с устройством разрыва струи (п. 6.9.16). Трубопроводы раствора маркируются коричневыми кольцами на зелёном фоне (код «9к»)."),
+        ]);
     }
 
     // Водяные завесы (пп. 6.3.6–6.3.14, Б.1.3.4–Б.1.3.6).

@@ -610,6 +610,33 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Flammable_liquid_store_needs_foam_and_gets_concentrate_with_reserve()
+    {
+        // Склад ЛВЖ (группа 7, складирование 3 м): водой не тушится — ошибка с подсказкой design.foam;
+        // пеной 6 % — 0,3 л/(с·м²), 54 л/с (табл. 6.2), пенообразователь с резервом 100 % и бак-дозатор в спецификации.
+        Drawing();
+        Run(Project());
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var store = project.Design with { RoomGroup = "7", StorageHeight = 3, RoomHeight = 6 };
+        var water = Run(Write("lvzh.waproj", ProjectFile.ToJson(project with { Design = store })));
+        water.Issues.ShouldContain(i => i.Code == "params.noWater" && i.Message.Contains("design.foam", StringComparison.Ordinal));
+
+        // Сквозной расчёт пеной — склад группы 5 (22,5 л/с раствора): сеть стоянки для 54 л/с группы 7 мала.
+        var result = Run(Write("foam.waproj", ProjectFile.ToJson(project with { Design = store with { RoomGroup = "5", Foam = new ProjectFoam { Name = "ПО-6ЦТ", Concentration = 6 } } })));
+        result.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty(string.Join(" | ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Message)));
+        result.Design!.Parameters.Intensity.ShouldBe(0.12); // группа 5, 2–3 м: раствором 0,12 против 0,24 водой
+        result.Design.Parameters.Foam.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "foam.amount");
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.StartsWith("Пенообразователь ПО-6ЦТ", StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.StartsWith("Бак-дозатор", StringComparison.Ordinal)));
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("п. 6.9.18");
+        text.ShouldContain("типа S");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();

@@ -1454,6 +1454,30 @@ public static class ProjectPipeline
             };
         }
 
+        // Пенная АУП (пп. 6.9.18, 6.9.19, 6.9.23): раствор с трубами, пенообразователь с резервом, бак-дозатор в спецификации.
+        FoamConcentrateResult? foamResult = null;
+        if (design.Foam is { } foamInput)
+        {
+            var pipeIssues = new List<Issue>();
+            var pipesM3 = AirFilled.InnerVolume(routes, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), pipeIssues);
+            issues.AddRange(pipeIssues.Where(x => !issues.Contains(x)));
+            var solutionFlow = new Flow(governing.PumpFlow.LitersPerSecond - (governing.Hydrants?.TotalFlow.LitersPerSecond ?? 0));
+            foamResult = FoamConcentrate.Calculate(solutionFlow, governing.Duration, pipesM3, foamInput.Concentration, governing.DictatingFlow, norms);
+            issues.AddRange(foamResult.Issues);
+            if (foamResult.TotalM3 > 0)
+            {
+                var ruF = CultureInfo.GetCultureInfo("ru-RU");
+                takeoff = takeoff with
+                {
+                    Items = [.. takeoff.Items,
+                        new TakeoffItem(TakeoffGroup.ControlUnit, $"Пенообразователь{(foamInput.Name.Length > 0 ? $" {foamInput.Name}" : "")}", null, Math.Round(foamResult.TotalM3, 2), "м³",
+                            string.Create(ruF, $"расчётный {foamResult.ConcentrateM3:0.00} м³ + резерв {foamResult.ReserveM3:0.00} м³ (п. 6.9.18 СП 485); концентрация {foamResult.ConcentrationPercent:0.#} %")),
+                        new TakeoffItem(TakeoffGroup.ControlUnit, "Бак-дозатор пенообразователя с обвязкой", null, 1, "компл.",
+                            string.Create(ruF, $"подобрать: объём не менее {foamResult.TotalM3:0.00} м³ (или основной и резервный), дозирование от {foamResult.DosingMin.LitersPerSecond:0.00} до {foamResult.DosingMax.LitersPerSecond:0.00} л/с (пп. 6.9.18, 6.9.23)"))],
+                };
+            }
+        }
+
         // Воздухозаполненная АУП (пп. 6.2.1, 6.2.4–6.2.8, 6.2.19, 6.7.1.21): объём воздуха, проверки, узел и компрессор в спецификации.
         AirFilledResult? air = null;
         var coldRule = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
@@ -1870,7 +1894,9 @@ public static class ProjectPipeline
                 [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                     $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))],
                 air,
-                curtains),
+                curtains,
+                foamResult,
+                design.Foam?.Name),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
