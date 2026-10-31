@@ -782,6 +782,13 @@ public static class ProjectPipeline
             // Диаметры по табл. Б.4, но участки со скоростью выше предела 6.7.1.37 увеличиваются автоматически:
             // иначе на реальном проекте напор доходил до 193 м и насос не подбирался.
             ResizeOverLimit: true);
+        // Водяные завесы (пп. 6.3.6–6.3.14): расчёт ниток до гидравлики АУП — совмещённые с АУП-С входят в расход насоса (Б.28).
+        var curtainSeries = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+        var curtains = design.Curtains.Select((c, n) => DrencherCurtain.Calculate(
+            new CurtainInput(string.Create(CultureInfo.InvariantCulture, $"CUR{n + 1}"), c.Name.Length > 0 ? c.Name : $"завеса {n + 1}", c.Width, c.K, c.Pressure, c.Dn, c.Group ?? design.RoomGroup, c.Combined),
+            curtainSeries, norms)).ToList();
+        issues.AddRange(curtains.SelectMany(c => c.Issues));
+        settings = settings with { CurtainFlowLps = curtains.Where(c => c.Input.CombinedWithSprinkler).Sum(c => c.TotalFlow.LitersPerSecond) };
         HydrantInput? hydrants = null;
         if (design.Hydrants is { } h)
         {
@@ -856,6 +863,12 @@ public static class ProjectPipeline
         UserTank? userTank = design.Tank is { } tank
             ? new UserTank(new Length(tank.Length), new Length(tank.Width), new Length(tank.Height), new Length(tank.DeadLayer))
             : null;
+        foreach (var c in curtains.Where(c => c.Input.CombinedWithSprinkler && c.FeedPressure.Mpa > governing.InletNodePressure.Mpa + 1e-9))
+        {
+            issues.Add(new Issue("curtain.pressure", IssueLevel.Warning,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Завеса «{c.Input.Name}»: в точке питания нужно {c.FeedPressure.Mpa:0.000} МПа, а в точке подключения АУП — {governing.InletNodePressure.Mpa:0.000} МПа: подключить ближе к насосной, увеличить DN нитки или поднять напор."), c.Input.Id));
+        }
+
         if (ReservoirCheck.Check(userTank, worst.WaterVolume, worst.TankMaxFill) is { } reservoirIssue)
         {
             issues.Add(reservoirIssue);
@@ -1291,6 +1304,17 @@ public static class ProjectPipeline
             takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count), issues.Any(i => i.Code == "vpv.diaphragm"))] };
         }
 
+        if (curtains.Count > 0)
+        {
+            takeoff = takeoff with
+            {
+                Items = [.. takeoff.Items, .. design.Curtains.Zip(curtains).Where(x => x.Second.PerRow > 0).Select(x => new TakeoffItem(TakeoffGroup.Sprinklers,
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ороситель дренчерный водяной, K = {x.Second.Input.K:0.###} (завеса «{x.Second.Input.Name}»)"), x.First.Model.Length > 0 ? x.First.Model : "по каталогу",
+                    x.Second.Rows * x.Second.PerRow, "шт.", string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{x.Second.Rows} нитк. × {x.Second.PerRow}, шаг {x.Second.SpacingM:0.00} м, DN{x.Second.Input.Dn}"))),
+                    new TakeoffItem(TakeoffGroup.ControlUnit, "Запорное устройство с электроприводом для пуска водяных завес", null, curtains.Count, "компл.", "подобрать; пуск автоматически и вручную (пп. 6.3.8, 6.3.9, 6.3.14 СП 485)")],
+            };
+        }
+
         // Воздухозаполненная АУП (пп. 6.2.1, 6.2.4–6.2.8, 6.2.19, 6.7.1.21): объём воздуха, проверки, узел и компрессор в спецификации.
         AirFilledResult? air = null;
         var coldRule = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
@@ -1706,7 +1730,8 @@ public static class ProjectPipeline
                 design.Jockey,
                 [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                     $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))],
-                air),
+                air,
+                curtains),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 

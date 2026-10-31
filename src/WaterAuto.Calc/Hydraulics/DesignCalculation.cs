@@ -20,7 +20,8 @@ public sealed record DesignSettings(
     IReadOnlyList<PipeSize>? PipeSizes = null,
     bool ResizeOverLimit = false,
     Length RiserLength = default,
-    int? RiserDn = null);
+    int? RiserDn = null,
+    double CurtainFlowLps = 0);
 
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
@@ -327,6 +328,13 @@ public static class DesignCalculation
             // Б.29: Q = Q_АУП + Q_ВПВ, расходы ПК — по их месту в совмещённой схеме (Б.1.3.8).
             qPump += hydrant.TotalFlow.LitersPerSecond;
             clause += ", Б.29";
+        }
+
+        // Б.28: водяные завесы, совмещённые с АУП-С, — их расход прибавляется к расходу АУП (подводящий и запас воды — с ним).
+        if (settings.CurtainFlowLps > 0)
+        {
+            qPump += settings.CurtainFlowLps;
+            clause += ", Б.28";
         }
 
         var supply = series.Pick(settings.SupplyDn);

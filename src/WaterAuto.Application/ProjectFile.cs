@@ -107,6 +107,9 @@ public sealed record ProjectDesign
     /// <summary>Установка спринклерная воздухозаполненная (п. 3.90): питающие и распределительные трубопроводы — под давлением воздуха.</summary>
     public bool AirFilled { get; init; }
 
+    /// <summary>Дренчерные водяные завесы проёмов (пп. 6.3.6–6.3.14).</summary>
+    public IReadOnlyList<ProjectCurtain> Curtains { get; init; } = [];
+
     /// <summary>Положение розетки для автоподбора: up (вверх), down (вниз), horizontal, concealed.</summary>
     public string SprinklerDeflector { get; init; } = "up";
 
@@ -201,6 +204,29 @@ public sealed record ProjectDesign
 /// Комплектная насосная установка проекта: конкретная установка каталога вместо автоподбора по требуемым подаче и напору.
 /// Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — количество насосов в выпуске берётся по ней.
 /// </summary>
+/// <summary>
+/// Водяная завеса проёма: имя, ширина, м; K и давление у диктующего оросителя, МПа (ТД оросителя); DN нитки; группа помещений
+/// (пусто — design.roomGroup); совмещена с АУП-С — расход складывается с АУП (Б.28), продолжительность — как АУП-С.
+/// </summary>
+public sealed record ProjectCurtain
+{
+    public string Name { get; init; } = "";
+
+    public double Width { get; init; }
+
+    public double K { get; init; }
+
+    public double Pressure { get; init; }
+
+    public int Dn { get; init; } = 32;
+
+    public string? Group { get; init; }
+
+    public bool Combined { get; init; } = true;
+
+    public string Model { get; init; } = "";
+}
+
 /// <summary>Этаж АУПТ: имя для листа, чертёж и отметка пола, м (основной этаж — design.floorElevation, по умолчанию 0).</summary>
 public sealed record ProjectAuptLevel
 {

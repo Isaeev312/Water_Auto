@@ -37,7 +37,8 @@ public sealed record NoteInputs(
     UserTank? Tank = null,
     ProjectJockey? Jockey = null,
     IReadOnlyList<string>? Groups = null,
-    AirFilledResult? Air = null);
+    AirFilledResult? Air = null,
+    IReadOnlyList<CurtainResult>? Curtains = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -62,6 +63,7 @@ public static class ExplanatoryNoteComposer
                 Placement(i),
                 Routing(i, norms),
                 Hydraulics(i, norms),
+                .. i.Curtains is { Count: > 0 } c ? new[] { Curtains(i, c, norms) } : [],
                 Pump(i, norms),
                 Water(i, norms),
                 Interfaces(),
@@ -72,6 +74,32 @@ public static class ExplanatoryNoteComposer
                 Conclusion(i),
             ],
             references);
+    }
+
+    // Водяные завесы (пп. 6.3.6–6.3.14, Б.1.3.4–Б.1.3.6).
+    private static NoteSection Curtains(NoteInputs i, IReadOnlyList<CurtainResult> curtains, INormsProvider norms)
+    {
+        var one = norms.Find("sp485.p6_3_10.singleRow")!.Values;
+        var two = norms.Find("sp485.p6_3_11.twoRows")!.Values;
+        var zone = norms.Find("sp485.p6_3_13.freeZone")!.Values["freeZone"]!.Value;
+        var combined = curtains.Where(c => c.Input.CombinedWithSprinkler).Sum(c => c.TotalFlow.LitersPerSecond);
+        var qAup = i.Design.PumpFlow.LitersPerSecond;
+        var blocks = new List<NoteBlock>
+        {
+            new NoteParagraph($"Проёмы защищаются дренчерными водяными завесами. Проём шириной менее {F(two["fromWidth"]!.Value)} м — распределительный трубопровод в одну нитку с удельным расходом не менее {F(one["specificFlow"]!.Value)} л/(с·м) по всей ширине (п. 6.3.10); {F(two["fromWidth"]!.Value)} м и более — две нитки на расстоянии ({F(two["rowGap"]!.Value)} ± {F(two["rowGapTolerance"]!.Value)}) м с удельным расходом каждой не менее {F(two["rowFlow"]!.Value)} л/(с·м), оросители в шахматном порядке, крайние — не дальше {F(two["wallMax"]!.Value)} м от стены (п. 6.3.11). Шаг оросителей — из расхода диктующего оросителя *q* = 10·*K*·√*p*; расход завесы — сумма расходов оросителей по гидравлическому расчёту нитки (Б.1.3.4, Б.1.3.5, формула Б.27)."),
+            new NoteTable("Водяные завесы", ["Проём", "B, м", "Ниток", "Оросителей в нитке", "Шаг, м", "K", "p, МПа", "DN", "Q, л/с", "P пит., МПа", "t, мин"],
+                [.. curtains.Select(c => (IReadOnlyList<string>)[c.Input.Name, F(c.Input.WidthM, "0.##"), c.Rows.ToString(Ru), c.PerRow.ToString(Ru), F(c.SpacingM, "0.00"), F(c.Input.K, "0.###"),
+                    F(c.Input.DictatingPressureMpa, "0.000"), c.Input.Dn.ToString(Ru), F(c.TotalFlow.LitersPerSecond, "0.00"), F(c.FeedPressure.Mpa, "0.000"), double.IsNaN(c.Duration) ? "как АУП-С" : F(c.Duration, "0")])]),
+        };
+        if (combined > 0)
+        {
+            blocks.Add(new NoteFormula($"*Q* = *Q*_{{АУП}} + *Q*_{{з}} = {F(qAup - combined, "0.00")} + {F(combined, "0.00")} = {F(qAup, "0.00")} л/с,", "Б.28", [
+                "где *Q*_{з} — расход водяных завес, совмещённых с АУП-С (п. 6.3.9, Б.1.3.6); продолжительность их действия — как у АУП-С (п. 6.3.6).",
+            ]));
+        }
+
+        blocks.Add(new NoteParagraph($"Пуск завес — автоматически и вручную (п. 6.3.8); устройства пуска — непосредственно у проёмов с внешней стороны и (или) на ближайшем пути эвакуации (п. 6.3.14). При разделении помещений завесой зона без пожарной нагрузки — не менее {F(zone)} м в обе стороны от нитки (группы ниток) (п. 6.3.13)."));
+        return new NoteSection("5а", "Водяные завесы", blocks);
     }
 
     private static NoteSection Introduction(NoteInputs i) => new("", "Введение", [

@@ -517,6 +517,33 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Combined_curtain_adds_its_flow_to_the_pump_by_B28()
+    {
+        // Ворота 4 м, K = 0,35, p = 0,1 МПа, DN25: одна нитка, 4 оросителя; расход завесы — к расходу насоса (Б.28).
+        Drawing();
+        var single = Run(Project());
+        var q0 = single.Design!.PumpFlow.LitersPerSecond;
+        var w0 = single.Design.WaterVolume;
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("curtain.waproj", ProjectFile.ToJson(project with
+        {
+            Design = project.Design with { Curtains = [new ProjectCurtain { Name = "Ворота", Width = 4, K = 0.35, Pressure = 0.1, Dn = 25 }] },
+        })));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        var qc = result.Design!.PumpFlow.LitersPerSecond - q0;
+        qc.ShouldBeGreaterThan(4 * 10 * 0.35 * Math.Sqrt(0.1));
+        result.Design.PumpFlowClause.ShouldContain("Б.28");
+        result.Design.WaterVolume.ShouldBe(w0 + (qc * result.Design.Duration * 60 / 1000), 1e-6);
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.StartsWith("Ороситель дренчерный", StringComparison.Ordinal)) && r.Contains("4"));
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("Водяные завесы");
+        text.ShouldContain("п. 6.3.10");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();
