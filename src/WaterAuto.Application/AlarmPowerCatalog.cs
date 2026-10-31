@@ -16,18 +16,18 @@ public static class AlarmPowerCatalog
     {
         using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(path));
         var root = doc.RootElement;
-        var voltage = root.GetProperty("voltage").GetDouble();
+        var voltage = new Voltage(root.GetProperty("voltage").GetDouble());
         var c = root.GetProperty("controller");
         var m = root.GetProperty("module");
         var s = root.GetProperty("supply");
         var b = root.GetProperty("battery");
         foreach (var (name, device) in new[] { ("controller", c), ("supply", s) })
         {
-            var v = device.GetProperty("voltage").GetDouble();
+            var v = new Voltage(device.GetProperty("voltage").GetDouble());
             if (v != voltage)
             {
                 throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture,
-                    $"{path}: {name} задан при {v} В, а набор — при {voltage} В; токи одного набора — при одном напряжении."));
+                    $"{path}: {name} задан при {v}, а набор — при {voltage}; токи одного набора — при одном напряжении."));
             }
         }
 
@@ -38,7 +38,7 @@ public static class AlarmPowerCatalog
             new LoopModule(Text(m, "name"), m.GetProperty("inputs").GetInt32(), A(m, "loopCurrent"), m.GetProperty("maxPerLoop").GetInt32(), Text(m, "source")),
             new PowerSupply(Text(s, "name"), A(s, "ownCurrent"), Text(s, "source")),
             new BatteryModel(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
-                b.GetProperty("discharge").EnumerateObject().ToDictionary(p => double.Parse(p.Name, CultureInfo.InvariantCulture), p => new Current(p.Value.GetDouble())),
+                b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
                 Text(b, "source")));
     }
 

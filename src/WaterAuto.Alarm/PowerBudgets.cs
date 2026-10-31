@@ -32,10 +32,11 @@ public static class PowerBudgets
                 $"{m.Name}: {modules} шт. — больше {m.MaxPerLoop} на одну линию {c.Name} по паспорту; нужен второй контроллер."));
         }
 
-        if (loopLoad > c.MaxLoopLoad.Amperes || modules * m.Inputs > c.MaxAddresses)
+        // Адресов у модуля столько, сколько входов использовано (паспорт АР8, п. 2.2.5.3).
+        if (loopLoad > c.MaxLoopLoad.Amperes || inputs > c.MaxAddresses)
         {
             issues.Add(new Issue("aps.power.loopLoad", IssueLevel.Warning,
-                string.Create(ru, $"Нагрузка линии {c.Name} {loopLoad * 1000:0.#} мА, адресов {modules * m.Inputs} — больше паспортных {c.MaxLoopLoad.Amperes * 1000:0.#} мА или {c.MaxAddresses}.")));
+                string.Create(ru, $"Нагрузка линии {c.Name} {loopLoad * 1000:0.#} мА, адресов {inputs} — больше паспортных {c.MaxLoopLoad.Amperes * 1000:0.#} мА или {c.MaxAddresses}.")));
         }
 
         // Ток контроллера в дежурном режиме — линейно между двумя точками паспорта (без нагрузки и с известной нагрузкой линии).
@@ -89,7 +90,7 @@ public static class PowerBudgets
     /// </summary>
     private static double? LoadFactor(BatteryModel battery, double hours, double load, string mode, List<Issue> issues)
     {
-        if (!battery.Discharge.TryGetValue(hours, out var current) || current.Amperes <= 0)
+        if (!battery.Discharge.TryGetValue(TimeSpan.FromHours(hours), out var current) || current.Amperes <= 0)
         {
             issues.Add(new Issue("aps.power.discharge", IssueLevel.Error,
                 string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"В каталоге нет тока разряда {battery.Name} за {hours:0.##} ч — Kн {mode} не определить."),

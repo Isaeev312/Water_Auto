@@ -10,13 +10,13 @@ public class AlarmPowerCatalogTests
     {
         var set = AlarmPowerCatalog.Load(EquipmentSet.PathFor(RepoPaths.Norms, AlarmPowerCatalog.File));
 
-        set.Voltage.ShouldBe(12);
+        set.Voltage.ShouldBe(new WaterAuto.Core.Voltage(12));
         set.Controller.Idle.Amperes.ShouldBe(0.08);
         set.Module.Inputs.ShouldBe(8);
         set.Supply.OwnCurrent.Amperes.ShouldBe(0.04);
         set.Battery.Nominal.AmpereHours.ShouldBe(17);
-        set.Battery.Discharge[24].Amperes.ShouldBe(0.727);
-        set.Battery.Discharge[1].Amperes.ShouldBe(10.41);
+        set.Battery.Discharge[TimeSpan.FromHours(24)].Amperes.ShouldBe(0.727);
+        set.Battery.Discharge[TimeSpan.FromHours(1)].Amperes.ShouldBe(10.41);
     }
 
     [Fact]

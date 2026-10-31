@@ -55,7 +55,7 @@ public static class PowerBudgetXlsx
         var b = budget.Battery;
         (string Name, string Value)[] summary =
         [
-            ("Напряжение питания, В", budget.Voltage.ToString("0.#", ru)),
+            ("Напряжение питания, В", budget.Voltage.Volts.ToString("0.#", ru)),
             ("ΣIд — ток в дежурном режиме, мА", Milli(budget.Standby, ru)),
             ("ΣIп — ток в режиме «Пожар», мА", Milli(budget.Alarm, ru)),
             ("Iибэ — собственный ток РИП от АКБ, мА", Milli(budget.SupplyOwn, ru)),

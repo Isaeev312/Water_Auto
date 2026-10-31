@@ -11,11 +11,23 @@ public class PowerBudgetsTests
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
     private static readonly AlarmPowerSet Set = new(
-        12,
+        new Voltage(12),
         new LoopController("С2000-КДЛ", new Current(0.08), new Current(0.16), new Current(0.0635), new Current(0.4), new Current(0.064), 127, "РЭ КДЛ"),
         new LoopModule("С2000-АР8", 8, new Current(0.004), 15, "РЭ АР8"),
         new PowerSupply("РИП-12 исп.01", new Current(0.04), "РЭ РИП"),
-        new BatteryModel("АБ 1217С", new Charge(17), 80, new Dictionary<double, Current> { [1] = new(10.41), [24] = new(0.727) }, "РЭ АБ"));
+        new BatteryModel("АБ 1217С", new Charge(17), 80, Table(10.41, 0.727), "РЭ АБ"));
+
+    private static Dictionary<TimeSpan, Current> Table(double oneHour, double day) =>
+        new() { [TimeSpan.FromHours(1)] = new(oneHour), [TimeSpan.FromHours(24)] = new(day) };
+
+    [Fact]
+    public void Addresses_count_used_inputs_not_module_capacity()
+    {
+        // 121 вход — 16 АР8, но адресов 121 ≤ 127: замечания о линии по адресам нет (остаётся только по числу модулей).
+        var codes = PowerBudgets.Build(121, Set with { Module = Set.Module with { MaxPerLoop = 20, LoopCurrent = new Current(0.001) } }, Norms).Issues.Select(i => i.Code);
+
+        codes.ShouldNotContain("aps.power.loopLoad");
+    }
 
     [Fact]
     public void Eight_inputs_need_one_module_and_give_the_hand_computed_capacity()
@@ -63,7 +75,7 @@ public class PowerBudgetsTests
     [Fact]
     public void Missing_discharge_column_gives_no_capacity()
     {
-        var set = Set with { Battery = Set.Battery with { Discharge = new Dictionary<double, Current> { [1] = new(10.41) } } };
+        var set = Set with { Battery = Set.Battery with { Discharge = new Dictionary<TimeSpan, Current> { [TimeSpan.FromHours(1)] = new(10.41) } } };
 
         var result = PowerBudgets.Build(8, set, Norms);
 
@@ -76,7 +88,7 @@ public class PowerBudgetsTests
     {
         // 16 АР8 — больше 15 на линии и 127 адресов. Kн ∝ C20, поэтому нехватку ёмкости задаёт таблица разряда:
         // 1,25·((Iд + Iибэ)/I24ч + (Iп + Iибэ)/I1ч) > 1 при токах разряда выше нагрузки (без dischargeLimit).
-        var small = Set with { Battery = Set.Battery with { Discharge = new Dictionary<double, Current> { [1] = new(0.5), [24] = new(0.25) } } };
+        var small = Set with { Battery = Set.Battery with { Discharge = Table(0.5, 0.25) } };
 
         var codes = PowerBudgets.Build(16 * 8, small, Norms).Issues.Where(i => i.Level == IssueLevel.Warning).Select(i => i.Code).ToList();
 
@@ -88,7 +100,7 @@ public class PowerBudgetsTests
     [Fact]
     public void Currents_above_discharge_table_are_a_warning()
     {
-        var weak = Set with { Battery = Set.Battery with { Discharge = new Dictionary<double, Current> { [1] = new(0.3), [24] = new(0.05) } } };
+        var weak = Set with { Battery = Set.Battery with { Discharge = Table(0.3, 0.05) } };
 
         PowerBudgets.Build(8, weak, Norms).Issues.ShouldContain(i => i.Code == "aps.power.dischargeLimit" && i.Level == IssueLevel.Warning);
     }

@@ -5,14 +5,17 @@ namespace WaterAuto.Reports.Tests;
 
 public class PowerBudgetXlsxTests
 {
+    private static Dictionary<TimeSpan, Current> Table(double oneHour, double day) =>
+        new() { [TimeSpan.FromHours(1)] = new(oneHour), [TimeSpan.FromHours(24)] = new(day) };
+
     [Fact]
     public void Writes_devices_and_battery_result()
     {
         var path = Path.Combine(Path.GetTempPath(), $"battery_{Guid.NewGuid():N}.xlsx");
         try
         {
-            var battery = new BatteryModel("АБ 1217С", new Charge(17), 80, new Dictionary<double, Current> { [1] = new(10.41), [24] = new(0.727) }, "РЭ АБ");
-            var budget = new PowerBudget(12,
+            var battery = new BatteryModel("АБ 1217С", new Charge(17), 80, Table(10.41, 0.727), "РЭ АБ");
+            var budget = new PowerBudget(new Voltage(12),
                 [
                     new PowerLine("С2000-КДЛ", 1, new Current(0.085), new Current(0.4), "дежурный — по нагрузке линии", "РЭ КДЛ"),
                     new PowerLine("С2000-АР8", 1, null, null, "питание от линии", "РЭ АР8"),

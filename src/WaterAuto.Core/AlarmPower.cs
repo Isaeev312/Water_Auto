@@ -14,12 +14,12 @@ public sealed record PowerSupply(string Name, Current OwnCurrent, string Source)
 
 /// <summary>
 /// АКБ по паспорту: номинальная ёмкость C20, ёмкость в конце срока службы S (% от начальной) и токи разряда
-/// по таблице разряда — ключ — время разряда, ч.
+/// по таблице разряда — ключ — время разряда.
 /// </summary>
-public sealed record BatteryModel(string Name, Charge Nominal, double EndOfLifePercent, IReadOnlyDictionary<double, Current> Discharge, string Source);
+public sealed record BatteryModel(string Name, Charge Nominal, double EndOfLifePercent, IReadOnlyDictionary<TimeSpan, Current> Discharge, string Source);
 
 /// <summary>Набор приборов питания автоматики АУПТ в АПС из каталога; все токи — при напряжении <paramref name="Voltage"/>, В.</summary>
-public sealed record AlarmPowerSet(double Voltage, LoopController Controller, LoopModule Module, PowerSupply Supply, BatteryModel Battery);
+public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, LoopModule Module, PowerSupply Supply, BatteryModel Battery);
 
 /// <summary>Строка расчёта питания: прибор, количество, токи на единицу (null — питается не от РИП), пояснение и источник.</summary>
 public sealed record PowerLine(string Name, int Count, Current? Standby, Current? Alarm, string Note, string Source);
@@ -29,7 +29,7 @@ public sealed record PowerLine(string Name, int Count, Current? Standby, Current
 /// выбранной АКБ (Б.3). Null — величину посчитать нельзя, причина — в замечаниях.
 /// </summary>
 public sealed record PowerBudget(
-    double Voltage,
+    Voltage Voltage,
     IReadOnlyList<PowerLine> Lines,
     Current Standby,
     Current Alarm,
