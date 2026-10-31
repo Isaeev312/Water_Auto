@@ -15,15 +15,7 @@ public static class SignalListXlsx
 
     private static readonly double[] Widths = [7, 14, 7, 11, 56, 36, 34];
 
-    public static string KindText(SignalKind kind) => kind switch
-    {
-        SignalKind.ValvePosition => "Положение запорного устройства",
-        SignalKind.PressureSwitch => "Срабатывание сигнализатора давления",
-        SignalKind.PumpStart => "Пуск (обобщённый выход)",
-        SignalKind.PumpFault => "Неисправность (обобщённый выход)",
-        SignalKind.AutomaticsOff => "Автоматика отключена",
-        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-    };
+    public static string KindText(SignalKind kind) => kind.Text();
 
     /// <param name="positions">Номера позиций спецификации по роли; без номера ячейка «Поз.» пустая.</param>
     public static void Write(string path, IReadOnlyList<ControlPoint> points, string title, string font = DocumentStyle.DefaultFont, IReadOnlyDictionary<string, int>? positions = null)

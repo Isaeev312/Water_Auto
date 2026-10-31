@@ -163,6 +163,12 @@ public sealed class PumpSetPipelineTests : IDisposable
         var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.BatteryFile)).SelectMany(r => r).ToList();
         battery.ShouldContain("Требуемая ёмкость АКБ, А·ч");
 
+        // Таблица адресов: 8 сигналов — входы 1…8 одного АР8, обозначения те же.
+        var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.AddressTableFile)).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).Where(r => r[3] != "").ToList();
+        addresses.Select(r => r[3]).ShouldBe(Enumerable.Range(1, 8).Select(n => n.ToString(CultureInfo.InvariantCulture)));
+        addresses.Select(r => r[4]).ShouldBe(marks);
+        addresses.ShouldAllBe(r => r[2] == "С2000-АР8 №1");
+
         // Обозначения перечня — те же на схеме насосной.
         var scheme = DxfReader.Read(FileOf(result, ProjectPipeline.PumpSchemeFile)).Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
         foreach (var mark in marks.Distinct())

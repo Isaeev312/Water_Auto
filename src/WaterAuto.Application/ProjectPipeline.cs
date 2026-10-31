@@ -89,6 +89,7 @@ public static class ProjectPipeline
     public const string SignalListFile = "aps_signals.xlsx";
     public const string BatteryFile = "aps_battery.xlsx";
     public const string InteractionFile = "aps_interaction.docx";
+    public const string AddressTableFile = "aps_addresses.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -313,6 +314,7 @@ public static class ProjectPipeline
 
         IReadOnlyList<ControlPoint> controlPoints = [];
         PowerBudget? powerBudget = null;
+        IReadOnlyList<AddressRow> addressRows = [];
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -352,9 +354,11 @@ public static class ProjectPipeline
             var powerSet = EquipmentSet.PathFor(normsDir, AlarmPowerCatalog.File);
             if (controlPoints.Count > 0 && File.Exists(powerSet))
             {
-                var power = PowerBudgets.Build(controlPoints.Count, AlarmPowerCatalog.Load(powerSet), norms);
+                var alarmSet = AlarmPowerCatalog.Load(powerSet);
+                var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms);
                 powerBudget = power.Budget;
                 issues.AddRange(power.Issues);
+                addressRows = AddressTable.Build(controlPoints, alarmSet.Module, alarmSet.Controller.Name).Rows;
             }
         }
 
@@ -983,6 +987,11 @@ public static class ProjectPipeline
         if (powerBudget is not null)
         {
             Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
+        }
+
+        if (addressRows.Count > 0)
+        {
+            Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов сигналов АУПТ в АПС", project.Font));
         }
 
         if (controlPoints.Count > 0)
