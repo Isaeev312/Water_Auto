@@ -43,6 +43,7 @@
       "powderMass": 1.95,
       "mass": 3.05,
       "startCurrent": 0.7,
+      "monitorCurrent": 0.15,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ97.В.00680/25, ОС ФГБОУ ВО «Академия ГПС МЧС России» (RA.RU.11ПБ97), 2025-12-30–2030-12-29",
       "source": "https://epotos.ru/api/product-docs/102/passport/21 — с. 2–4: п.1.6, табл. 1, п.2.2–2.4, табл. 2; https://epotos.ru/api/product-docs/102/passport/21 — с. 6, п.4.2.2; https://epotos.ru/api/product-docs/102/passport/21 — с. свидетельство о приёмке",
       "note": "k2 = 1 + 1,33·Sз/Sу; при Sз/Sу > 0,15 изготовитель рекомендует доп. МПП (п. 2.2); k4 = 1,0 по площади, иначе по СП 485 (п. 2.4); самосрабатывание при 180 °С."
@@ -111,6 +112,7 @@
       "powderMass": 7.0,
       "mass": 12.1,
       "startCurrent": 0.7,
+      "monitorCurrent": 0.15,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ97.В.00076/21, ОС ФГБОУ ВО «Академия ГПС МЧС России», ?–2026-01-12",
       "source": "https://epotos.ru/api/product-docs/60/passport/110 — с. 2–3: табл. 1, табл. 2; свидетельство о приёмке",
       "note": "Импульсный, подача ≤ 1,0 с; Буран-8КД (кратковременного действия) — те же площади, отдельная запись не ведётся. Зона защиты — прямоугольник L×К (табл. 2). Между 3,5 и 5,5 м объём в паспорте не задан."
@@ -148,6 +150,7 @@
       "mass": 3.5,
       "startCurrent": 0.15,
       "startDuration": 0.1,
+      "monitorCurrent": 0.03,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ97.В.00745/26, ОС ФГБОУ ВО «Академия ГПС МЧС России» (RA.RU.11ПБ97), 2026-07-17–2031-07-16",
       "source": "https://antifire.org/wp-content/uploads/2026/08/Pasport-MPPR-2.pdf — с. 3–4: табл. 1 и примечания; https://antifire.org/wp-content/uploads/2026/08/Pasport-MPPR-2.pdf — с. 7–8: п.6.4–6.6, табл. 2, 3; https://antifire.org/wp-content/uploads/2026/08/Pasport-MPPR-2.pdf — с. 16",
       "note": "k2 = 1 + 1,33·Sз/Sу (п. 6.4); k4 в паспорте нет — по СП 485. Класс В по всему объёму — 13 м³ на площади 4,3 м²."
@@ -220,6 +223,7 @@
       "mass": 9.2,
       "startCurrent": 0.15,
       "startDuration": 0.1,
+      "monitorCurrent": 0.03,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ЧС13.В.01077/26, ОС «ПОЖТЕСТ» ФГБУ ВНИИПО МЧС России (RA.RU.10ЧС13), 2026-04-10–2031-04-09",
       "source": "https://antifire.org/wp-content/uploads/2026/06/Pasport-MPPR-6-1.pdf — с. 3–4: табл. 1 и примечания; https://antifire.org/wp-content/uploads/2026/06/Pasport-MPPR-6-1.pdf — с. 8: табл. 2, 3; https://antifire.org/wp-content/uploads/2026/06/Pasport-MPPR-6-1.pdf — с. 16",
       "note": "k2 = 1 + 1,33·Sз/Sу (п. 6.4); k4 в паспорте нет — по СП 485. Версия МПП(Н)-6 имеет другие значения класса В — не путать."
@@ -274,6 +278,7 @@
       "mass": 13,
       "startCurrent": 0.15,
       "startDuration": 0.1,
+      "monitorCurrent": 0.03,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ЧС13.В.00346/21, ОС «ПОЖТЕСТ» ФГБУ ВНИИПО МЧС России, 2021-11-09–2026-11-09 (действует, истекает 09.11.2026)",
       "source": "https://antifire.org/wp-content/uploads/2025/01/Pasport-MPP-9.pdf — с. 3–4: табл. 1 и примечания; https://antifire.org/wp-content/uploads/2025/01/Pasport-MPP-9.pdf — с. 8: табл. 2; https://antifire.org/wp-content/uploads/2021/11/Sert-sootv-MPP-9-2021...2026.pdf — с. 1 (скан)",
       "note": "k2 = 1 + 1,33·Sз/Sу (п. 6.4 паспорта). СЕРТИФИКАТ ИСТЕКАЕТ 09.11.2026 — проверить новый перед применением."
@@ -362,6 +367,7 @@
       "mass": 8.0,
       "startCurrent": 0.1,
       "startDuration": 0.01,
+      "monitorCurrent": 0.02,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ34.В.00200/22, ОС ООО «НТЦ «ПОЖ-АУДИТ» (RA.RU.ПБ34), 2022-07-18–2027-07-17 (действует; последняя цифра года частично закрыта печатью, при увеличении читается как 7 — сверить в реестре ФГИС)",
       "source": "https://www.eternis.ru/upload/iblock/bab/tk7y6evzsyaw3ozxz5y81owjjp3krjtj/PS-Garant_5-_011225_v.3.7_UTV_.pdf — с. 3–5: табл. 1, табл. 2; 6–7: табл. 3–4; https://www.eternis.ru/upload/iblock/ff7/0vwrw8jwou1gw6qjg8qda6817lmulm53/Sertifikat_MPP_5_7_12.pdf — с. 1–2 (скан с приложением)",
       "note": "k2 в паспорте НЕТ — расчёт количества по прил. И не выполняется до получения k2 от изготовителя (А-17). k1 = 1,0 и k4 = 1,0 указаны без привязки к способу — k4 принят для тушения по площади. Значения — по вписанному квадрату; между точками таблицы — меньшее."
@@ -450,6 +456,7 @@
       "mass": 10.5,
       "startCurrent": 0.1,
       "startDuration": 0.01,
+      "monitorCurrent": 0.02,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ34.В.00200/22, ОС ООО «НТЦ «ПОЖ-АУДИТ» (RA.RU.ПБ34), 2022-07-18–2027-07-17 (действует; последняя цифра года частично закрыта печатью, при увеличении читается как 7 — сверить в реестре ФГИС)",
       "source": "https://www.eternis.ru/upload/iblock/0e3/83g9a8fw63x4fvmc8t2lbkif238zcncn/PS-Garant_7-_021225_v.3.6_UTV_.pdf — с. 3–5: табл. 1, табл. 2; 6–7: табл. 3–4; https://www.eternis.ru/upload/iblock/ff7/0vwrw8jwou1gw6qjg8qda6817lmulm53/Sertifikat_MPP_5_7_12.pdf — с. 1–2 (скан с приложением)",
       "note": "k2 в паспорте НЕТ — расчёт количества по прил. И не выполняется до получения k2 от изготовителя (А-17). k1 = 1,0 и k4 = 1,0 указаны без привязки к способу — k4 принят для тушения по площади. Значения — по вписанному квадрату; между точками таблицы — меньшее."
@@ -538,6 +545,7 @@
       "mass": 18.1,
       "startCurrent": 0.1,
       "startDuration": 0.01,
+      "monitorCurrent": 0.02,
       "certificate": "Сертификат ТР ЕАЭС 043/2017 ЕАЭС RU C-RU.ПБ34.В.00200/22, ОС ООО «НТЦ «ПОЖ-АУДИТ» (RA.RU.ПБ34), 2022-07-18–2027-07-17 (действует; последняя цифра года частично закрыта печатью, при увеличении читается как 7 — сверить в реестре ФГИС)",
       "source": "https://www.eternis.ru/upload/iblock/585/tahoiuyqeux5lkfc308uk3t8k9hrtylx/PS-Garant_12-_021225_v.3.10_UTV_.pdf — с. 3–6: табл. 1–3; 8: табл. 4; https://www.eternis.ru/upload/iblock/ff7/0vwrw8jwou1gw6qjg8qda6817lmulm53/Sertifikat_MPP_5_7_12.pdf — с. 1–2 (скан с приложением); https://files.layta.ru/upload/files_upload/Eternis/pasporta/garant_12_passport.pdf — с. 3–4: табл. 1–2",
       "note": "k2 в паспорте НЕТ — расчёт количества по прил. И не выполняется до получения k2 от изготовителя (А-17). k1 = 1,0 и k4 = 1,0 указаны без привязки к способу — k4 принят для тушения по площади. Значения — по вписанному квадрату; между точками таблицы — меньшее. Табл. 2 и табл. 4 паспорта расходятся на 12 м (объём А 95 / 96) — принято 95."

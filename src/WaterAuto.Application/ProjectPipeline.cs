@@ -113,6 +113,7 @@ public static class ProjectPipeline
     public const string PowderVolume = "АПТ";
     public const string PowderNoteFile = "apt_pz.docx";
     public const string PowderSpecFile = "apt_spec.xlsx";
+    public const string PowderPlanFile = "apt_plan.dxf";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
     {
@@ -338,13 +339,14 @@ public static class ProjectPipeline
         IReadOnlyList<AlarmSpecItem> alarmSpec = [];
         List<CableLine> cableLines = [];
         List<LoopLine> schemeLoops = [];
+        var powderStartUnits = 0;
         AlarmPowerSet? alarmSetForDocs = null;
 
         // Блоки тома АПС — общие для проекта с АУПТ и без неё (aupt: false): питание, адреса, спецификация и журнал;
         // листы планов по уровням; документы тома. Питание считается при сигналах АУПТ или при раскладке АПС без АУПТ.
         void BuildAlarmPower()
         {
-            var needPower = controlPoints.Count > 0 || (!project.Aupt && detectorLayout is not null);
+            var needPower = controlPoints.Count > 0 || (!project.Aupt && detectorLayout is not null) || powderStartUnits > 0;
             // АКБ приборов автоматики АУПТ (ADR 0012, этап 1): по одному входу модуля на точку управления.
             var powerSet = EquipmentSet.PathFor(normsDir, AlarmPowerCatalog.File);
             if (needPower && !File.Exists(powerSet))
@@ -651,16 +653,64 @@ public static class ProjectPipeline
 
             var dir = Path.Combine(outDir, PowderVolume);
             var tt = project.Title;
-            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues);
+            // Цепи пуска от блока пуска АУП (каталог оповещателей, startUnits): выходы по помещениям, блоки — в питание АПС.
+            PowderStartPlan? start = null;
+            PowderStartUnitEntry? unit = null;
+            var notifierFile = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
+            if (File.Exists(notifierFile) && AlarmNotifierCatalog.Load(notifierFile).StartUnits is { Count: > 0 } startUnits)
+            {
+                unit = startUnits[0];
+                start = WaterAuto.Calc.Powder.PowderStart.Plan([.. result.Rooms.Select(r => (r.RoomId, r.Modules))], entry.StartCurrent, entry.MonitorCurrent, unit.Model);
+                issues.AddRange(start.Issues);
+                if (start.Units > 0)
+                {
+                    powderStartUnits = start.Units;
+                    poweredDevices.Add((unit.Device, start.Units));
+                }
+            }
+            else
+            {
+                issues.Add(new Issue("powder.start.noUnit", IssueLevel.Warning, "В каталоге нет блока пуска АУП (startUnits) — цепи пуска модулей не рассчитаны."));
+            }
+
+            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, start, unit?.Model);
+            // План: модули сеткой по помещению, не меньше расчётного N (PowderLayout); если сетка дала больше — замечание.
+            var planRooms = new List<PowderPlanRoom>();
+            foreach (var rr in result.Rooms)
+            {
+                var room = rooms.First(x => x.Id == rr.RoomId);
+                var outline = plan.Rooms.First(x => x.Id == rr.RoomId).Contour;
+                var placed = WaterAuto.Calc.Powder.PowderLayout.Place(outline, rr.Modules, rr.PerModule);
+                if (placed.Count != rr.Modules)
+                {
+                    issues.Add(new Issue("powder.layout.count", IssueLevel.Warning,
+                        $"«{room.Name}»: по расчёту {rr.Modules} модулей, при раскладке сеткой с ячейкой не больше стороны защищаемого квадрата — {placed.Count}; в спецификации — расчётное количество, проверить расстановку по диаграмме распыла (п. 10.2.13).", room.Id));
+                }
+
+                planRooms.Add(new PowderPlanRoom(room.Name, outline, [.. placed.Select((pt, k) => ($"{room.Id}.P{k + 1}", pt))],
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{room.Name}: {PowderNote.MethodText(room.Method)}, класс {room.FireClass}, модулей {rr.Modules} ({rr.Formula}); высота установки {room.MountHeightM:0.##} м.")));
+            }
+
+            Write(dir, PowderPlanFile, files, p => PowderPlanDxfWriter.Write(p, planRooms, entry.Model.Name, 1, [
+                "Расстановка — равномерной сеткой по габаритам помещения; уточнить по диаграмме распыла и затенениям по ТД на модуль (п. 10.2.13 СП 485).",
+                "Все модули помещения срабатывают в интервале не более 3 с (п. 10.2.4); пуск — от прибора управления АПС после задержки на эвакуацию (п. 10.4.3).",
+                "Крепление модулей — на пятикратный вес (п. 10.2.14); над модулями и у входов — табло «Порошок — уходи!», «Порошок — не входи!» (п. 10.3.1).",
+            ], Stamp(project, "АПТ", "План расстановки модулей порошкового пожаротушения"), project.Font));
             Write(dir, PowderNoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "АПТ.ПЗ", "Порошковое пожаротушение. Пояснительная записка"), project.Font));
             var total = result.Rooms.Sum(x => x.Modules);
             AlarmSpecItem[] items =
             [
                 new($"Модуль порошкового пожаротушения {entry.Designation}", entry.Model.Name, entry.Manufacturer, "шт.", total + result.Reserve, entry.Certificate,
                     string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"в установке {total}, запас {result.Reserve} (п. 10.2.16 СП 485){(entry.StartCurrent is { } sc ? $"; ток пуска не менее {sc:0.##} А" : "")}")),
+                .. start is { Units: > 0 } && unit is not null
+                    ? new AlarmSpecItem[] { new($"Блок пуска модулей ({unit.Designation})", unit.Model.Name, unit.Manufacturer, "шт.", start.Units, unit.Device.Certificate, $"{start.OutputsByRoom.Values.Sum()} выходов, до {start.ModulesPerOutput} модулей на выход; питание 12 В от РИП (в расчёте АКБ)") }
+                    : [],
             ];
             Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
         }
+
+        // Порошок считается до питания АПС: блоки пуска модулей входят в расчёт АКБ.
+        BuildPowder();
 
         // Проект без водяной АУПТ: только том АПС и (или) АПТ, раздел design не нужен.
         if (!project.Aupt)
@@ -674,7 +724,6 @@ public static class ProjectPipeline
             BuildAlarmPower();
             WriteAlarmPlans([.. issues]);
             WriteAlarmDocs();
-            BuildPowder();
             files.Add(WriteIssues(outDir, issues));
             return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal))), files, issues, null);
         }
@@ -1539,7 +1588,6 @@ public static class ProjectPipeline
         }
 
         WriteAlarmDocs();
-        BuildPowder();
 
         Write(auptDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
         Write(auptDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));

@@ -81,3 +81,9 @@ public sealed record PowderRoom(
 public sealed record PowderRoomResult(string RoomId, int Modules, double Protected, double PerModule, double K1, double K2, double K3, double K4, string Formula, string Clause);
 
 public sealed record PowderResult(IReadOnlyList<PowderRoomResult> Rooms, int Reserve, IReadOnlyList<Issue> Issues);
+
+/// <summary>Блок пуска АУП по паспорту: число выходов, ток выхода и суммарный, ток контроля цепей, А.</summary>
+public sealed record PowderStartUnit(string Name, int Outputs, double MaxOutputCurrent, double MaxTotalCurrent, double MonitorCurrent);
+
+/// <summary>Цепи пуска: модулей на выход, выходов по помещениям, блоков пуска, замечания.</summary>
+public sealed record PowderStartPlan(int ModulesPerOutput, IReadOnlyDictionary<string, int> OutputsByRoom, int Units, IReadOnlyList<Issue> Issues);
