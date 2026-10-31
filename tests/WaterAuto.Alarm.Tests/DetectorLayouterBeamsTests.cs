@@ -53,8 +53,10 @@ public class DetectorLayouterBeamsTests
     }
 
     [Fact]
-    public void Crossing_beams_are_reported_as_coffers_and_laid_out_flat()
+    public void Crossing_beams_make_coffers_with_a_detector_per_cell_by_table_6_3()
     {
+        // Балки 0,5 м поперёк (x = 6,25…6,75) и вдоль (y = 4,75…5,25): 2 × 2 ячейки ≈ 6,25 × 4,75 и 13,25 × 4,75 м.
+        // H = 3 м → до ближайшего дымового ИП ≤ 4,5 м → шаг ≤ 6,36 м: ячейки 13,25 м делятся на 3 → (1 + 3) × 2 = 8 ИП.
         var zone = Zone(0.5) with
         {
             Beams = [new Beam("B1", Rect(6250, 0, 6750, 10000), new Length(0.5), new Length(3)), new Beam("B3", Rect(0, 4750, 20000, 5250), new Length(0.5), new Length(3))],
@@ -62,8 +64,36 @@ public class DetectorLayouterBeamsTests
 
         var layout = DetectorLayouter.Layout([zone], Norms);
 
-        layout.Issues.ShouldContain(i => i.Code == "aps.layout.coffers" && i.Level == IssueLevel.Warning && i.Clause!.Contains("табл. 6.3"));
+        layout.Detectors.Count.ShouldBe(8);
+        layout.Detectors.ShouldAllBe(d => zone.Beams.All(b => !b.Outline.Contains(d.Location)));
+        // В каждой ячейке любая точка не дальше 4,5 м от ИП ячейки.
+        foreach (var cell in new[] { Rect(0, 0, 6250, 4750), Rect(6750, 0, 20000, 4750), Rect(0, 5250, 6250, 10000), Rect(6750, 5250, 20000, 10000) })
+        {
+            var inCell = layout.Detectors.Where(d => cell.Contains(d.Location)).ToList();
+            inCell.ShouldNotBeEmpty();
+            foreach (var v in cell.Vertices)
+            {
+                inCell.Min(d => Math.Sqrt(Math.Pow(d.Location.XMm - v.XMm, 2) + Math.Pow(d.Location.YMm - v.YMm, 2))).ShouldBeLessThanOrEqualTo(4500 + 1);
+            }
+        }
+
+        var info = layout.Issues.Single(i => i.Code == "aps.layout.coffers");
+        info.Level.ShouldBe(IssueLevel.Info);
+        info.Message.ShouldContain("на потолке (W > 4D)");
+    }
+
+    [Fact]
+    public void Low_crossing_beams_are_laid_out_as_a_flat_ceiling()
+    {
+        var zone = Zone(0.2) with
+        {
+            Beams = [new Beam("B1", Rect(6250, 0, 6750, 10000), new Length(0.2), new Length(3)), new Beam("B3", Rect(0, 4750, 20000, 5250), new Length(0.2), new Length(3))],
+        };
+
+        var layout = DetectorLayouter.Layout([zone], Norms);
+
         layout.Detectors.Count.ShouldBe(6);
+        layout.Issues.ShouldContain(i => i.Code == "aps.layout.coffers" && i.Level == IssueLevel.Info && i.Message.Contains("плоском потолке"));
     }
 
     [Fact]

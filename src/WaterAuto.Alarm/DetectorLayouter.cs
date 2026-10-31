@@ -86,7 +86,7 @@ public static class DetectorLayouter
     }
 
     /// <summary>Поле раскладки: прямоугольник и предел шага и расстояния до грани поперёк балок (null — без балок).</summary>
-    private sealed record Field(Box Box, bool AcrossX, double? MaxAcross, double? MaxToFace, Polygon? Outline = null);
+    private sealed record Field(Box Box, bool AcrossX, double? MaxAcross, double? MaxToFace, Polygon? Outline = null, double? MaxStep = null);
 
     /// <summary>
     /// Поля между балками одного направления, пересекающими помещение насквозь. Балки двух направлений — кессоны (табл. 6.3),
@@ -119,10 +119,7 @@ public static class DetectorLayouter
 
         if (spanning.Any(x => x.AlongX) && spanning.Any(x => !x.AlongX))
         {
-            issues.Add(new Issue("aps.layout.coffers", IssueLevel.Warning,
-                $"Помещение «{zone.RoomName}»: балки двух направлений (кессоны) — размещение по табл. 6.3 не выполнено, ИП расставлены как при плоском потолке; проверить вручную.",
-                zone.RoomId, "СП 484.1311500.2020, табл. 6.3", zone.Outline.Centroid));
-            return [whole];
+            return Coffers(zone, box, spanning.Select(x => (x.Box, x.AlongX, x.Beam.Height.Meters)).ToList(), norms, issues);
         }
 
         // Балки вдоль X делят помещение по Y (поперёк балок — ось Y) и наоборот.
@@ -161,6 +158,60 @@ public static class DetectorLayouter
         return fields;
     }
 
+    /// <summary>
+    /// Кессоны (табл. 6.3): ячейки между балками двух направлений; в каждой ячейке ИП так, чтобы любая её точка была не дальше
+    /// табличного расстояния от ближайшего ИП (шаг сетки не больше d·√2) и в радиусе зоны контроля. Балки ниже 10 % H —
+    /// как плоский потолок. Место установки (на потолке или на нижней плоскости балок при W ≤ 4D) — в замечании.
+    /// </summary>
+    private static List<Field> Coffers(DetectorZone zone, Box box, List<(Box Box, bool AlongX, double HeightM)> beams, INormsProvider norms, List<Issue> issues)
+    {
+        var tallest = beams.Max(b => b.HeightM);
+        var row = DetectorRules.CofferSpacing(norms, zone.Kind, zone.CeilingHeight, new Length(tallest));
+        if (row is null)
+        {
+            issues.Add(new Issue("aps.layout.coffers", IssueLevel.Info,
+                $"Помещение «{zone.RoomName}»: балки двух направлений ниже 10 % высоты помещения — размещение ИП как при плоском потолке (табл. 6.3).",
+                zone.RoomId, "СП 484.1311500.2020, табл. 6.3", zone.Outline.Centroid));
+            return [new Field(box, false, null, null)];
+        }
+
+        var xCuts = beams.Where(b => !b.AlongX).Select(b => (b.Box.X0, b.Box.X1)).OrderBy(c => c.Item1).ToList();
+        var yCuts = beams.Where(b => b.AlongX).Select(b => (b.Box.Y0, b.Box.Y1)).OrderBy(c => c.Item1).ToList();
+        var xs = Spans(box.X0, box.X1, xCuts);
+        var ys = Spans(box.Y0, box.Y1, yCuts);
+        var d = row.Value.Distance.Millimeters;
+        var step = d * Math.Sqrt(2);
+        var fields = new List<Field>();
+        foreach (var (y0, y1) in ys)
+        {
+            foreach (var (x0, x1) in xs)
+            {
+                fields.Add(new Field(new Box(x0, y0, x1, y1), false, null, null, null, step));
+            }
+        }
+
+        var minCell = Math.Min(xs.Min(s => s.Item2 - s.Item1), ys.Min(s => s.Item2 - s.Item1)) / 1000;
+        var onBeams = minCell <= 4 * tallest;
+        issues.Add(new Issue("aps.layout.coffers", IssueLevel.Info,
+            string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"Помещение «{zone.RoomName}»: кессоны {xs.Count} × {ys.Count} ячеек при балках до {new Length(tallest)}, H = {zone.CeilingHeight} — в каждой ячейке ИП не дальше {row.Value.Distance} от любой её точки (строка {row.Value.RecordId}); установка — {(onBeams ? "на нижней плоскости балок (W ≤ 4D)" : "на потолке (W > 4D)")}."),
+            zone.RoomId, "СП 484.1311500.2020, табл. 6.3", zone.Outline.Centroid));
+        return fields;
+    }
+
+    private static List<(double, double)> Spans(double start, double end, List<(double, double)> cuts)
+    {
+        var spans = new List<(double, double)>();
+        var s = start;
+        foreach (var (c0, c1) in cuts)
+        {
+            if (c0 - s > Polygon.ToleranceMm) { spans.Add((s, c0)); }
+            s = Math.Max(s, c1);
+        }
+
+        if (end - s > Polygon.ToleranceMm) { spans.Add((s, end)); }
+        return spans;
+    }
+
     /// <summary>Сетка ИП в поле; null — покрытие не обеспечить (ошибка уже записана).</summary>
     private static List<PlanPoint>? LayoutField(DetectorZone zone, DetectorRules rules, Field field, List<Issue> issues)
     {
@@ -173,6 +224,13 @@ public static class DetectorLayouter
         var step = rules.Coverage >= 2 ? r : r * Math.Sqrt(2);
         var nx = Math.Max(1, (int)Math.Ceiling(box.Width / step));
         var ny = Math.Max(1, (int)Math.Ceiling(box.Height / step));
+        if (field.MaxStep is { } maxStep)
+        {
+            // Кессон: любая точка ячейки не дальше табличного расстояния от ИП — шаг не больше d·√2 по обеим осям.
+            nx = Math.Max(nx, (int)Math.Ceiling(box.Width / maxStep));
+            ny = Math.Max(ny, (int)Math.Ceiling(box.Height / maxStep));
+        }
+
         if (field.MaxAcross is { } across && field.MaxToFace is { } toFace)
         {
             // Поперёк балок: шаг не больше табличного и крайние ИП не дальше табличного расстояния от грани.

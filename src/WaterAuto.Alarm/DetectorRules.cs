@@ -41,6 +41,24 @@ public sealed record DetectorRules(Length Radius, Length MaxRoomHeight, Length M
         return (new Length(row.Values[prefix]!.Value), new Length(row.Values[prefix + "ToWall"]!.Value), row.Id);
     }
 
+    /// <summary>
+    /// Табл. 6.3 (кессоны — балки двух направлений): наибольшее расстояние до ближайшего ИП и место установки. Null — балки
+    /// ниже 10 % высоты, размещение как при плоском потолке. OnBeams — при ширине ячейки W ≤ 4D ИП ставят на нижней плоскости балок.
+    /// </summary>
+    public static (Length Distance, string RecordId)? CofferSpacing(INormsProvider norms, DetectorKind kind, Length ceilingHeight, Length beamHeight)
+    {
+        ArgumentNullException.ThrowIfNull(norms);
+        if (beamHeight.Meters < 0.1 * ceilingHeight.Meters)
+        {
+            return null;
+        }
+
+        var h = Math.Round(ceilingHeight.Meters, MidpointRounding.AwayFromZero);
+        var row = norms.ByClause("табл. 6.3").Where(r => r.Doc == "СП 484.1311500.2020" && r.Attributes.GetValueOrDefault("beam") == "gt10")
+            .FirstOrDefault(r => (r.Values.GetValueOrDefault("hMin") is not { } min || h > min) && (r.Values.GetValueOrDefault("hMax") is not { } max || h <= max));
+        return row is null ? null : (new Length(row.Values[kind == DetectorKind.Smoke ? "smoke" : "heat"]!.Value), row.Id);
+    }
+
     public static string Clause(DetectorKind kind) => kind == DetectorKind.Smoke ? "СП 484.1311500.2020, п. 6.6.16" : "СП 484.1311500.2020, п. 6.6.15";
 
     /// <summary>Правила для вида ИП, алгоритма и адресности; null с замечанием — если записи норм нет.</summary>
