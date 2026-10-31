@@ -29,7 +29,8 @@
     "document": "Проект",
     "author": "Исаев А.",
     "supervisor": "",
-    "cityYear": "Бишкек 2026"
+    "cityYear": "Бишкек 2026",
+    "code": "2026-01"
   },
   "alarm": {
     "zones": [
