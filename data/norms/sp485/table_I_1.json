@@ -1,0 +1,28 @@
+{
+  "$schema": "../../schemas/norms.schema.json",
+  "schemaVersion": 1,
+  "doc": "СП 485.1311500.2020",
+  "edition": "с изм. № 1 (введено с 01.01.2026) и № 2 (введено с 09.07.2026)",
+  "clause": "прил. И, табл. И.1",
+  "title": "Коэффициент сравнительной эффективности огнетушащих порошков k3 по горючему веществу (относительно бензина АИ-92)",
+  "source": "sp-485.1311500.2020-s-izmeneniyami-n-1-2.docx, прил. И, табл. И.1.",
+  "verified": false,
+  "columns": {
+    "abPowder": "порошки для тушения пожаров классов А, В",
+    "bPowder": "порошки для тушения пожаров класса В",
+    "abPowderManual": "порошки классов А, В для установок только с ручным пуском и с импульсными модулями (значение в скобках)"
+  },
+  "footnotes": {
+    "*": "В скобках — значения для установок только с ручным пуском и установок с импульсными модулями.",
+    "нет данных": "При отсутствии вещества в таблице k3 определяется экспериментально (прил. И, п. И.3.1.1) — программа не подставляет значение (А-17)."
+  },
+  "records": [
+    { "id": "sp485.tI_1.petrol", "clause": "прил. И, табл. И.1", "values": { "abPowder": 1.0, "bPowder": 0.9 }, "units": { "abPowder": "—", "bPowder": "—" }, "attrs": { "substance": "бензин АИ-92 (второго класса)" } },
+    { "id": "sp485.tI_1.diesel", "clause": "прил. И, табл. И.1", "values": { "abPowder": 0.9, "bPowder": 0.8 }, "units": { "abPowder": "—", "bPowder": "—" }, "attrs": { "substance": "дизельное топливо" } },
+    { "id": "sp485.tI_1.transformerOil", "clause": "прил. И, табл. И.1", "values": { "abPowder": 0.8, "bPowder": 0.8 }, "units": { "abPowder": "—", "bPowder": "—" }, "attrs": { "substance": "трансформаторное масло" } },
+    { "id": "sp485.tI_1.benzene", "clause": "прил. И, табл. И.1", "values": { "abPowder": 1.1, "bPowder": 1.1 }, "units": { "abPowder": "—", "bPowder": "—" }, "attrs": { "substance": "бензол" } },
+    { "id": "sp485.tI_1.isopropanol", "clause": "прил. И, табл. И.1", "values": { "abPowder": 1.2, "bPowder": 1.1 }, "units": { "abPowder": "—", "bPowder": "—" }, "attrs": { "substance": "изопропанол" } },
+    { "id": "sp485.tI_1.wood", "clause": "прил. И, табл. И.1", "values": { "abPowder": 1.0, "abPowderManual": 2.0 }, "units": { "abPowder": "—", "abPowderManual": "—" }, "attrs": { "substance": "древесина" }, "note": "Порошками класса В не тушится (прочерк в таблице)." },
+    { "id": "sp485.tI_1.rubber", "clause": "прил. И, табл. И.1", "values": { "abPowder": 1.0, "abPowderManual": 1.5 }, "units": { "abPowder": "—", "abPowderManual": "—" }, "attrs": { "substance": "резина" }, "note": "Порошками класса В не тушится (прочерк в таблице)." }
+  ]
+}

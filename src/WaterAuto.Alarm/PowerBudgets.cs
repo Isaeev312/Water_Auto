@@ -3,7 +3,8 @@ using WaterAuto.Core;
 
 namespace WaterAuto.Alarm;
 
-public sealed record PowerBudgetResult(PowerBudget Budget, IReadOnlyList<Issue> Issues);
+/// <summary>Расчёт питания и принятый набор (РИП и АКБ могут быть заменены вариантом из каталога).</summary>
+public sealed record PowerBudgetResult(PowerBudget Budget, IReadOnlyList<Issue> Issues, AlarmPowerSet Set);
 
 /// <summary>
 /// Питание приборов автоматики АУПТ в АПС (ADR 0012, этап 1): контроллер линии, модули входов по числу сигналов, РИП с АКБ.
@@ -20,6 +21,41 @@ public static class PowerBudgets
     public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null, int isolators = 0, IReadOnlyList<(PoweredDevice Device, int Count)>? powered = null)
     {
         ArgumentNullException.ThrowIfNull(set);
+        if (set.Options.Count == 0)
+        {
+            return BuildOne(inputs, set, norms, detectors, isolators, powered);
+        }
+
+        // Подбор из каталога: вариант, при котором требуемая ёмкость обеспечена, с наименьшим числом РИП, затем — с наименьшей
+        // ёмкостью батарей. Ни один не подходит — расчёт по набору по умолчанию с предупреждением о ёмкости.
+        var feasible = set.Options
+            .Select(o => (Option: o, Result: BuildOne(inputs, set with { Supply = o.Supply, Battery = o.Battery, Box = o.Box, Options = [] }, norms, detectors, isolators, powered)))
+            .Where(x => x.Result.Budget.Required is { } r && r.AmpereHours <= x.Option.Battery.Total.AmpereHours + 1e-9)
+            .OrderBy(x => x.Result.Budget.Supplies).ThenBy(x => x.Option.Box is null ? 0 : 1).ThenBy(x => x.Result.Budget.Supplies * x.Option.Battery.Total.AmpereHours)
+            .FirstOrDefault();
+        if (feasible.Result is not { } chosen)
+        {
+            return BuildOne(inputs, set, norms, detectors, isolators, powered);
+        }
+
+        var ru0 = CultureInfo.GetCultureInfo("ru-RU");
+        var o = feasible.Option;
+        return chosen with
+        {
+            Issues =
+            [
+                .. chosen.Issues,
+                new Issue("aps.power.optionChosen", IssueLevel.Info,
+                    string.Create(ru0, $"Питание подобрано из каталога: {o.Supply.Name} с {o.Battery.Label} ({o.Battery.Total.AmpereHours:0.##} А·ч) — наименьший вариант, при котором обеспечена требуемая ёмкость {chosen.Budget.Required!.Value.AmpereHours:0.##} А·ч{(chosen.Budget.Supplies > 1 ? $" на каждый из {chosen.Budget.Supplies} источников" : "")}.{(o.Note is { } n ? " " + n : "")}"),
+                    Clause: Doc),
+            ],
+        };
+    }
+
+    private static PowerBudgetResult BuildOne(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors, int isolators, IReadOnlyList<(PoweredDevice Device, int Count)>? powered)
+    {
+        ArgumentNullException.ThrowIfNull(set);
+        var battery = set.Battery.Combined();
         detectors ??= new Dictionary<string, int>();
         powered ??= [];
         var issues = new List<Issue>();
@@ -31,7 +67,7 @@ public static class PowerBudgets
             // Набор не из каталога (схема такие значения не пропускает): считать нечего, а делить на ноль нельзя.
             issues.Add(new Issue("aps.power.badSet", IssueLevel.Error,
                 $"Набор приборов ({c.Name}, {m.Name}) задан неполно: входы модуля, ток и нагрузка линии, число адресов должны быть больше нуля."));
-            return new(new PowerBudget(set.Voltage, [], Current.Zero, Current.Zero, set.Supply.OwnCurrent, set.Battery, null, null, null, null), issues);
+            return new(new PowerBudget(set.Voltage, [], Current.Zero, Current.Zero, set.Supply.OwnCurrent, set.Battery, null, null, null, null), issues, set);
         }
 
         var deviceLines = new List<PowerLine>();
@@ -89,7 +125,7 @@ public static class PowerBudgets
         }
 
         issues.Add(new Issue("aps.power.defaultSet", IssueLevel.Info,
-            $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Name}), только приборы автоматики АУПТ; пульт и приборы АПС, СОУЭ (этапы 2–3) не учтены."));
+            $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Label}): контроллеры с адресными устройствами, модули сигналов АУПТ, оповещатели и релейные блоки с питанием от РИП; пульт (ППКП) и блок речевого оповещения со своими АКБ в расчёт не входят."));
         if (controllers > 1)
         {
             issues.Add(new Issue("aps.power.controllers", IssueLevel.Info,
@@ -132,8 +168,8 @@ public static class PowerBudgets
         var td = BatteryCapacity.Hours(norms, BatteryCapacity.StandbyTimeId, hourIssues);
         var tp = BatteryCapacity.Hours(norms, BatteryCapacity.AlarmTimeId, hourIssues);
         issues.AddRange(hourIssues);
-        var kd = td is { } hd ? LoadFactor(set.Battery, hd, standbyPer.Amperes + own.Amperes, "дежурного режима", issues) : null;
-        var kp = tp is { } hp ? LoadFactor(set.Battery, hp, alarmPer.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
+        var kd = td is { } hd ? LoadFactor(battery, hd, standbyPer.Amperes + own.Amperes, "дежурного режима", issues) : null;
+        var kp = tp is { } hp ? LoadFactor(battery, hp, alarmPer.Amperes + own.Amperes, "режима «Пожар»", issues) : null;
 
         var aging = BatteryCapacity.Aging(set.Battery.EndOfLifePercent, []);
         Charge? required = null;
@@ -143,19 +179,19 @@ public static class PowerBudgets
             var capacity = BatteryCapacity.Required(new BatteryLoad(standbyPer, alarmPer, own), new BatteryFactors(kStandby, kAlarm, set.Battery.EndOfLifePercent), norms);
             issues.AddRange(capacity.Issues);
             required = capacity.Required;
-            if (required is { } r && r.AmpereHours > set.Battery.Nominal.AmpereHours)
+            if (required is { } r && r.AmpereHours > battery.Nominal.AmpereHours + 1e-9)
             {
                 issues.Add(new Issue("aps.power.capacity", IssueLevel.Warning,
-                    string.Create(ru, $"Требуется АКБ не менее {r.AmpereHours:0.##} А·ч{(supplies > 1 ? $" на каждый из {supplies} источников" : "")}, {set.Battery.Name} — {set.Battery.Nominal.AmpereHours:0.##} А·ч: нужна АКБ большей ёмкости или дополнительный бокс."),
+                    string.Create(ru, $"Требуется АКБ не менее {r.AmpereHours:0.##} А·ч{(supplies > 1 ? $" на каждый из {supplies} источников" : "")}, {set.Battery.Label} — {battery.Nominal.AmpereHours:0.##} А·ч: нужна АКБ большей ёмкости или дополнительный бокс."),
                     Clause: Doc));
             }
 
-            var time = BatteryCapacity.Backup(set.Battery.Nominal, alarmPer, set.Battery.EndOfLifePercent);
+            var time = BatteryCapacity.Backup(battery.Nominal, alarmPer, set.Battery.EndOfLifePercent);
             issues.AddRange(time.Issues);
             backup = time.Time;
         }
 
-        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging, supplies), issues);
+        return new(new PowerBudget(set.Voltage, lines, standby, alarm, own, set.Battery, kd, kp, required, backup, aging, supplies), issues, set);
     }
 
     /// <summary>

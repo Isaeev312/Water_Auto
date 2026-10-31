@@ -191,7 +191,7 @@ public static class AlarmNote
                 "*K*_{н.д}, *K*_{н.п} — коэффициенты нагрузки по паспорту батареи для 24-часового и 1-часового разряда (формула Б.1.1; во втором слагаемом принят ток режима «Пожар»);",
                 "*t*_{д} = 24 ч, *t*_{п} = 1 ч — время работы от батареи (п. Б.2).",
             ]),
-            new NoteParagraph(string.Create(Ru, $"Принята батарея {b.Battery.Name} ёмкостью {b.Battery.Nominal.AmpereHours:0.##} А·ч{(b.Required is { } rq ? (rq.AmpereHours <= b.Battery.Nominal.AmpereHours ? " — требуемая ёмкость обеспечена" : " — **требуемая ёмкость не обеспечена**, нужна батарея большей ёмкости") : "")}. Время работы в режиме «Пожар» по формуле Б.3: *t* = *C*_{{АКБ}} / (*I*_{{п}}·*K*_{{стр}}) = {(b.Backup is { } t ? t.TotalHours.ToString("0.#", Ru) : "—")} ч. Подробно — aps_battery.xlsx.")),
+            new NoteParagraph(string.Create(Ru, $"Принята батарея {b.Battery.Label} ёмкостью {b.Battery.Total.AmpereHours:0.##} А·ч{(b.Required is { } rq ? (rq.AmpereHours <= b.Battery.Total.AmpereHours + 1e-9 ? " — требуемая ёмкость обеспечена" : " — **требуемая ёмкость не обеспечена**, нужна батарея большей ёмкости") : "")}. Время работы в режиме «Пожар» по формуле Б.3: *t* = *C*_{{АКБ}} / (*I*_{{п}}·*K*_{{стр}}) = {(b.Backup is { } t ? t.TotalHours.ToString("0.#", Ru) : "—")} ч. Подробно — aps_battery.xlsx.")),
         ];
     }
 

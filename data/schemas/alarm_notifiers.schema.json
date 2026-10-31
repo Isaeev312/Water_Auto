@@ -357,6 +357,87 @@
           }
         }
       }
+    },
+    "startUnits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "designation",
+          "manufacturer",
+          "outputs",
+          "maxOutputCurrent",
+          "maxTotalCurrent",
+          "monitorCurrent",
+          "standbyCurrent",
+          "alarmCurrent",
+          "voltage",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "designation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "manufacturer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outputs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxOutputCurrent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Наибольший ток одного выхода, А."
+          },
+          "maxTotalCurrent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Наибольший суммарный ток выходов блока, А."
+          },
+          "monitorCurrent": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Ток контроля исправности цепей, А."
+          },
+          "standbyCurrent": {
+            "type": "number",
+            "minimum": 0
+          },
+          "alarmCurrent": {
+            "type": "number",
+            "minimum": 0
+          },
+          "voltage": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "certificate": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }
