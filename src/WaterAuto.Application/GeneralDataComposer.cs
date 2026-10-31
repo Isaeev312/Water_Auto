@@ -21,7 +21,8 @@ public sealed record GeneralDataInputs(
     string WeldStandard,
     IReadOnlyDictionary<string, string> FittingStandards,
     string? SpecificationDesignation = null,
-    string? StationSpecificationDesignation = null);
+    string? StationSpecificationDesignation = null,
+    bool AirFilled = false);
 
 /// <summary>
 /// Лист «Общие данные» (ГОСТ Р 21.101): ведомость чертежей — из проекта; ссылочные документы — нормы расчёта и все
@@ -99,7 +100,7 @@ public static class GeneralDataComposer
             $"Рабочие чертежи автоматической установки водяного пожаротушения объекта «{i.ObjectName}» выполнены в соответствии с СП 485.1311500.2020"
                 + (d.Hydrants is null ? "" : d.Hydrants.Settings.IsParking ? ", внутренний противопожарный водопровод — СН КР 40-04:2025 и СНиП 21-02-99*" : ", внутренний противопожарный водопровод — СН КР 40-04:2025")
                 + ".",
-            $"Установка — спринклерная водозаполненная. Параметры приняты для группы помещений {p.Group} по {p.Source} СП 485.",
+            $"Установка — спринклерная {(i.AirFilled ? "воздухозаполненная" : "водозаполненная")}. Параметры приняты для группы помещений {p.Group} по {p.Source} СП 485.",
             $"Трубопроводы — стальные по {i.PipeStandard}; соединения — на сварке по {i.WeldStandard}; фасонные части — {string.Join(", ", i.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}.",
             "Монтаж трубопроводов и оборудования, их крепление — по СП 75.13330; приёмо-сдаточные испытания установки — по ГОСТ Р 50680.",
             "Технические средства установки, кроме оросителей, измерительных приборов и трубопроводов, окрасить в красный цвет (п. 6.8.11 СП 485).",

@@ -105,6 +105,12 @@ public static class ProjectPipeline
     public const string SouePlanLayer = "СОУЭ_ОПОВЕЩАТЕЛИ";
     public const string IssuesFile = "issues.txt";
 
+    /// <summary>План этажа АУПТ из design.levels (k = 1, 2, …; основной этаж — <see cref="PlanDxfFile"/>).</summary>
+    public static string LevelPlanFile(int k) => string.Create(CultureInfo.InvariantCulture, $"plan_level{k}.dxf");
+
+    /// <summary>Аксонометрия этажа АУПТ из design.levels.</summary>
+    public static string LevelAxonometryFile(int k) => string.Create(CultureInfo.InvariantCulture, $"axonometry_level{k}.dxf");
+
     /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
     public const string AuptVolume = "АУПТ";
     public const string AlarmVolume = "АПС";
@@ -662,7 +668,8 @@ public static class ProjectPipeline
             PowderStartPlan? start = null;
             PowderStartUnitEntry? unit = null;
             var notifierFile = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
-            if (File.Exists(notifierFile) && AlarmNotifierCatalog.Load(notifierFile).StartUnits is { Count: > 0 } startUnits)
+            var notifierCatalog = File.Exists(notifierFile) ? AlarmNotifierCatalog.Load(notifierFile) : null;
+            if (notifierCatalog?.StartUnits is { Count: > 0 } startUnits)
             {
                 unit = startUnits[0];
                 start = WaterAuto.Calc.Powder.PowderStart.Plan([.. result.Rooms.Select(r => (r.RoomId, r.Modules))], entry.StartCurrent, entry.MonitorCurrent, unit.Model);
@@ -676,6 +683,42 @@ public static class ProjectPipeline
             else
             {
                 issues.Add(new Issue("powder.start.noUnit", IssueLevel.Warning, "В каталоге нет блока пуска АУП (startUnits) — цепи пуска модулей не рассчитаны."));
+            }
+
+            // Сигнализация режимов (СП 484 пп. 7.6.3, 7.6.5): табло над каждой дверью, датчик положения двери, звуковой оповещатель на зону.
+            var signItems = new List<AlarmSpecItem>();
+            var signs = norms.Find("sp484.p7_6_5.signs");
+            var doorNorm = norms.Find("sp484.p7_6_3.doorSensors");
+            if (signs is null || doorNorm is null)
+            {
+                issues.Add(new Issue("powder.signs.noNorm", IssueLevel.Warning, "В данных норм нет пп. 7.6.3, 7.6.5 СП 484 — табло и датчики положения дверей не подобраны."));
+            }
+            else
+            {
+                var doors = result.Rooms.Sum(rr => Math.Max(1, powder.Rooms.FirstOrDefault(x => string.Equals(x.Room, rooms.First(y => y.Id == rr.RoomId).Name, StringComparison.OrdinalIgnoreCase))?.Doors ?? 1));
+                var lights = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Light).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                var sounders = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Sound).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                const string Rule = "СП 484.1311500.2020, п. 7.6.5";
+                foreach (var (text, key, side) in new[] { ("Автоматика отключена", "automaticOffOutside", "со стороны входа"), ("Порошок — не входить!", "keepOutOutside", "со стороны входа"), ("Порошок — уходи!", "leaveInside", "со стороны выхода") })
+                {
+                    var n = (int)Math.Ceiling(doors * signs.Values[key]!.Value - 1e-9);
+                    var light = lights.Count > 0 ? lights[0] : null;
+                    signItems.Add(new($"Оповещатель пожарный световой (табло) «{text}»", light?.Model.Name ?? "подобрать", light?.Manufacturer ?? "", "шт.", n, light?.Device.Certificate, $"над каждой дверью {side}; {Rule}"));
+                    if (light is not null)
+                    {
+                        poweredDevices.Add((light.Device, n));
+                    }
+                }
+
+                signItems.Add(new("Извещатель магнитоконтактный — датчик положения двери", "подобрать", "", "шт.", (int)Math.Ceiling(doors * doorNorm.Values["perDoor"]!.Value - 1e-9), null,
+                    "открытие двери переводит АУП в «Автоматика отключена»; СП 484.1311500.2020, п. 7.6.3"));
+                var zoneSounders = (int)Math.Ceiling(result.Rooms.Count * signs.Values["soundersPerZone"]!.Value - 1e-9);
+                var sounder = sounders.Count > 0 ? sounders[0] : null;
+                signItems.Add(new("Оповещатель пожарный звуковой", sounder?.Model.Name ?? "подобрать", sounder?.Manufacturer ?? "", "шт.", zoneSounders, sounder?.Device.Certificate, $"звуковая сигнализация режимов раздельно для каждой зоны пожаротушения; {Rule}"));
+                if (sounder is not null)
+                {
+                    poweredDevices.Add((sounder.Device, zoneSounders));
+                }
             }
 
             var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, start, unit?.Model);
@@ -699,7 +742,7 @@ public static class ProjectPipeline
             Write(dir, PowderPlanFile, files, p => PowderPlanDxfWriter.Write(p, planRooms, entry.Model.Name, 1, [
                 "Расстановка — равномерной сеткой по габаритам помещения; уточнить по диаграмме распыла и затенениям по ТД на модуль (п. 10.2.13 СП 485).",
                 "Все модули помещения срабатывают в интервале не более 3 с (п. 10.2.4); пуск — от прибора управления АПС после задержки на эвакуацию (п. 10.4.3).",
-                "Крепление модулей — на пятикратный вес (п. 10.2.14); над модулями и у входов — табло «Порошок — уходи!», «Порошок — не входи!» (п. 10.3.1).",
+                "Крепление модулей — на пятикратный вес (п. 10.2.14); над каждой дверью — табло «Автоматика отключена», «Порошок — не входить!» снаружи и «Порошок — уходи!» изнутри, датчик положения двери (пп. 7.6.3, 7.6.5 СП 484).",
             ], Stamp(project, "АПТ", "План расстановки модулей порошкового пожаротушения"), project.Font));
             Write(dir, PowderNoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "АПТ.ПЗ", "Порошковое пожаротушение. Пояснительная записка"), project.Font));
             var total = result.Rooms.Sum(x => x.Modules);
@@ -710,6 +753,7 @@ public static class ProjectPipeline
                 .. start is { Units: > 0 } && unit is not null
                     ? new AlarmSpecItem[] { new($"Блок пуска модулей ({unit.Designation})", unit.Model.Name, unit.Manufacturer, "шт.", start.Units, unit.Device.Certificate, $"{start.OutputsByRoom.Values.Sum()} выходов, до {start.ModulesPerOutput} модулей на выход; питание 12 В от РИП (в расчёте АКБ)") }
                     : [],
+                .. signItems,
             ];
             Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
         }
@@ -826,25 +870,29 @@ public static class ProjectPipeline
             return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal) || i.Code.StartsWith("gas.", StringComparison.Ordinal))), files, issues, null);
         }
 
-        var resolved = LayoutRules.Resolve(norms, design.RoomGroup, design.ConstructionClass, design.MaxSpacing is { } m ? new Length(m) : null);
-        issues.AddRange(resolved.Issues);
-        if (resolved.Rules is not { } rules)
+        // Группы помещений (design.rooms): раскладка и трассы — по правилам своей группы; без записей — одна группа design.roomGroup.
+        if (AuptGroups.Build(plan, design, norms, issues) is not { } roomGroups)
         {
             return Stop();
         }
 
-        var fire = FireParameters.Resolve(norms, design.RoomGroup, design.RoomHeight is { } rh ? new Length(rh) : null, design.StorageHeight is { } sh ? new Length(sh) : null);
-        issues.AddRange(fire.Issues);
-        if (fire.Parameters is not { } parameters)
+        // Этажи (design.levels): свой чертёж с вводом-стояком, ID помещений с префиксом «L{k}.»; расчёт — с подъёмом и длиной стояка.
+        var mainGroups = roomGroups;
+        var auptLevels = AuptLevels.Build(project, projectPath, design, norms, issues);
+        if (auptLevels.Count > 0)
         {
-            return Stop();
+            roomGroups = AuptGroupsResult.Merge([mainGroups, .. auptLevels.Select(l => l.Groups)]);
         }
 
-        var layout = SprinklerLayouter.Layout(plan, rules, design.FloorElevation is { } floor ? new Length(floor) : null);
+        AuptGroups.CheckRooms(design, [plan, .. auptLevels.Select(l => l.Plan)], issues);
+        var mainZone = roomGroups.Zones.FirstOrDefault(z => z.Group == design.RoomGroup) ?? roomGroups.Zones[0];
+        var rules = mainZone.Rules;
+        var parameters = mainZone.Parameters;
+        var layout = roomGroups.Layout;
         issues.AddRange(layout.Issues);
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
-        var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero, design.Ring);
+        var routing = roomGroups.Routing;
         issues.AddRange(routing.Issues);
         if (design.MaxSprinklersPerBranch is { } maxBranch)
         {
@@ -902,13 +950,13 @@ public static class ProjectPipeline
         IReadOnlyList<int>? sprinklerTemps = null;
         if (sprinklerK > 0)
         {
-            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, rules, settings, parameters, hydrants)).ToList();
+            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, roomGroups.ZoneOf(r.RoomId).Rules, AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design), roomGroups.ZoneOf(r.RoomId).Parameters, hydrants)).ToList();
         }
         else
         {
             // Автоподбор: модели каталога с нужным положением розетки, полный расчёт для каждой (SprinklerSelection).
             var catalog = SprinklerCatalog.ForWater(SprinklerCatalog.Load(catalogPath), design.SprinklerDeflector).ToList();
-            selection = SprinklerSelection.Select(routing.Routes, norms, rules, settings, parameters, hydrants, catalog.Select(c => c.Candidate).ToList());
+            selection = SprinklerSelection.Select([.. routing.Routes.Select(r => (r, roomGroups.ZoneOf(r.RoomId).Rules, (FireParameters?)roomGroups.ZoneOf(r.RoomId).Parameters, (DesignSettings?)AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design)))], norms, settings, hydrants, catalog.Select(c => c.Candidate).ToList());
             issues.AddRange(selection.Issues);
             if (selection is not { Chosen: { } chosen, Designs: { } chosenDesigns })
             {
@@ -928,7 +976,18 @@ public static class ProjectPipeline
                 string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Подобран ороситель {chosen.Maker} {chosen.Model}, K = {chosen.K:0.###}: из {selection.Rows.Count} моделей подходят {selection.Rows.Count(r => r.Valid)}, выбрана с наименьшим Q·P насоса.{(entry.Verified ? "" : " Данные каталога не сверены с паспортом изделия.")}")));
         }
 
-        var worst = designs.MaxBy(d => d.PumpPressure.Mpa)!;
+        // Разные группы — насос и бак по огибающей (В-27); правила и параметры записки — группы диктующего расчёта.
+        // governing — расчёт с наибольшим давлением насоса без подмен: по нему ПЗ (формулы сходятся); worst — с огибающей для насосов и бака.
+        var governing = designs.MaxBy(d => d.PumpPressure.Mpa)!;
+        var worst = AuptGroups.Envelope(designs, roomGroups, issues);
+        if (auptLevels.Count > 0)
+        {
+            var levelName = AuptLevels.Of(worst.Route.RoomId, auptLevels)?.Name ?? "основной этаж";
+            issues.Add(new Issue("design.levels.governing", IssueLevel.Info,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Этажей сети: {auptLevels.Count + 1}; диктующий расчёт — «{levelName}» (помещение {worst.Route.RoomId}), H = {worst.PumpHead.Meters:0.#} м. Подъём и стояк каждого этажа учтены в подводящем трубопроводе DN{design.SupplyDn}.")));
+        }
+        rules = roomGroups.ZoneOf(worst.Route.RoomId).Rules;
+        parameters = roomGroups.ZoneOf(worst.Route.RoomId).Parameters;
         issues.AddRange(designs.SelectMany(d => d.Issues).Distinct());
         UserTank? userTank = design.Tank is { } tank
             ? new UserTank(new Length(tank.Length), new Length(tank.Width), new Length(tank.Height), new Length(tank.DeadLayer))
@@ -1368,6 +1427,27 @@ public static class ProjectPipeline
             takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count), issues.Any(i => i.Code == "vpv.diaphragm"))] };
         }
 
+        // Воздухозаполненная АУП (пп. 6.2.1, 6.2.4–6.2.8, 6.2.19, 6.7.1.21): объём воздуха, проверки, узел и компрессор в спецификации.
+        AirFilledResult? air = null;
+        var coldRule = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
+        if (design.AirFilled)
+        {
+            air = AirFilled.Check(routes, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), design.SprinklerDeflector, design.MinAmbientTemperature, norms);
+            issues.AddRange(air.Issues);
+            static TakeoffItem Air(TakeoffItem x) => x with { Name = x.Name.Replace("водозаполненный", "воздухозаполненный", StringComparison.Ordinal) };
+            takeoff = takeoff with
+            {
+                Items = [.. takeoff.Items.Select(Air), new TakeoffItem(TakeoffGroup.ControlUnit, "Источник пневматического давления (компрессор) для воздухозаполненной секции", null, 1, "компл.",
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"подобрать: заполнение {air.AirVolumeM3:0.###} м³ сети до рабочего давления не дольше 1 ч (пп. 6.1.7, 6.2.6 СП 485)"))],
+            };
+            stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Select(Air)] };
+        }
+        else if (design.MinAmbientTemperature is { } tMin && coldRule is { } cold && tMin < cold)
+        {
+            issues.Add(new Issue("air.coldWaterFilled", IssueLevel.Warning,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Минимальная температура {tMin:0} °С ниже {cold:0} °С, а установка водозаполненная: нужна воздухозаполненная (design.airFilled, п. 6.2.1) либо антифриз, утепление или обогрев труб (п. 6.7.1.41).")));
+        }
+
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
         var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard, pipeSizes);
         issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
@@ -1378,7 +1458,19 @@ public static class ProjectPipeline
         }
 
         var outIssues = issues.ToList();
-        var summary = Summary(worst);
+        var summary = Summary(governing);
+        var allLayout = layout;
+        var allRoutes = routes;
+        var allSupports = supports;
+        if (auptLevels.Count > 0)
+        {
+            var mainRooms = mainGroups.Zones.SelectMany(z => z.RoomIds).ToHashSet(StringComparer.Ordinal);
+            layout = new SprinklerLayout([.. layout.Sprinklers.Where(x => mainRooms.Contains(x.RoomId))], layout.Zones, layout.Issues);
+            routes = [.. routes.Where(r => mainRooms.Contains(r.RoomId))];
+            var mainSegments = routes.SelectMany(r => r.Segments.Concat(r.Loops)).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+            supports = supports with { Points = [.. supports.Points.Where(x => mainSegments.Contains(x.SegmentId))] };
+        }
+
         // Привязки: к стенам (нижний ряд, левый столбец), к осям по колоннам, шаги в рядках, трубопроводы, ввод и ПК.
         var dimensions = (IReadOnlyList<PlanDimensionChain>)[.. PlanDimensions.Build(plan, layout), .. PlanDimensions.Ties(plan, layout, routes, hydrantPoints)];
         var axes = PlanDimensions.Axes(plan);
@@ -1400,7 +1492,29 @@ public static class ProjectPipeline
             new Length(design.PipeElevation),
             new AxonometryStyle(Font: project.Font, SprinklersUp: !design.SprinklerDeflector.Equals("down", StringComparison.OrdinalIgnoreCase), InletNote: design.InletReference),
             SheetStamp(project, "Аксонометр", "Аксонометрическая схема трубопроводов"),
-            new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers)));
+            routes.Any(r => r.RoomId == worst.Route.RoomId) ? new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers) : null));
+        foreach (var (lv, k) in auptLevels.Select((l, k) => (l, k + 1)))
+        {
+            var lvRooms = lv.Groups.Zones.SelectMany(z => z.RoomIds).ToHashSet(StringComparer.Ordinal);
+            var lvLayout = new SprinklerLayout([.. allLayout.Sprinklers.Where(x => lvRooms.Contains(x.RoomId))], lv.Groups.Layout.Zones, []);
+            var lvRoutes = allRoutes.Where(r => lvRooms.Contains(r.RoomId)).ToList();
+            var lvSegments = lvRoutes.SelectMany(r => r.Segments.Concat(r.Loops)).Select(x => x.Id).ToHashSet(StringComparer.Ordinal);
+            var lvIssues = outIssues.Where(i => i.ElementId is { } e && lvRooms.Any(x => e.StartsWith(x, StringComparison.Ordinal))).ToList();
+            var lvElevation = design.PipeElevation + lv.Delta;
+            Write(auptDir, LevelPlanFile(k), files, p => PlanDxfWriter.Write(p, lvLayout, lvRoutes, lvIssues, summary: lvRoutes.Any(r => r.RoomId == worst.Route.RoomId) ? summary : null,
+                supports: [.. allSupports.Points.Where(x => lvSegments.Contains(x.SegmentId))], style: new PlanDxfStyle(Font: project.Font)));
+            Write(auptDir, LevelAxonometryFile(k), files, p => AxonometryDxfWriter.Write(
+                p,
+                lvRoutes,
+                new Length(lvElevation),
+                new AxonometryStyle(Font: project.Font, SprinklersUp: !design.SprinklerDeflector.Equals("down", StringComparison.OrdinalIgnoreCase), InletNote: $"стояк, {lv.Name}"),
+                SheetStamp(project, "Аксонометр", $"Аксонометрическая схема трубопроводов. {lv.Name}"),
+                lvRoutes.Any(r => r.RoomId == worst.Route.RoomId) ? new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers) : null));
+        }
+
+        layout = allLayout;
+        routes = allRoutes;
+        supports = allSupports;
         // Принципиальная схема насосной станции (лист основного комплекта).
         var fromTank = design.InletPressure < Need(norms, "sp485.p6_9_12.minNetworkPressure").Values["pressure"]!.Value;
         Write(auptDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
@@ -1701,15 +1815,15 @@ public static class ProjectPipeline
             new NoteInputs(
                 new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
                 project.Name,
-                design.RoomGroup,
+                roomGroups.ZoneOf(governing.Route.RoomId).Group,
                 design.ConstructionClass,
                 plan,
                 rules,
                 layout,
                 routing with { Routes = routes },
                 takeoff,
-                worst,
-                settings,
+                governing,
+                AuptLevels.SettingsFor(governing.Route.RoomId, auptLevels, settings, design),
                 literature,
                 ids,
                 selection,
@@ -1725,13 +1839,16 @@ public static class ProjectPipeline
                 piping,
                 PumpCatalog.Piping(normsDir)?.Source,
                 userTank,
-                design.Jockey),
+                design.Jockey,
+                [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+                    $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))],
+                air),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
-            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null),
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
