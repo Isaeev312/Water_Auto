@@ -42,6 +42,16 @@ public class LoopLayoutTests
     }
 
     [Fact]
+    public void Isolators_add_current_but_no_addresses()
+    {
+        // 120 ИП по 0,6 мА + 100 БРИЗ по 40 мкА без адресов: адресов 128 → 2 контроллера так и так; ток 76 мА тоже.
+        var plan = LoopLayout.Plan(8, Kdl, Ar8, [(120, new Current(0.0006), 1), (100, new Current(0.00004), 0)]);
+        plan.Controllers.ShouldBe(2);
+        // 60 ИП + 100 БРИЗ: адресов 68, ток 4 + 36 + 4 = 44 мА → один контроллер.
+        LoopLayout.Plan(8, Kdl, Ar8, [(60, new Current(0.0006), 1), (100, new Current(0.00004), 0)]).Controllers.ShouldBe(1);
+    }
+
+    [Fact]
     public void No_inputs_means_no_controllers()
     {
         LoopLayout.Plan(0, Kdl, Ar8).Controllers.ShouldBe(0);

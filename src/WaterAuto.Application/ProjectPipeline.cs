@@ -93,6 +93,7 @@ public static class ProjectPipeline
     public const string AddressTableFile = "aps_addresses.xlsx";
     public const string AlarmPlanFile = "aps_plan.dxf";
     public const string AlarmNoteFile = "aps_pz.docx";
+    public const string AlarmSpecFile = "aps_spec.xlsx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -144,10 +145,34 @@ public static class ProjectPipeline
         // АПС, этап 2 (ADR 0012): извещатели — только в помещениях и с параметрами, заданными проектировщиком.
         var detectorZones = AlarmZones(project, plan, design, normsDir, issues);
         var detectorLayout = detectorZones.Count > 0 ? DetectorLayouter.Layout(detectorZones, norms) : null;
+        AlarmZoningResult? zoning = null;
+        DetectorModel? manualModel = null;
+        var detectorModels = new Dictionary<string, DetectorModel>();
         if (detectorLayout is not null)
         {
             issues.AddRange(detectorLayout.Issues);
             issues.AddRange(ZoneChecks.Check(detectorZones, detectorLayout, norms));
+            // Состав СПС: ИПР, ЗКСПС, изоляторы. Модель ИПР — выбор проектировщика, иначе первая ручная в каталоге.
+            var detectorCatalogPath = EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File);
+            if (File.Exists(detectorCatalogPath))
+            {
+                var models = AlarmDetectorCatalog.Load(detectorCatalogPath);
+                detectorModels = models.ToDictionary(m => m.Id);
+                manualModel = project.Alarm?.ManualModel is { } mm
+                    ? models.FirstOrDefault(m => m.Id == mm && m.IsManual)
+                    : models.FirstOrDefault(m => m.IsManual);
+                if (project.Alarm?.ManualModel is { } wanted && manualModel is null)
+                {
+                    issues.Add(new Issue("aps.detector.unknown", IssueLevel.Error, $"АПС: ручного извещателя «{wanted}» нет в каталоге {AlarmDetectorCatalog.File}."));
+                }
+                else if (project.Alarm?.ManualModel is null && manualModel is not null)
+                {
+                    issues.Add(new Issue("aps.detector.default", IssueLevel.Info, $"АПС: модель ИПР не выбрана — принят {manualModel.Name}, первый ручной в каталоге; задайте alarm.manualModel, если нужен другой."));
+                }
+            }
+
+            zoning = AlarmZoning.Build(detectorZones, detectorLayout, norms, manualModel?.Isolator ?? false);
+            issues.AddRange(zoning.Issues);
         }
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
@@ -329,6 +354,7 @@ public static class ProjectPipeline
         IReadOnlyList<ControlPoint> controlPoints = [];
         PowerBudget? powerBudget = null;
         IReadOnlyList<AddressRow> addressRows = [];
+        IReadOnlyList<AlarmSpecItem> alarmSpec = [];
         if (File.Exists(stationSet))
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
@@ -387,21 +413,39 @@ public static class ProjectPipeline
 
                 if (alarmSet is not null)
                 {
-                    // Извещатели — по выбранным моделям: ток и сертификат из каталога извещателей, количество — из раскладки.
+                    // Извещатели — по выбранным моделям: ток, адреса и сертификат из каталога извещателей, количество — из раскладки и состава СПС.
                     Dictionary<string, int>? detectorCounts = null;
-                    if (detectorLayout is not null)
+                    var addressDevices = new List<AddressTable.AddressDevice>();
+                    if (detectorLayout is not null && zoning is not null)
                     {
-                        var models = AlarmDetectorCatalog.Load(EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File)).ToDictionary(m => m.Id);
                         detectorCounts = detectorZones.Where(z => z.ModelId is not null)
                             .GroupBy(z => z.ModelId!)
                             .ToDictionary(g => g.Key, g => g.Sum(z => detectorLayout.CountByRoom.GetValueOrDefault(z.RoomId)));
-                        alarmSet = alarmSet with { Detectors = detectorCounts.Keys.Where(models.ContainsKey).ToDictionary(id => id, id => models[id].AsLoopDevice()) };
+                        if (manualModel is not null && zoning.Manuals.Count > 0)
+                        {
+                            detectorCounts[manualModel.Id] = zoning.Manuals.Count;
+                        }
+
+                        alarmSet = alarmSet with { Detectors = detectorCounts.Keys.Where(detectorModels.ContainsKey).ToDictionary(id => id, id => detectorModels[id].AsLoopDevice()) };
+                        var zoneById = detectorZones.ToDictionary(z => z.RoomId);
+                        foreach (var d in detectorLayout.Detectors)
+                        {
+                            var z = zoneById[d.RoomId];
+                            var model = z.ModelId is not null && detectorModels.TryGetValue(z.ModelId, out var dm) ? dm : null;
+                            addressDevices.Add(new(d.Id, $"{(d.Kind == DetectorKind.Smoke ? "ИП дымовой" : "ИП тепловой")} {model?.Name ?? ""} — {z.RoomName}".Trim(), "Пожар", zoning.ZoneOf.GetValueOrDefault(d.Id, ""), model?.LoopCurrent ?? Current.Zero));
+                        }
+
+                        foreach (var manual in zoning.Manuals)
+                        {
+                            addressDevices.Add(new(manual.Id, $"ИПР {manualModel?.Name ?? ""} — {zoneById[manual.RoomId].RoomName}".Trim(), "Пожар (ручной)", "", manualModel?.LoopCurrent ?? Current.Zero));
+                        }
                     }
 
-                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts);
+                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0);
                     powerBudget = power.Budget;
                     issues.AddRange(power.Issues);
-                    addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module).Rows;
+                    addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module, addressDevices).Rows;
+                    alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0);
                 }
             }
         }
@@ -742,7 +786,7 @@ public static class ProjectPipeline
         Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
         if (detectorLayout is not null)
         {
-            Write(outDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font));
+            Write(outDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf));
         }
 
         Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
@@ -1044,7 +1088,12 @@ public static class ProjectPipeline
 
         if (addressRows.Count > 0)
         {
-            Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов сигналов АУПТ в АПС", project.Font));
+            Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов АПС", project.Font));
+        }
+
+        if (alarmSpec.Count > 0)
+        {
+            Write(outDir, AlarmSpecFile, files, p => AlarmSpecXlsx.Write(p, alarmSpec, $"{project.Name}. Спецификация оборудования АПС", project.Font));
         }
 
         if (controlPoints.Count > 0)

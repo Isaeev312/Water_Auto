@@ -18,7 +18,7 @@ public static class LoopLayout
     public static LoopLayoutResult Plan(int inputs, LoopController controller, LoopModule module) => Plan(inputs, controller, module, []);
 
     /// <param name="devices">Прочие адресные устройства линии (извещатели): количество и ток каждого; по одному адресу.</param>
-    public static LoopLayoutResult Plan(int inputs, LoopController controller, LoopModule module, IReadOnlyList<(int Count, Current Current)> devices)
+    public static LoopLayoutResult Plan(int inputs, LoopController controller, LoopModule module, IReadOnlyList<(int Count, Current Current, int Addresses)> devices)
     {
         ArgumentNullException.ThrowIfNull(controller);
         ArgumentNullException.ThrowIfNull(module);
@@ -31,12 +31,13 @@ public static class LoopLayout
 
         // Число контроллеров — по самому жёсткому из пределов: модули на линию, адреса (входы + устройства), ток линии.
         var deviceCount = devices.Sum(d => Math.Max(0, d.Count));
+        var deviceAddresses = devices.Sum(d => Math.Max(0, d.Count) * Math.Max(0, d.Addresses));
         var deviceLoad = devices.Sum(d => Math.Max(0, d.Count) * d.Current.Amperes);
         var totalLoad = (modules * module.LoopCurrent.Amperes) + deviceLoad;
         var controllers = Math.Max(
             (modules + perLine - 1) / perLine,
             Math.Max(
-                (int)Math.Ceiling((double)(inputs + deviceCount) / controller.MaxAddresses),
+                (int)Math.Ceiling((double)(inputs + deviceAddresses) / controller.MaxAddresses),
                 controller.MaxLoopLoad.Amperes > 0 ? (int)Math.Ceiling(totalLoad / controller.MaxLoopLoad.Amperes - 1e-9) : 0));
         if (controllers == 0)
         {

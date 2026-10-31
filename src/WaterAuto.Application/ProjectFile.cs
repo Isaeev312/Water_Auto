@@ -354,6 +354,9 @@ public sealed record ProjectSheet(string Sheet, string Name, string Note = "");
 public sealed class ProjectAlarm
 {
     public IReadOnlyList<ProjectAlarmZone> Zones { get; init; } = [];
+
+    /// <summary>ID модели ручного извещателя из каталога извещателей; null — первая ручная модель (с замечанием).</summary>
+    public string? ManualModel { get; init; }
 }
 
 /// <summary>Зона раскладки ИП: помещение по имени с чертежа («*» — все помещения), тип ИП, алгоритм, адресность, высота до перекрытия.</summary>

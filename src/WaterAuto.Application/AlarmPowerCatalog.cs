@@ -40,6 +40,10 @@ public static class AlarmPowerCatalog
             }
         }
 
+        LoopDevice? isolator = root.TryGetProperty("isolator", out var iso)
+            ? new LoopDevice(Text(iso, "name"), A(iso, "loopCurrent"), Text(iso, "source")) { Certificate = Cert(iso), Addresses = iso.TryGetProperty("addresses", out var ia) ? ia.GetInt32() : 0 }
+            : null;
+
         return new AlarmPowerSet(
             voltage,
             new LoopController(Text(c, "name"), A(c, "idle"), A(c, "loaded"), A(c, "loadOfLoaded"), A(c, "max"), A(c, "maxLoopLoad"),
@@ -49,7 +53,7 @@ public static class AlarmPowerCatalog
             new BatteryModel(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
                 b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
                 Text(b, "source")) { Certificate = Cert(b) })
-        { Detectors = detectors };
+        { Detectors = detectors, Isolator = isolator };
     }
 
     private static Current A(JsonElement e, string name) => new(e.GetProperty(name).GetDouble());

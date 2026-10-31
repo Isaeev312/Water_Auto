@@ -97,6 +97,18 @@ public sealed class ProjectPipelineTests : IDisposable
         var doc = DxfReader.Read(plan);
         doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
         result.Issues.ShouldNotContain(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
+        // ИПР на стенах и спецификация АПС с извещателями, ИПР, изоляторами и приборами питания.
+        doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.ManualLayer).ShouldBeGreaterThanOrEqualTo(1);
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        spec.Select(r => r[2]).ShouldContain("ДИП-34А-03");
+        spec.Select(r => r[2]).ShouldContain("ИПР 513-3АМ");
+        spec.Select(r => r[2]).ShouldContain("БРИЗ исп.03");
+        spec.Single(r => r[2] == "ДИП-34А-03")[5].ShouldBe("12");
+        spec.ShouldAllBe(r => r[6] != "не указан");
+        // Таблица адресов: после входов АР8 — извещатели своими адресами с ЗКСПС.
+        var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
+        addresses.Count(r => r[4].StartsWith("Автостоянка", StringComparison.Ordinal) || r[7] == "ЗКСПС-1").ShouldBeGreaterThanOrEqualTo(12);
+
         // Модель не выбрана — первая из каталога с замечанием; выбранная тепловая для дымовой зоны — ошибка.
         result.Issues.ShouldContain(i => i.Code == "aps.detector.default" && i.Message.Contains("ДИП-34А-03"));
         var mismatch = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3, Model = "bolid.s2000_ip_03" }] }));
@@ -117,7 +129,7 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
-            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
+            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
             ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);

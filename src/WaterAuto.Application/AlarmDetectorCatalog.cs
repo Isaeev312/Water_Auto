@@ -9,7 +9,7 @@ public sealed record DetectorModel(string Id, DetectorKind? Kind, string Name, s
     /// <summary>Ручной извещатель: вид не из <see cref="DetectorKind"/> (ИПР раскладкой пока не размещаются).</summary>
     public bool IsManual => Kind is null;
 
-    public LoopDevice AsLoopDevice() => new($"{Name} ({Designation})", LoopCurrent, Source) { Certificate = Certificate };
+    public LoopDevice AsLoopDevice() => new($"{Name} ({Designation})", LoopCurrent, Source) { Certificate = Certificate, Addresses = Addresses };
 }
 
 /// <summary>Чтение каталога извещателей; схему проверяет tools/ValidateData.</summary>

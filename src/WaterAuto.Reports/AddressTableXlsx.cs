@@ -8,9 +8,9 @@ public static class AddressTableXlsx
 {
     public const int HeaderRow = 3;
 
-    public static readonly IReadOnlyList<string> Columns = ["№ п/п", "Контроллер", "Модуль", "Вход", "Обозначение", "Оборудование", "Сигнал"];
+    public static readonly IReadOnlyList<string> Columns = ["№ п/п", "Контроллер", "Модуль", "Вход", "Обозначение", "Оборудование", "Сигнал", "ЗКСПС"];
 
-    private static readonly double[] Widths = [7, 18, 18, 7, 14, 56, 36];
+    private static readonly double[] Widths = [7, 18, 18, 7, 14, 56, 36, 12];
 
     public static void Write(string path, IReadOnlyList<AddressRow> rows, string title, string font = DocumentStyle.DefaultFont)
     {
@@ -36,10 +36,11 @@ public static class AddressTableXlsx
             ws.Cell(row, 1).Value = i + 1;
             ws.Cell(row, 2).Value = r.Controller;
             ws.Cell(row, 3).Value = r.Module;
-            ws.Cell(row, 4).Value = r.Input;
+            if (r.Input > 0) { ws.Cell(row, 4).Value = r.Input; } else { ws.Cell(row, 4).Value = "—"; }
             ws.Cell(row, 5).Value = r.Designation;
             ws.Cell(row, 6).Value = r.Equipment;
             ws.Cell(row, 7).Value = r.Signal;
+            ws.Cell(row, 8).Value = r.Zone;
         }
 
         var table = ws.Range(HeaderRow, 1, Math.Max(HeaderRow, row - 1), Columns.Count);

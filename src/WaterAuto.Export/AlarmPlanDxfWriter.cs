@@ -20,11 +20,15 @@ public static class AlarmPlanDxfWriter
     public const string SummaryLayer = "АПС_РАСЧЁТ";
     public const string SmokeBlock = "АПС_ИП_ДЫМ";
     public const string HeatBlock = "АПС_ИП_ТЕПЛ";
+    public const string ManualBlock = "АПС_ИПР";
+    public const string ManualLayer = "АПС_ИПР";
 
-    public static void Write(string path, DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, string font = DocumentStyle.DefaultFont, double textHeightMm = 250) =>
-        DxfDrawing.Save(path, Build(layout, zones, issues, textHeightMm), font);
+    public static void Write(string path, DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, string font = DocumentStyle.DefaultFont, double textHeightMm = 250, IReadOnlyList<PlacedManual>? manuals = null, IReadOnlyDictionary<string, string>? zoneOf = null) =>
+        DxfDrawing.Save(path, Build(layout, zones, issues, textHeightMm, manuals, zoneOf), font);
 
-    public static CadDocument Build(DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, double textHeightMm = 250)
+    /// <param name="manuals">Ручные извещатели — квадратный блок на слое АПС_ИПР.</param>
+    /// <param name="zoneOf">ЗКСПС каждого ИП — пишется в атрибут блока и в сводку помещения.</param>
+    public static CadDocument Build(DetectorLayout layout, IReadOnlyList<DetectorZone> zones, IReadOnlyList<Issue> issues, double textHeightMm = 250, IReadOnlyList<PlacedManual>? manuals = null, IReadOnlyDictionary<string, string>? zoneOf = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(zones);
@@ -45,7 +49,9 @@ public static class AlarmPlanDxfWriter
             doc.Entities.Add(new LwPolyline(z.Outline.Vertices.Select(v => new XY(v.XMm, v.YMm)).ToList()) { IsClosed = true, Layer = contours });
             var c = z.Outline.Centroid;
             var count = layout.CountByRoom.GetValueOrDefault(z.RoomId);
-            doc.Entities.Add(new TextEntity(string.Create(ru, $"{z.RoomName}: {KindText(z.Kind)} ИП {z.ModelName ?? ""} — {count} шт., алгоритм {z.Algorithm}, {(z.Addressable ? "адресные" : "безадресные")}, H = {z.CeilingHeight.Meters:0.##} м"))
+            var zonesText = zoneOf is null ? "" : string.Join(", ", layout.Detectors.Where(d => d.RoomId == z.RoomId && zoneOf.ContainsKey(d.Id)).Select(d => zoneOf[d.Id]).Distinct());
+            var manualCount = manuals?.Count(m => m.RoomId == z.RoomId) ?? 0;
+            doc.Entities.Add(new TextEntity(string.Create(ru, $"{z.RoomName}: {KindText(z.Kind)} ИП {z.ModelName ?? ""} — {count} шт., алгоритм {z.Algorithm}, {(z.Addressable ? "адресные" : "безадресные")}, H = {z.CeilingHeight.Meters:0.##} м{(manualCount > 0 ? $"; ИПР — {manualCount} шт." : "")}{(zonesText.Length > 0 ? $"; {zonesText}" : "")}"))
             {
                 InsertPoint = new XYZ(c.XMm, c.YMm - (2 * textHeightMm), 0),
                 Height = textHeightMm,
@@ -69,7 +75,28 @@ public static class AlarmPlanDxfWriter
             id.Layer = detectors;
         }
 
-        foreach (var issue in issues.Where(i => i.Location is not null && i.Code.StartsWith("aps.layout", StringComparison.Ordinal)))
+        if (manuals is { Count: > 0 })
+        {
+            var manualLayer = DxfDrawing.AddLayer(doc, ManualLayer, 1);
+            var block = ManualBlockRecord(doc, radius, textHeightMm);
+            foreach (var m in manuals)
+            {
+                var insert = new Insert(block) { InsertPoint = new XYZ(m.Location.XMm, m.Location.YMm, 0), Layer = manualLayer };
+                doc.Entities.Add(insert);
+                var id = insert.Attributes.FirstOrDefault(a => a.Tag == "ID");
+                if (id is null)
+                {
+                    id = new AttributeEntity { Tag = "ID", Height = textHeightMm / 2 };
+                    insert.Attributes.Add(id);
+                }
+
+                id.Value = m.Id;
+                id.InsertPoint = new XYZ(m.Location.XMm + radius, m.Location.YMm + radius, 0);
+                id.Layer = manualLayer;
+            }
+        }
+
+        foreach (var issue in issues.Where(i => i.Location is not null && (i.Code.StartsWith("aps.layout", StringComparison.Ordinal) || i.Code.StartsWith("aps.zone", StringComparison.Ordinal))))
         {
             var at = issue.Location!.Value;
             doc.Entities.Add(new Circle(new XYZ(at.XMm, at.YMm, 0), 2 * radius) { Layer = marks });
@@ -94,6 +121,20 @@ public static class AlarmPlanDxfWriter
         }
 
         block.Entities.Add(new AttributeDefinition { Tag = "ID", Prompt = "ID извещателя", Height = textHeightMm / 2, InsertPoint = new XYZ(radius, radius, 0), Flags = AttributeFlags.Hidden });
+        doc.BlockRecords.Add(block);
+        return block;
+    }
+
+    private static BlockRecord ManualBlockRecord(CadDocument doc, double radius, double textHeightMm)
+    {
+        if (doc.BlockRecords.TryGetValue(ManualBlock, out var block))
+        {
+            return block;
+        }
+
+        block = new BlockRecord(ManualBlock);
+        block.Entities.Add(new LwPolyline([new XY(-radius, -radius), new XY(radius, -radius), new XY(radius, radius), new XY(-radius, radius)]) { IsClosed = true });
+        block.Entities.Add(new AttributeDefinition { Tag = "ID", Prompt = "ID ИПР", Height = textHeightMm / 2, InsertPoint = new XYZ(radius, radius, 0), Flags = AttributeFlags.Hidden });
         doc.BlockRecords.Add(block);
         return block;
     }

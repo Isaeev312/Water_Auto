@@ -30,6 +30,9 @@ public sealed record LoopModule(string Name, int Inputs, Current LoopCurrent, in
 public sealed record LoopDevice(string Name, Current LoopCurrent, string Source) : ICertified
 {
     public string? Certificate { get; init; }
+
+    /// <summary>Адресов на линии занимает одно устройство; 0 — изолятор КЗ.</summary>
+    public int Addresses { get; init; } = 1;
 }
 
 /// <summary>Резервированный источник питания: собственный ток от АКБ при отсутствии сети (Iибэ).</summary>
@@ -52,6 +55,9 @@ public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, L
 {
     /// <summary>Извещатели набора по ключам каталога (smoke, heat, manual); их число берётся из раскладки.</summary>
     public IReadOnlyDictionary<string, LoopDevice> Detectors { get; init; } = new Dictionary<string, LoopDevice>();
+
+    /// <summary>Изолятор КЗ линии (БРИЗ); null — в каталоге нет.</summary>
+    public LoopDevice? Isolator { get; init; }
 }
 
 /// <summary>Строка расчёта питания: прибор, количество, токи на единицу (null — питается не от РИП), пояснение и источник.</summary>
@@ -73,3 +79,6 @@ public sealed record PowerBudget(
     Charge? Required,
     TimeSpan? Backup,
     double? AgingFactor = null);
+
+/// <summary>Строка спецификации оборудования АПС.</summary>
+public sealed record AlarmSpecItem(string Name, string Designation, string Manufacturer, string Unit, int Quantity, string? Certificate, string? Note);

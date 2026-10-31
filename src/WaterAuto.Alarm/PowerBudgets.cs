@@ -15,7 +15,8 @@ public static class PowerBudgets
 
     /// <param name="inputs">Число входов модулей — по одному на точку управления.</param>
     /// <param name="detectors">Число извещателей по ключам каталога набора (smoke, heat, manual); null — без извещателей.</param>
-    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null)
+    /// <param name="isolators">Изоляторов КЗ на линиях (ток без адреса).</param>
+    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null, int isolators = 0)
     {
         ArgumentNullException.ThrowIfNull(set);
         detectors ??= new Dictionary<string, int>();
@@ -32,7 +33,7 @@ public static class PowerBudgets
         }
 
         var deviceLines = new List<PowerLine>();
-        var devices = new List<(int Count, Current Current)>();
+        var devices = new List<(int Count, Current Current, int Addresses)>();
         foreach (var (key, count) in detectors.Where(kv => kv.Value > 0))
         {
             if (!set.Detectors.TryGetValue(key, out var device))
@@ -42,8 +43,21 @@ public static class PowerBudgets
                 continue;
             }
 
-            devices.Add((count, device.LoopCurrent));
-            deviceLines.Add(new PowerLine(device.Name, count, null, null, $"питание от линии {c.Name}, входит в его ток; 1 адрес", device.Source));
+            devices.Add((count, device.LoopCurrent, device.Addresses));
+            deviceLines.Add(new PowerLine(device.Name, count, null, null, $"питание от линии {c.Name}, входит в его ток; {device.Addresses} адрес", device.Source));
+        }
+
+        if (isolators > 0)
+        {
+            if (set.Isolator is { } iso)
+            {
+                devices.Add((isolators, iso.LoopCurrent, iso.Addresses));
+                deviceLines.Add(new PowerLine(iso.Name, isolators, null, null, $"изолятор КЗ, питание от линии {c.Name}; адреса не занимает", iso.Source));
+            }
+            else
+            {
+                issues.Add(new Issue("aps.power.noIsolator", IssueLevel.Warning, $"Нужно {isolators} изоляторов КЗ (п. 6.3.5 СП 484), а в каталоге приборов питания изолятора нет — их ток и состав не учтены."));
+            }
         }
 
         var layout = LoopLayout.Plan(inputs, c, m, devices);
@@ -52,6 +66,7 @@ public static class PowerBudgets
 
         // Сертификаты соответствия, действующие на объекте (А-12): без них изделие в проект не попадает — предупреждение одно на набор.
         var uncertified = new ICertified[] { c, m, set.Supply, set.Battery }.Concat(set.Detectors.Where(kv => detectors.GetValueOrDefault(kv.Key) > 0).Select(kv => (ICertified)kv.Value))
+            .Concat(isolators > 0 && set.Isolator is not null ? [set.Isolator] : [])
             .Where(d => string.IsNullOrWhiteSpace(d.Certificate)).Select(d => d.Name).Distinct().ToList();
         if (uncertified.Count > 0)
         {

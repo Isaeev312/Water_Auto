@@ -57,4 +57,4 @@ public sealed record SignalSource(string? Role, string Equipment, SignalKind Kin
 public sealed record ControlPoint(string Id, string Equipment, SignalKind Kind, string? Clause, string? Role, string Designation, int? Section);
 
 /// <summary>Строка таблицы адресов: контроллер, модуль, номер входа, обозначение и сигнал устройства АУПТ.</summary>
-public sealed record AddressRow(string Controller, string Module, int Input, string Designation, string Equipment, string Signal);
+public sealed record AddressRow(string Controller, string Module, int Input, string Designation, string Equipment, string Signal, string Zone = "");
