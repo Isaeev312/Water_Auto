@@ -67,3 +67,19 @@ public readonly record struct PipeCharacteristic(double Kt)
 
     public override string ToString() => Kt.ToString("0.######", CultureInfo.InvariantCulture);
 }
+
+/// <summary>Сила тока, А (питание систем противопожарной защиты).</summary>
+public readonly record struct Current(double Amperes)
+{
+    public static Current Zero => new(0);
+
+    public static Current operator +(Current a, Current b) => new(a.Amperes + b.Amperes);
+
+    public override string ToString() => Amperes.ToString("0.####", CultureInfo.InvariantCulture) + " А";
+}
+
+/// <summary>Ёмкость аккумуляторной батареи, А·ч.</summary>
+public readonly record struct Charge(double AmpereHours)
+{
+    public override string ToString() => AmpereHours.ToString("0.###", CultureInfo.InvariantCulture) + " А·ч";
+}
