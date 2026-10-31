@@ -19,6 +19,9 @@ public static class SignalListXlsx
     {
         SignalKind.ValvePosition => "Положение запорного устройства",
         SignalKind.PressureSwitch => "Срабатывание сигнализатора давления",
+        SignalKind.PumpStart => "Пуск (обобщённый выход)",
+        SignalKind.PumpFault => "Неисправность (обобщённый выход)",
+        SignalKind.AutomaticsOff => "Автоматика отключена",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

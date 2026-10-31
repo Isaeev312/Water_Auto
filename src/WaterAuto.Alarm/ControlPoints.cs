@@ -9,19 +9,22 @@ public sealed record ControlPointsResult(IReadOnlyList<ControlPoint> Points, IRe
 /// Этап «Точки управления» (ADR 0012, п. 2): источники сигналов АУПТ раскрываются в точки — по одной на устройство.
 /// Обозначение точки — роль позиции и номер устройства в ней: у источника с ролью оно не зависит от других позиций и не
 /// меняется, пока не меняется количество устройств этой позиции. У источника без роли вместо неё — вид сигнала и порядковый
-/// номер источника этого вида, поэтому такое обозначение зависит от порядка источников.
+/// номер источника этого вида, поэтому такое обозначение зависит от порядка источников. Если у роли несколько источников
+/// (одно устройство с несколькими сигналами, например шкаф насосов), к роли добавляется вид сигнала.
 /// </summary>
 public static class ControlPoints
 {
     public static ControlPointsResult Build(IEnumerable<SignalSource> sources)
     {
         ArgumentNullException.ThrowIfNull(sources);
+        var list = sources.ToList();
+        var shared = list.Where(s => s.Role is not null).GroupBy(s => s.Role!).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
         var points = new List<ControlPoint>();
         var issues = new List<Issue>();
         var unnamed = new Dictionary<SignalKind, int>();
-        foreach (var s in sources)
+        foreach (var s in list)
         {
-            var key = s.Role;
+            var key = s.Role is { } role && shared.Contains(role) ? $"{role}.{Code(s.Kind)}" : s.Role;
             if (key is null)
             {
                 unnamed[s.Kind] = unnamed.GetValueOrDefault(s.Kind) + 1;
@@ -48,6 +51,9 @@ public static class ControlPoints
     {
         SignalKind.ValvePosition => "valvePosition",
         SignalKind.PressureSwitch => "pressureSwitch",
+        SignalKind.PumpStart => "pumpStart",
+        SignalKind.PumpFault => "pumpFault",
+        SignalKind.AutomaticsOff => "automaticsOff",
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 }

@@ -31,6 +31,22 @@ public class EquipmentSignalsTests
     }
 
     [Fact]
+    public void Pump_cabinet_gives_generic_start_fault_and_automatics_off_signals()
+    {
+        var counts = new Dictionary<string, int> { ["pumps"] = 2, ["sections"] = 1, ["inlets"] = 1 };
+
+        var cabinet = EquipmentSet.Signals(Catalog(EquipmentSet.PumpStationFile), new Dictionary<string, string>(), counts)
+            .Where(s => s.Role == "cabinet").ToList();
+
+        cabinet.Select(s => s.Kind).ShouldBe([SignalKind.PumpStart, SignalKind.PumpFault, SignalKind.AutomaticsOff]);
+        cabinet.ShouldAllBe(s => s.Count == 1);
+        // Выходы «Пуск» и «Неисправность» — ГОСТ Р 53325-2012, п. 7.4.5; для «Автоматика отключена» пункт о передаче не найден.
+        cabinet[0].Clause!.ShouldContain("7.4.5");
+        cabinet[1].Clause!.ShouldContain("7.4.5");
+        cabinet[2].Clause.ShouldBeNull();
+    }
+
+    [Fact]
     public void Pump_set_roles_drop_signals_of_rows_replaced_by_the_set()
     {
         var tokens = new Dictionary<string, string> { ["dnS"] = "150", ["dnD"] = "125", ["dnC"] = "100" };

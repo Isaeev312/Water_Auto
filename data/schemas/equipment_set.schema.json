@@ -94,9 +94,12 @@
                   "type": "string",
                   "enum": [
                     "valvePosition",
-                    "pressureSwitch"
+                    "pressureSwitch",
+                    "pumpStart",
+                    "pumpFault",
+                    "automaticsOff"
                   ],
-                  "description": "valvePosition — положение запорного устройства, pressureSwitch — срабатывание сигнализатора давления."
+                  "description": "valvePosition — положение запорного устройства, pressureSwitch — срабатывание сигнализатора давления, pumpStart и pumpFault — обобщённые выходы прибора управления насосами «Пуск» и «Неисправность», automaticsOff — автоматический пуск отключён."
                 },
                 "clause": {
                   "type": "string",

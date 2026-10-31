@@ -327,14 +327,22 @@ public static class ProjectPipeline
             var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Inlets.Count : 0 };
             stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
 
-            // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают.
-            var points = ControlPoints.Build(EquipmentSet.Signals(stationSet, stationTokens, stationCounts, setChoice?.Chosen is not null ? EquipmentSet.PumpSetRoles : null));
+            // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,
+            // кроме шкафа: прибор управления есть и в установке, его выходы в АПС нужны так же (ГОСТ Р 53325-2012, п. 7.4.5).
+            var signalSources = EquipmentSet.Signals(stationSet, stationTokens, stationCounts,
+                setChoice?.Chosen is not null ? EquipmentSet.PumpSetRoles.Where(r => r != "cabinet").ToHashSet() : null);
+            if (setChoice?.Chosen is { } setForSignals)
+            {
+                signalSources = [.. signalSources.Select(s => s.Role == "cabinet" ? s with { Equipment = $"Прибор управления установки {setForSignals.Designation}" } : s)];
+            }
+
+            var points = ControlPoints.Build(signalSources);
             controlPoints = points.Points;
             issues.AddRange(points.Issues);
             if (controlPoints.Count > 0)
             {
                 issues.Add(new Issue("aps.signals.incomplete", IssueLevel.Info,
-                    "Перечень сигналов АУПТ в АПС неполный: сигналов шкафа управления насосами, жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+                    "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; сигналов жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
             }
         }
 

@@ -8,6 +8,15 @@ public enum SignalKind
 
     /// <summary>Срабатывание сигнализатора давления узла управления.</summary>
     PressureSwitch,
+
+    /// <summary>Обобщённый выход прибора управления насосами «Пуск».</summary>
+    PumpStart,
+
+    /// <summary>Обобщённый выход прибора управления насосами «Неисправность».</summary>
+    PumpFault,
+
+    /// <summary>Автоматический пуск насосов отключён (ручной режим или блокировка).</summary>
+    AutomaticsOff,
 }
 
 /// <summary>
@@ -22,5 +31,8 @@ public sealed record SignalSource(string? Role, string Equipment, SignalKind Kin
 /// <summary>
 /// Точка управления — одно устройство АУПТ, сигнал которого заводится в АПС: строка перечня сигналов и будущей таблицы адресов.
 /// </summary>
-/// <param name="Id">Обозначение, производное от роли позиции АУПТ и номера устройства, например «cuValve.2».</param>
+/// <param name="Id">
+/// Обозначение, производное от роли позиции АУПТ и номера устройства, например «cuValve.2»; если у позиции несколько
+/// сигналов — с видом сигнала, например «cabinet.pumpFault.1».
+/// </param>
 public sealed record ControlPoint(string Id, string Equipment, SignalKind Kind, string? Clause);

@@ -146,7 +146,10 @@ public sealed class PumpSetPipelineTests : IDisposable
         var ids = rows.Skip(WaterAuto.Reports.SignalListXlsx.HeaderRow).Select(r => r[1]).ToList();
 
         // Два ввода в насосную — две задвижки; одна секция — затворы до и после узла и его сигнализатор давления.
-        ids.ShouldBe(["inletValve.1", "inletValve.2", "cu.1", "cuValve.1", "cuValve.2"], ignoreOrder: true);
+        // Шкаф входит в комплектную установку, но его выходы в АПС нужны и у неё (ГОСТ Р 53325-2012, п. 7.4.5).
+        ids.ShouldBe(["inletValve.1", "inletValve.2", "cabinet.pumpStart.1", "cabinet.pumpFault.1", "cabinet.automaticsOff.1", "cu.1", "cuValve.1", "cuValve.2"], ignoreOrder: true);
+        rows.Skip(WaterAuto.Reports.SignalListXlsx.HeaderRow).Where(r => r[1].StartsWith("cabinet", StringComparison.Ordinal))
+            .ShouldAllBe(r => r[2].StartsWith("Прибор управления установки " + result.Pump!.Designation, StringComparison.Ordinal));
         // Затворы обвязки входят в комплектную установку и в перечень не попадают, как и в ПТ2.СО.
         ids.ShouldNotContain(id => id.StartsWith("valveS", StringComparison.Ordinal) || id.StartsWith("valveD", StringComparison.Ordinal));
         result.Issues.ShouldContain(i => i.Code == "aps.signals.incomplete");

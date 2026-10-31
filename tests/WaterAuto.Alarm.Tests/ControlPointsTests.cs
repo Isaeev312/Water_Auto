@@ -24,6 +24,21 @@ public class ControlPointsTests
     }
 
     [Fact]
+    public void Several_signals_of_one_role_get_the_kind_in_the_id()
+    {
+        SignalSource[] sources =
+        [
+            new("cabinet", "Шкаф управления пожарными насосами", SignalKind.PumpStart, 1, "ГОСТ Р 53325-2012, п. 7.4.5"),
+            new("cabinet", "Шкаф управления пожарными насосами", SignalKind.PumpFault, 1, "ГОСТ Р 53325-2012, п. 7.4.5"),
+            new("cu", "Узел управления DN100", SignalKind.PressureSwitch, 1, "п. 1"),
+        ];
+
+        var result = ControlPoints.Build(sources);
+
+        result.Points.Select(p => p.Id).ShouldBe(["cabinet.pumpStart.1", "cabinet.pumpFault.1", "cu.1"]);
+    }
+
+    [Fact]
     public void Ids_do_not_depend_on_other_sources()
     {
         var alone = ControlPoints.Build([new SignalSource("cu", "Узел управления DN100", SignalKind.PressureSwitch, 2)]);

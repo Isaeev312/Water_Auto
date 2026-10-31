@@ -128,6 +128,9 @@ public static class EquipmentSet
                     {
                         "valvePosition" => SignalKind.ValvePosition,
                         "pressureSwitch" => SignalKind.PressureSwitch,
+                        "pumpStart" => SignalKind.PumpStart,
+                        "pumpFault" => SignalKind.PumpFault,
+                        "automaticsOff" => SignalKind.AutomaticsOff,
                         var kind => throw new InvalidDataException($"{path}: неизвестный вид сигнала «{kind}»."),
                     },
                     count,
