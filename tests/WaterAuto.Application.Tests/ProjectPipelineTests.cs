@@ -46,6 +46,7 @@ public sealed class ProjectPipelineTests : IDisposable
             store.Layer = L(FloorPlanImporter.ContourLayer);
             doc.Entities.Add(store);
             doc.Entities.Add(new TextEntity("Склад") { InsertPoint = new XYZ(width + (storeWidth / 2), depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+            doc.Entities.Add(new Point(new XYZ(width + 700, 500, 0)) { Layer = L(FloorPlanImporter.InletLayer) });
         }
 
         var column = Rect(7300, 7300, 7700, 7700);
@@ -308,7 +309,13 @@ public sealed class ProjectPipelineTests : IDisposable
         // Склад группы 5 требует большего расхода, чем стоянка группы 2: насос — не меньше расхода склада.
         result.Pump.ShouldNotBeNull();
         using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
-        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("табл. 6.2");
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("табл. 6.2");
+        text.ShouldContain("принято по огибающей");
+        // Склад группы 5 (табл. 6.2, 3 м) требует и большего расхода, и большего напора: насос — по нему.
+        envelope.Message.ShouldContain("группа 5 (табл. 6.2)");
+        result.Design!.PumpFlow.LitersPerSecond.ShouldBe(48.5, 0.05);
+        result.Design.PumpHead.Meters.ShouldBe(95.6, 0.05);
     }
 
     [Fact]

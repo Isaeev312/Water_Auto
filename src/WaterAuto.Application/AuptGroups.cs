@@ -33,10 +33,6 @@ public static class AuptGroups
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(design);
         ArgumentNullException.ThrowIfNull(issues);
-        foreach (var r in design.Rooms.Where(r => !plan.Rooms.Any(x => string.Equals(x.Name, r.Room, StringComparison.OrdinalIgnoreCase))))
-        {
-            issues.Add(new Issue("design.rooms.noRoom", IssueLevel.Warning, $"design.rooms: помещение «{r.Room}» на чертеже не найдено (слой ПТ_КОНТУР) — запись не применена."));
-        }
 
         ProjectRoomGroup? Entry(Room room) => design.Rooms.FirstOrDefault(r => string.Equals(r.Room, room.Name, StringComparison.OrdinalIgnoreCase));
         var keyed = plan.Rooms.GroupBy(room =>
@@ -80,6 +76,36 @@ public static class AuptGroups
     /// Огибающая расчётов групп: насос — наибольший расход и наибольший напор, бак — наибольший объём воды (В-27). Одна группа —
     /// расчёт с наибольшим давлением насоса без изменений.
     /// </summary>
+    /// <summary>Записи design.rooms, имени которых нет ни на одном этаже, — замечание (помещение может быть только на одном этаже).</summary>
+    public static void CheckRooms(ProjectDesign design, IEnumerable<FloorPlan> plans, List<Issue> issues)
+    {
+        ArgumentNullException.ThrowIfNull(design);
+        ArgumentNullException.ThrowIfNull(issues);
+        var names = plans.SelectMany(p => p.Rooms).Select(r => r.Name).ToList();
+        foreach (var r in design.Rooms.Where(r => !names.Any(x => string.Equals(x, r.Room, StringComparison.OrdinalIgnoreCase))))
+        {
+            issues.Add(new Issue("design.rooms.noRoom", IssueLevel.Warning, $"design.rooms: помещение «{r.Room}» на чертежах не найдено (слой ПТ_КОНТУР) — запись не применена."));
+        }
+    }
+
+    /// <summary>Строка ПЗ о принятых по огибающей расходе и запасе воды; null — одна группа.</summary>
+    public static string? EnvelopeLine(IReadOnlyList<DesignResult> designs, AuptGroupsResult groups, IReadOnlyList<Room> rooms)
+    {
+        ArgumentNullException.ThrowIfNull(designs);
+        ArgumentNullException.ThrowIfNull(groups);
+        if (groups.Zones.Select(z => z.Group).Distinct(StringComparer.Ordinal).Count() < 2)
+        {
+            return null;
+        }
+
+        string Name(DesignResult d) => rooms.FirstOrDefault(r => r.Id == d.Route.RoomId)?.Name ?? d.Route.RoomId;
+        var q = designs.MaxBy(d => d.PumpFlow.LitersPerSecond)!;
+        var w = designs.MaxBy(d => d.WaterVolume)!;
+        var h = designs.MaxBy(d => d.PumpPressure.Mpa)!;
+        return string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+            $"принято по огибающей: Q = {q.PumpFlow.LitersPerSecond:0.00} л/с («{Name(q)}»), H = {h.PumpHead.Meters:0.0} м («{Name(h)}»), запас воды W = {w.WaterVolume:0.0} м³ («{Name(w)}») — по ним подобраны насосы и резервуар");
+    }
+
     public static DesignResult Envelope(IReadOnlyList<DesignResult> designs, AuptGroupsResult groups, List<Issue> issues)
     {
         ArgumentNullException.ThrowIfNull(designs);

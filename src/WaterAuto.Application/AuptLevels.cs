@@ -42,7 +42,9 @@ public static class AuptLevels
                 Ducts = [.. plan.Ducts.Select(d => d with { Id = prefix + d.Id })],
                 PumpRooms = [],
             };
-            if (AuptGroups.Build(tagged, design, norms, issues) is not { } groups)
+            // Отметка пола этажа — для условия п. 6.2.14 (короба по высоте от пола).
+            var levelDesign = design with { FloorElevation = design.FloorElevation is null ? null : l.Elevation };
+            if (AuptGroups.Build(tagged, levelDesign, norms, issues) is not { } groups)
             {
                 continue;
             }

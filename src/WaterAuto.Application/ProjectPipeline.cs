@@ -160,6 +160,7 @@ public static class ProjectPipeline
             roomGroups = AuptGroupsResult.Merge([mainGroups, .. auptLevels.Select(l => l.Groups)]);
         }
 
+        AuptGroups.CheckRooms(design, [plan, .. auptLevels.Select(l => l.Plan)], issues);
         var mainZone = roomGroups.Zones.FirstOrDefault(z => z.Group == design.RoomGroup) ?? roomGroups.Zones[0];
         var rules = mainZone.Rules;
         var parameters = mainZone.Parameters;
@@ -431,6 +432,8 @@ public static class ProjectPipeline
         }
 
         // Разные группы — насос и бак по огибающей (В-27); правила и параметры записки — группы диктующего расчёта.
+        // governing — расчёт с наибольшим давлением насоса без подмен: по нему ПЗ (формулы сходятся); worst — с огибающей для насосов и бака.
+        var governing = designs.MaxBy(d => d.PumpPressure.Mpa)!;
         var worst = AuptGroups.Envelope(designs, roomGroups, issues);
         if (auptLevels.Count > 0)
         {
@@ -1043,7 +1046,7 @@ public static class ProjectPipeline
         }
 
         var outIssues = issues.ToList();
-        var summary = Summary(worst);
+        var summary = Summary(governing);
         var allLayout = layout;
         var allRoutes = routes;
         var allSupports = supports;
@@ -1457,15 +1460,15 @@ public static class ProjectPipeline
             new NoteInputs(
                 new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
                 project.Name,
-                roomGroups.ZoneOf(worst.Route.RoomId).Group,
+                roomGroups.ZoneOf(governing.Route.RoomId).Group,
                 design.ConstructionClass,
                 plan,
                 rules,
                 layout,
                 routing with { Routes = routes },
                 takeoff,
-                worst,
-                settings,
+                governing,
+                AuptLevels.SettingsFor(governing.Route.RoomId, auptLevels, settings, design),
                 literature,
                 ids,
                 selection,
@@ -1482,7 +1485,7 @@ public static class ProjectPipeline
                 PumpCatalog.Piping(normsDir)?.Source,
                 userTank,
                 design.Jockey,
-                [.. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
+                [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                     $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))]),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
