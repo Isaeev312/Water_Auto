@@ -86,9 +86,12 @@ public static class SoueLayouter
             var radius = new Length(radiusM);
             if (radiusM < 2)
             {
-                issues.Add(new Issue("soue.sounder.weak", IssueLevel.Warning,
-                    string.Create(ru, $"«{z.RoomName}»: оповещатель {sounder.Name} ({l1:0} дБ на 1 м) даёт требуемые {required:0} дБА только в радиусе {radiusM:0.#} м — выбрать более громкий."),
+                // Модель не тянет помещение: раскладка дала бы сотни оповещателей и бессмысленный ток — остановить с ошибкой.
+                issues.Add(new Issue("soue.sounder.weak", IssueLevel.Error,
+                    string.Create(ru, $"«{z.RoomName}»: оповещатель {sounder.Name} ({l1:0} дБ на 1 м) даёт требуемые {required:0} дБА только в радиусе {radiusM:0.#} м — модель непригодна, выбрать оповещатель не ниже {required + coefficient * Math.Log10(5):0} дБ на 1 м (радиус 5 м) в alarm.warning.sounder."),
                     z.RoomId, Doc + ", прил. В, В.2", z.Outline.Centroid));
+                results.Add(new SoueZoneResult(z.RoomId, required, radius, 0, 0));
+                continue;
             }
 
             var step = radiusM * Math.Sqrt(2) * 1000;

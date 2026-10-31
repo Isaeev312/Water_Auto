@@ -129,7 +129,8 @@ public sealed class ProjectPipelineTests : IDisposable
         var soueRun = Run(Project(alarm: new ProjectAlarm
         {
             Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
-            Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40 },
+            // Фон 50 дБА задан явно: при фоне автостоянки 70 дБА С2000-ОПЗ (85 дБ) непригоден — это проверяет SoueLayouterTests.
+            Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40, BackgroundDba = 50 },
         }));
         soueRun.Success.ShouldBeTrue(string.Join("; ", soueRun.Issues.Select(i => i.Message)));
         var souePlan = DxfReader.Read(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal)));

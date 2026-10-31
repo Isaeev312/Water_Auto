@@ -30,7 +30,8 @@
     "author": "Исаев А.",
     "supervisor": "",
     "cityYear": "Бишкек 2026",
-    "code": "2026-01"
+    "code": "2026-01",
+    "building": "Подземная автостоянка на 45 машино-мест"
   },
   "alarm": {
     "zones": [
@@ -47,6 +48,35 @@
     "panel": {
       "x": 14000,
       "y": 2000
+    },
+    "warning": {
+      "method": "Sound",
+      "methodRow": "sp3.tB_1m.undergroundParking",
+      "indicator": 45,
+      "backgroundRow": "sp3.tB_1.parking"
+    },
+    "hvac": {
+      "generalVentilation": [
+        "П-1",
+        "П-2",
+        "В-1",
+        "В-2"
+      ],
+      "smokeZones": [
+        {
+          "name": "ДЗ-1",
+          "exhaustSystem": "ВДУ-1",
+          "supplySystem": "ПД-1",
+          "smokeDampers": 2
+        },
+        {
+          "name": "ДЗ-2",
+          "exhaustSystem": "ВДУ-2",
+          "supplySystem": "ПД-2",
+          "smokeDampers": 2
+        }
+      ],
+      "normallyOpenDampers": 4
     }
   }
 }

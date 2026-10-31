@@ -40,8 +40,9 @@ public class SoueLayouterTests
         var result = SoueLayouter.Layout([Zone(Rect(20000, 10000), background: 90)], Sounder, Light, Norms);
 
         result.Zones.Single().RequiredLevel.ShouldBe(105, 1e-9);
-        // 105 на 1 м при требуемых 105 → r = 1 м: оповещатель почти в каждой точке — предупреждение о непригодности модели.
-        result.Issues.ShouldContain(i => i.Code == "soue.sounder.weak" && i.Level == IssueLevel.Warning);
+        // 105 на 1 м при требуемых 105 → r = 1 м: модель непригодна — ошибка, оповещатели не расставляются.
+        result.Issues.ShouldContain(i => i.Code == "soue.sounder.weak" && i.Level == IssueLevel.Error && i.Message.Contains("119 дБ"));
+        result.Sounders.ShouldBeEmpty();
         result.Issues.ShouldContain(i => i.Code == "soue.light.required" && i.Clause!.Contains("6.8.2"));
     }
 
