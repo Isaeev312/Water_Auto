@@ -1184,12 +1184,12 @@ public static class ProjectPipeline
                 }
                 else if (r.Name.StartsWith("Напорный к УУ", StringComparison.Ordinal))
                 {
-                    valves.Add(Along(r.Path, 700, true, "gate", PosOf("cuValve")));
+                    valves.Add(Along(r.Path, 700, true, "butterfly", PosOf("cuValve")));
                     valves.Add(Along(r.Path, 0, false, "vent", PosOf("airVent")));
                 }
                 else if (r.Name.StartsWith("Выпуск секции", StringComparison.Ordinal))
                 {
-                    valves.Add(Along(r.Path, 700, false, "gate", PosOf("cuValve")));
+                    valves.Add(Along(r.Path, 700, false, "butterfly", PosOf("cuValve")));
                 }
                 else if (r.Name.StartsWith("Патрубок ГМ", StringComparison.Ordinal))
                 {
@@ -1299,12 +1299,15 @@ public static class ProjectPipeline
                 ])).ToList();
             var axoBlocks = roomPlan.Items.Zip(blocks.Where(b => b.Label != "фундамент"), (i, b) => new AxonoBlock(b.Position is { } bp ? $"{bp}. {b.Label}" : b.Label, i.X0, i.Y0, i.X1, i.Y1, b.Bottom, b.Top)).ToList();
             var axoValves = new List<AxonoValve>();
+            var sectionValves = new List<(double X, double Z, string Kind, int? Position, double Angle)>();
             foreach (var r in piping?.Runs ?? [])
             {
                 var z = r.RunHeightMm / 1000;
-                foreach (var (pt, _, kind, pos) in valves.Where(v => r.Path.Zip(r.Path.Skip(1)).Any(s => OnSegment(v.Item1, s.First, s.Second))))
+                foreach (var (pt, angle, kind, pos) in valves.Where(v => r.Path.Zip(r.Path.Skip(1)).Any(s => OnSegment(v.Item1, s.First, s.Second))))
                 {
                     axoValves.Add(new AxonoValve(new Point3(pt.XMm, pt.YMm, z), kind, pos));
+                    // На разрезе (вид вдоль X) ход среды — по знаку проекции направления трубы на X.
+                    sectionValves.Add((pt.XMm, z, kind, pos, Math.Cos(angle) < -1e-9 ? Math.PI : 0));
                 }
             }
 
@@ -1332,7 +1335,7 @@ public static class ProjectPipeline
                         "Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:200 (п. 6.10.29); переходы — эксцентрические.",
                         "Электродвигатели насосов — не ниже 0,5 м от пола (п. 6.10.22); установка — на фундаменте по паспорту изготовителя (п. 6.10.26).",
                         "Высоты узла управления и жокей-насоса — условные (data/catalog/pump_room.json).",
-                    ]),
+                    ]) { Valves = sectionValves },
                 SheetStamp(project, "Разрез", "Разрез 1-1 насосной станции") with { Name = "Разрез 1-1 насосной станции" },
                 project.Font));
 

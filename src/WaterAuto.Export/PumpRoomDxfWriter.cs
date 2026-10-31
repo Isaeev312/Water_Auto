@@ -210,20 +210,9 @@ public static class PumpRoomDxfWriter
         }
 
         var pipeLayerForSets = DxfDrawing.AddLayer(doc, PipeLayer, 5, LineWeightType.W50);
-        void Valve(XYZ at, double angle, string kind, double r)
-        {
-            var (c, sn) = (Math.Cos(angle), Math.Sin(angle));
-            XY Q(double a, double b) => new(at.X + (a * c) - (b * sn), at.Y + (a * sn) + (b * c));
-            if (kind == "check")
-            {
-                doc.Entities.Add(new LwPolyline([Q(-r, -r), Q(r, 0), Q(-r, r)]) { IsClosed = true, Layer = equipment });
-                doc.Entities.Add(new Line(new XYZ(Q(r, -r).X, Q(r, -r).Y, 0), new XYZ(Q(r, r).X, Q(r, r).Y, 0)) { Layer = equipment });
-            }
-            else
-            {
-                doc.Entities.Add(new LwPolyline([Q(-r, -r), Q(r, r), Q(r, -r), Q(-r, r)]) { IsClosed = true, Layer = equipment });
-            }
-        }
+        // Арматура — знаками ГОСТ 21.205 (задвижка, затвор дисковый, обратный клапан…), вид — по роли в спецификации.
+        void Valve(XYZ at, double angle, string kind, double r) =>
+            GostSymbols.Draw(doc, equipment, text, new XY(at.X, at.Y), angle, r, GostSymbols.FromKind(kind));
 
         foreach (var e in data.Equipment)
         {
@@ -464,36 +453,24 @@ public static class PumpRoomDxfWriter
         {
             var lx = x1 + (data.WallThicknessMm) + (12 * h);
             var ly = y1;
-            Text(lx, ly, "Условные обозначения", 1.0 * h);
+            // Знаки арматуры — по ГОСТ 21.205 только тех видов, что есть на листе; линия, подъёмы и отметки на стенах — ниже.
+            var used = data.Valves.Select(v => GostSymbols.FromKind(v.Kind)).Concat(data.Equipment.Any(e => e.Pumps.Count > 1) ? [PipeSymbol.Gate, PipeSymbol.Check] : []).Distinct().ToList();
+            var cy = GostSymbols.Legend(doc, equipment, text, lx, ly, h, used);
             var rows = new (string Kind, string Label)[]
             {
                 ("line", $"трубопровод противопожарного водопровода ({data.LineCode}), ГОСТ 21.205"),
-                ("gate", "задвижка (затвор)"),
-                ("check", "клапан обратный"),
-                ("vent", "воздухоотводчик автоматический"),
                 ("riser", "подъём (опуск) трубопровода, отметки верха / низа"),
                 ("mark", "ввод, выпуск, патрубок ГМ на стене"),
             };
-            for (var k = 0; k < rows.Length; k++)
+            foreach (var (kind, label) in rows)
             {
-                var cy = ly - ((k + 1.6) * 2.4 * h);
                 var c = P(lx + (2 * h), cy);
-                switch (rows[k].Kind)
+                switch (kind)
                 {
                     case "line":
                         doc.Entities.Add(new Line(P(lx, cy), P(lx + (1.3 * h), cy)) { Layer = pipes });
                         doc.Entities.Add(new Line(P(lx + (2.7 * h), cy), P(lx + (4 * h), cy)) { Layer = pipes });
                         Text(lx + (1.4 * h), cy - (0.35 * h), data.LineCode, 0.7 * h);
-                        break;
-                    case "gate":
-                        Valve(c, 0, "gate", 0.6 * h);
-                        break;
-                    case "check":
-                        Valve(c, 0, "check", 0.6 * h);
-                        break;
-                    case "vent":
-                        doc.Entities.Add(new Circle { Center = c, Radius = 0.6 * h, Layer = equipment });
-                        Text(c.X - (0.25 * h), c.Y - (0.3 * h), "В", 0.5 * h);
                         break;
                     case "riser":
                         doc.Entities.Add(new Circle { Center = c, Radius = 0.45 * h, Layer = equipment });
@@ -503,7 +480,8 @@ public static class PumpRoomDxfWriter
                         break;
                 }
 
-                Text(lx + (5 * h), cy - (0.35 * h), rows[k].Label, 0.7 * h);
+                Text(lx + (5 * h), cy - (0.35 * h), label, 0.7 * h);
+                cy -= 2.4 * h;
             }
         }
 

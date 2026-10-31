@@ -99,23 +99,31 @@ public static class PumpRoomAxonometryDxfWriter
             }
         }
 
-        // Арматура: символ у точки, номер позиции на выноске.
+        // Арматура: знак ГОСТ 21.205 по направлению трубы в изометрии (ход среды — по порядку точек трубы), номер позиции на выноске.
+        double AngleAt(Point3 at)
+        {
+            foreach (var p in data.Pipes)
+            {
+                foreach (var (a, b) in p.Path.Zip(p.Path.Skip(1)))
+                {
+                    var len = Math.Abs(b.XMm - a.XMm) + Math.Abs(b.YMm - a.YMm) + (Math.Abs(b.Z - a.Z) * 1000);
+                    var via = Math.Abs(at.XMm - a.XMm) + Math.Abs(at.YMm - a.YMm) + (Math.Abs(at.Z - a.Z) * 1000) + Math.Abs(b.XMm - at.XMm) + Math.Abs(b.YMm - at.YMm) + (Math.Abs(b.Z - at.Z) * 1000);
+                    if (len > 1 && Math.Abs(via - len) < 1)
+                    {
+                        var (pa, pb) = (Pr(a), Pr(b));
+                        return Math.Atan2(pb.Y - pa.Y, pb.X - pa.X);
+                    }
+                }
+            }
+
+            return 0;
+        }
+
         foreach (var v in data.Valves)
         {
             var c = Pr(v.At);
             var r = 0.7 * h;
-            switch (v.Kind)
-            {
-                case "vent":
-                    doc.Entities.Add(new Circle { Center = Z(c), Radius = r, Layer = equipment });
-                    break;
-                case "check":
-                    doc.Entities.Add(new LwPolyline([new XY(c.X - r, c.Y - r), new XY(c.X + r, c.Y), new XY(c.X - r, c.Y + r)]) { IsClosed = true, Layer = equipment });
-                    break;
-                default:
-                    doc.Entities.Add(new LwPolyline([new XY(c.X - r, c.Y - r), new XY(c.X + r, c.Y + r), new XY(c.X + r, c.Y - r), new XY(c.X - r, c.Y + r)]) { IsClosed = true, Layer = equipment });
-                    break;
-            }
+            GostSymbols.Draw(doc, equipment, text, c, AngleAt(v.At), r, GostSymbols.FromKind(v.Kind));
 
             if (v.Position is { } n)
             {
@@ -125,6 +133,14 @@ public static class PumpRoomAxonometryDxfWriter
         }
 
         Text(new XY(sheet.At(30, 0).X, sheet.At(0, sheet.Format.HeightMm - 15).Y), "Аксонометрическая схема обвязки насосной станции", 2 * h);
+
+        // Условные обозначения — справа над основной надписью: только виды арматуры, что есть на схеме.
+        if (data.Valves.Count > 0)
+        {
+            var lx = sheet.At(sheet.Format.WidthMm - 190, 0).X;
+            var ly = sheet.At(0, sheet.Format.HeightMm - 15).Y;
+            GostSymbols.Legend(doc, equipment, text, lx, ly, h, data.Valves.Select(v => GostSymbols.FromKind(v.Kind)));
+        }
         var ny = sheet.At(0, 92).Y;
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
         var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));

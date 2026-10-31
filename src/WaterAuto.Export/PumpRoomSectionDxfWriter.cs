@@ -27,7 +27,11 @@ public sealed record PumpRoomSection(
     (double X0, double X1, double Depth)? Pit,
     IReadOnlyList<SectionBlock> Blocks,
     IReadOnlyList<SectionPipe> Pipes,
-    IReadOnlyList<string> Notes);
+    IReadOnlyList<string> Notes)
+{
+    /// <summary>Арматура на разрезе: X, мм, отметка оси, м, вид (gate, butterfly, check, vent), номер позиции, направление хода среды (0 — вправо, π — влево).</summary>
+    public IReadOnlyList<(double X, double Z, string Kind, int? Position, double Angle)> Valves { get; init; } = [];
+}
 
 /// <summary>Разрез 1-1 насосной станции на листе с рамкой и основной надписью по форме 3, масштаб 1:50.</summary>
 public static class PumpRoomSectionDxfWriter
@@ -129,6 +133,28 @@ public static class PumpRoomSectionDxfWriter
             }
         }
 
+        // Арматура — знаками ГОСТ 21.205 на оси трубы, номер позиции на выноске.
+        foreach (var (vx, vz, kind, pos, angle) in data.Valves)
+        {
+            var r = 0.7 * h;
+            GostSymbols.Draw(doc, equipment, text, new XY(vx, vz * 1000), angle, r, GostSymbols.FromKind(kind));
+            if (pos is { } n)
+            {
+                doc.Entities.Add(new Line(new XYZ(vx + r, (vz * 1000) + r, 0), new XYZ(vx + (2.5 * r), (vz * 1000) + (2.5 * r), 0)) { Layer = text });
+                Text(vx + (2.6 * r), (vz * 1000) + (2.6 * r), n.ToString(CultureInfo.InvariantCulture), 0.7 * h);
+            }
+        }
+
+        // Насосы установки — знак насоса ГОСТ 21.205 у корпуса агрегата.
+        foreach (var b in data.Blocks.Where(b => b.Pumps > 0))
+        {
+            for (var k = 0; k < b.Pumps; k++)
+            {
+                var cx = b.X0 + ((b.X1 - b.X0) * (k + 0.5) / b.Pumps);
+                GostSymbols.Draw(doc, equipment, text, new XY(cx, (b.Bottom + 0.15 + ((b.Top - b.Bottom) * 0.15)) * 1000), Math.PI / 2, 0.8 * h, PipeSymbol.Pump);
+            }
+        }
+
         // Отметки: пол, перекрытие, земля, трубы (по одной на отметку).
         var markX = x0 - t - 3500;
         Mark(markX, 0, "пол");
@@ -140,6 +166,11 @@ public static class PumpRoomSectionDxfWriter
         }
 
         Text(sheet.At(30, 0).X, sheet.At(0, sheet.Format.HeightMm - 15).Y, "Разрез 1-1 насосной станции", 2 * h);
+        var legendKinds = data.Valves.Select(v => GostSymbols.FromKind(v.Kind)).Concat(data.Blocks.Any(b => b.Pumps > 0) ? [PipeSymbol.Pump] : []).ToList();
+        if (legendKinds.Count > 0)
+        {
+            GostSymbols.Legend(doc, equipment, text, sheet.At(sheet.Format.WidthMm - 190, 0).X, sheet.At(0, sheet.Format.HeightMm - 15).Y, h, legendKinds);
+        }
         var ny = sheet.At(0, 92).Y;
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
         var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
