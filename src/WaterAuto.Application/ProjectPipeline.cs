@@ -1938,7 +1938,7 @@ public static class ProjectPipeline
                 design.AirFilled,
                 curtains,
                 hydrantPoints.Count,
-                string.Create(ru87, $"насосная станция: {station.WorkingPumps} рабочих и {station.StandbyPumps} резервных пожарных насоса, Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м"),
+                string.Create(ru87, $"насосная станция: пожарных насосов рабочих — {station.WorkingPumps}, резервных — {station.StandbyPumps}; Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м"),
                 volumes87,
                 schemes87));
             Write(outDir, Pp87File, files, p => NoteDocx.Write(p, pb, Stamp(project, "ПБ", "Мероприятия по обеспечению пожарной безопасности"), project.Font));

@@ -24,6 +24,7 @@ public class DrencherCurtainTests
         (r.TotalFlow.LitersPerSecond / 4).ShouldBeGreaterThanOrEqualTo(1.0);
         r.FeedPressure.Mpa.ShouldBeGreaterThan(0.1);
         r.Duration.ShouldBe(60);
+        r.Issues.ShouldNotContain(i => i.Code == "pipe.noGeometry"); // трубы нитки — с сортаментом, скорость проверяется
     }
 
     [Fact]

@@ -74,7 +74,8 @@ public static class DrencherCurtain
         for (var j = 1; j <= n; j++)
         {
             nodes.Add(new($"D{j}", NodeKind.Sprinkler, new Length(0), new KFactor(input.K)));
-            pipes.Add(new($"P{j}", j == 1 ? "S" : $"D{j - 1}", $"D{j}", new Length(j == 1 ? spacing / 2 : spacing), pipe.Kt, 1 + k));
+            pipes.Add(new($"{input.Id}.P{j}", j == 1 ? "S" : $"D{j - 1}", $"D{j}", new Length(j == 1 ? spacing / 2 : spacing), pipe.Kt, 1 + k,
+                new PipeGeometry(pipe.Standard, pipe.Dn, new Length(pipe.OuterDiameterMm / 1000), new Length(pipe.WallMm / 1000))));
         }
 
         var solution = TreeSolver.SolveDesign(new HydraulicNetwork(nodes, pipes), $"D{n}", new Pressure(input.DictatingPressureMpa));

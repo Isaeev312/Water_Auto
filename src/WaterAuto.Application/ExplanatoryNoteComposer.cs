@@ -393,8 +393,10 @@ public static class ExplanatoryNoteComposer
         blocks.Add(new NoteFormula($"*Q*_{{р}} = Σ*q*_{{n}} = **{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с**,", "5.7", [
             $"где *n* — количество оросителей в диктующей зоне, *n* = {d.ZoneSprinklers.Count}.",
         ]));
-        var qAup = d.PumpFlow.LitersPerSecond - (d.Hydrants?.TotalFlow.LitersPerSecond ?? 0);
-        var aupName = d.Hydrants is null ? "*Q*_{нас}" : "*Q*_{АУП}";
+        // Завесы, совмещённые с АУП-С, входят в расход насоса по Б.28 — здесь расход только спринклерной части.
+        var qCurtains = i.Curtains?.Where(c => c.Input.CombinedWithSprinkler).Sum(c => c.TotalFlow.LitersPerSecond) ?? 0;
+        var qAup = d.PumpFlow.LitersPerSecond - (d.Hydrants?.TotalFlow.LitersPerSecond ?? 0) - qCurtains;
+        var aupName = d.Hydrants is null && qCurtains <= 0 ? "*Q*_{нас}" : "*Q*_{АУП}";
         blocks.Add(new NoteParagraph(d.PumpFlowClause.StartsWith("Б.24", StringComparison.Ordinal)
             ? $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с ≤ *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.24), установка должна обеспечивать нормативный расход: {aupName} = **{F(qAup, "0.00")} л/с**."
             : $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с > *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.25), расход принимается не менее расчётного (Б.26): {aupName} = **{F(qAup, "0.00")} л/с**."));
