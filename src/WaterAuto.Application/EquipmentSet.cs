@@ -82,6 +82,62 @@ public static class EquipmentSet
         return Merge(items);
     }
 
+    /// <summary>
+    /// Сигналы в АПС по полю signals шаблона (ADR 0012): по одному источнику на сигнал позиции, количество — как у строки
+    /// спецификации (per × множитель count). Подстановки и множители — как в <see cref="Items(string, TakeoffGroup, IReadOnlyDictionary{string, string}, IReadOnlyDictionary{string, int})"/>.
+    /// </summary>
+    public static IReadOnlyList<SignalSource> Signals(string path, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(counts);
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var signals = new List<SignalSource>();
+        foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
+        {
+            if (!t.TryGetProperty("signals", out var list))
+            {
+                continue;
+            }
+
+            var times = t.TryGetProperty("count", out var c) ? counts.GetValueOrDefault(c.GetString()!) : 1;
+            if (times == 0)
+            {
+                continue;
+            }
+
+            var name = tokens.Aggregate(t.GetProperty("name").GetString()!, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+            var count = (int)Math.Round(t.GetProperty("per").GetDouble() * times);
+            foreach (var s in list.EnumerateArray())
+            {
+                signals.Add(new SignalSource(
+                    t.TryGetProperty("role", out var r) ? r.GetString() : null,
+                    name,
+                    s.GetProperty("kind").GetString() switch
+                    {
+                        "valvePosition" => SignalKind.ValvePosition,
+                        "pressureSwitch" => SignalKind.PressureSwitch,
+                        var kind => throw new InvalidDataException($"{path}: неизвестный вид сигнала «{kind}»."),
+                    },
+                    count,
+                    s.TryGetProperty("clause", out var cl) ? cl.GetString() : null));
+            }
+        }
+
+        return signals;
+    }
+
+    /// <summary>Сигналы комплекта на каждое место установки (<paramref name="places"/> — DN мест), сложенные по DN.</summary>
+    public static IReadOnlyList<SignalSource> Signals(string path, IEnumerable<int> places)
+    {
+        ArgumentNullException.ThrowIfNull(places);
+        return places
+            .GroupBy(dn => dn)
+            .OrderBy(g => g.Key)
+            .SelectMany(g => Signals(path, new Dictionary<string, string> { ["dn"] = g.Key.ToString(CultureInfo.InvariantCulture) }, new Dictionary<string, int>())
+                .Select(s => s with { Count = s.Count * g.Count() }))
+            .ToList();
+    }
+
     private static List<TakeoffItem> Merge(List<TakeoffItem> items)
     {
         // Одинаковые строки (шаблон без {dn}) складываются.

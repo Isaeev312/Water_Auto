@@ -35,6 +35,7 @@
       "count": "sections",
       "group": "equipment",
       "role": "cu",
+      "signals": [ { "kind": "pressureSwitch" } ],
       "note": "с сигнализатором давления и камерой задержки; или аналог"
     },
     {
@@ -53,6 +54,7 @@
       "per": 1,
       "group": "valves",
       "role": "inletValve",
+      "signals": [ { "kind": "valvePosition" } ],
       "note": "на каждом вводе (входном всасывающем трубопроводе) в насосную; или аналог",
       "count": "inlets"
     },
@@ -64,6 +66,7 @@
       "count": "pumps",
       "group": "valves",
       "role": "valveS",
+      "signals": [ { "kind": "valvePosition" } ],
       "note": "на всасывающей линии; или аналог"
     },
     {
@@ -74,6 +77,7 @@
       "count": "pumps",
       "group": "valves",
       "role": "valveD",
+      "signals": [ { "kind": "valvePosition" } ],
       "note": "на напорной линии; или аналог"
     },
     {
@@ -144,6 +148,7 @@
       "count": "sections",
       "group": "valves",
       "role": "cuValve",
+      "signals": [ { "kind": "valvePosition", "clause": "СП 485.1311500.2020, п. 6.8.7" } ],
       "note": "до и после узла управления (п. 6.8.7); или аналог"
     },
     {
