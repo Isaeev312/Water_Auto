@@ -14,7 +14,7 @@ public static class AlarmNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null, IReadOnlyList<string>? volumeFiles = null)
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -35,6 +35,10 @@ public static class AlarmNote
         sections.Add(new("4", "Зоны контроля, ручные извещатели, изоляторы и прибор", Zones(zones, layout, issues, zoning)));
         sections.Add(new("5", "Сигналы от установки пожаротушения", Signals(points)));
         sections.Add(new("6", "Электропитание и аккумуляторная батарея", Power(budget)));
+        if (volumeFiles is { Count: > 0 })
+        {
+            sections.Add(new("7", "Состав тома", [new NoteParagraph("Том «Пожарная сигнализация» выпускается отдельной папкой и содержит:"), new NoteList([.. volumeFiles.Select(VolumeFileText)])]));
+        }
         return new NoteDocument(title with { Title = "Пожарная сигнализация. Пояснительная записка к расчёту" }, sections, []);
     }
 
@@ -157,6 +161,19 @@ public static class AlarmNote
             new NoteParagraph(string.Create(Ru, $"Принята батарея {b.Battery.Name} ёмкостью {b.Battery.Nominal.AmpereHours:0.##} А·ч{(b.Required is { } rq ? (rq.AmpereHours <= b.Battery.Nominal.AmpereHours ? " — требуемая ёмкость обеспечена" : " — **требуемая ёмкость не обеспечена**, нужна батарея большей ёмкости") : "")}. Время работы в режиме «Пожар» по формуле Б.3: *t* = *C*_{{АКБ}} / (*I*_{{п}}·*K*_{{стр}}) = {(b.Backup is { } t ? t.TotalHours.ToString("0.#", Ru) : "—")} ч. Подробно — aps_battery.xlsx.")),
         ];
     }
+
+    private static string VolumeFileText(string file) => Path.GetFileName(file) switch
+    {
+        "aps_plan.dxf" => "aps_plan.dxf — план расстановки извещателей (слои АПС_)",
+        "aps_signals.xlsx" => "aps_signals.xlsx — перечень сигналов АУПТ в АПС",
+        "aps_addresses.xlsx" => "aps_addresses.xlsx — таблица адресов",
+        "aps_battery.xlsx" => "aps_battery.xlsx — расчёт ёмкости АКБ",
+        "aps_cables.xlsx" => "aps_cables.xlsx — кабельный журнал",
+        "aps_spec.xlsx" => "aps_spec.xlsx — спецификация оборудования",
+        "aps_interaction.docx" => "aps_interaction.docx — ТЗ на взаимодействие с АУПТ",
+        "aps_pz.docx" => "aps_pz.docx — пояснительная записка (этот документ)",
+        var other => other,
+    };
 
     private static string Milli(Current? c) => c is { } v ? (v.Amperes * 1000).ToString("0.#", Ru) : "от линии";
 

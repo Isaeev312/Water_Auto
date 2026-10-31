@@ -97,9 +97,15 @@ public static class ProjectPipeline
     public const string CableJournalFile = "aps_cables.xlsx";
     public const string IssuesFile = "issues.txt";
 
+    /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
+    public const string AuptVolume = "АУПТ";
+    public const string AlarmVolume = "АПС";
+
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
     {
         Directory.CreateDirectory(outDir);
+        var auptDir = Path.Combine(outDir, AuptVolume);
+        var alarmDir = Path.Combine(outDir, AlarmVolume);
         var issues = new List<Issue>();
         var files = new List<string>();
         PipelineResult Stop()
@@ -812,14 +818,14 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(outDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
         if (detectorLayout is not null)
         {
-            Write(outDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf));
+            Write(alarmDir, AlarmPlanFile, files, p => AlarmPlanDxfWriter.Write(p, detectorLayout, detectorZones, outIssues, project.Font, manuals: zoning?.Manuals, zoneOf: zoning?.ZoneOf));
         }
 
-        Write(outDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
-        Write(outDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(
+        Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        Write(auptDir, AxonometryFile, files, p => AxonometryDxfWriter.Write(
             p,
             routes,
             new Length(design.PipeElevation),
@@ -828,7 +834,7 @@ public static class ProjectPipeline
             new AxonometryCalc(worst.Route.RoomId, worst.Route.InletId, CalcPoints.Labels(worst), [.. worst.Path.Select(x => x.Id)], worst.ZoneSprinklers)));
         // Принципиальная схема насосной станции (лист основного комплекта).
         var fromTank = design.InletPressure < Need(norms, "sp485.p6_9_12.minNetworkPressure").Values["pressure"]!.Value;
-        Write(outDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
+        Write(auptDir, PumpSchemeFile, files, p => PumpSchemeDxfWriter.Write(
             p,
             new PumpSchemeData(
                 setChoice?.Chosen is { } schemeSet ? schemeSet.MainPumps + schemeSet.StandbyPumps : station.WorkingPumps + station.StandbyPumps,
@@ -952,7 +958,7 @@ public static class ProjectPipeline
             ];
             if (piping is not null)
             {
-                Write(outDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
+                Write(auptDir, PumpRoomPipingFile, files, p => PumpRoomDxfWriter.Write(
                     p,
                     roomDrawing with
                     {
@@ -1029,7 +1035,7 @@ public static class ProjectPipeline
                 }
             }
 
-            Write(outDir, PumpRoomAxonometryFile, files, p => PumpRoomAxonometryDxfWriter.Write(
+            Write(auptDir, PumpRoomAxonometryFile, files, p => PumpRoomAxonometryDxfWriter.Write(
                 p,
                 new PumpRoomAxonometry(axoPipes, axoBlocks, axoValves, [
                     "Фронтальная изометрия (ГОСТ 2.317): ось Y — под 45°, без сокращения; отметки — оси труб от пола насосной.",
@@ -1040,7 +1046,7 @@ public static class ProjectPipeline
                 SheetStamp(project, "Аксонометрическая схема обвязки", "Аксонометрическая схема обвязки насосной станции") with { Name = "Аксонометрия обвязки насосной" },
                 project.Font));
 
-            Write(outDir, PumpRoomSectionFile, files, p => PumpRoomSectionDxfWriter.Write(
+            Write(auptDir, PumpRoomSectionFile, files, p => PumpRoomSectionDxfWriter.Write(
                 p,
                 new PumpRoomSection(
                     rv.Min(q => q.XMm), rv.Max(q => q.XMm), pr1.WallThickness * 1000, pr1.FloorElevation, pr1.Height, pr1.GroundElevation - pr1.FloorElevation,
@@ -1057,7 +1063,7 @@ public static class ProjectPipeline
                 SheetStamp(project, "Разрез", "Разрез 1-1 насосной станции") with { Name = "Разрез 1-1 насосной станции" },
                 project.Font));
 
-            Write(outDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
+            Write(auptDir, PumpRoomPlanFile, files, p => PumpRoomDxfWriter.Write(
                 p,
                 roomDrawing,
                 SheetStamp(project, "План насосной", "План насосной станции пожаротушения"),
@@ -1069,7 +1075,7 @@ public static class ProjectPipeline
         {
             var prI = design.PumpRoom;
             var (elevI, inletElevI) = (inletRouteZ, inletWallZ);
-            Write(outDir, InletRouteFile, files, p => InletRouteDxfWriter.Write(
+            Write(auptDir, InletRouteFile, files, p => InletRouteDxfWriter.Write(
                 p,
                 new InletRouteDrawing(
                     [.. plan.Rooms.Select(r => r.Contour)],
@@ -1094,8 +1100,8 @@ public static class ProjectPipeline
 
         if (stationTakeoff.Items.Count > 0)
         {
-            Write(outDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
-            Write(outDir, PumpStationSpecXlsxFile, files, p => SpecificationXlsx.Write(p, stationTakeoff, new SpecificationHeader($"{project.Name}. Насосная станция. Спецификация оборудования, изделий и материалов"), project.Font, continuous: true));
+            Write(auptDir, PumpStationSpecFile, files, p => SpecificationDocx.Write(p, stationTakeoff, Stamp(project, "ПТ2.СО", "Спецификация оборудования, изделий и материалов насосной станции"), project.Font, continuous: true));
+            Write(auptDir, PumpStationSpecXlsxFile, files, p => SpecificationXlsx.Write(p, stationTakeoff, new SpecificationHeader($"{project.Name}. Насосная станция. Спецификация оборудования, изделий и материалов"), project.Font, continuous: true));
         }
 
         if (controlPoints.Count > 0)
@@ -1107,34 +1113,34 @@ public static class ProjectPipeline
                 signalPositions["cabinet"] = setPosition;
             }
 
-            Write(outDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
+            Write(alarmDir, SignalListFile, files, p => SignalListXlsx.Write(p, controlPoints, $"{project.Name}. Перечень сигналов АУПТ в АПС", project.Font, signalPositions));
         }
 
         if (powerBudget is not null)
         {
-            Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
+            Write(alarmDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
         }
 
         if (addressRows.Count > 0)
         {
-            Write(outDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов АПС", project.Font));
+            Write(alarmDir, AddressTableFile, files, p => AddressTableXlsx.Write(p, addressRows, $"{project.Name}. Таблица адресов АПС", project.Font));
         }
 
         if (cableLines.Count > 0)
         {
-            Write(outDir, CableJournalFile, files, p => CableJournalXlsx.Write(p, cableLines, $"{project.Name}. Кабельный журнал АПС", project.Font));
+            Write(alarmDir, CableJournalFile, files, p => CableJournalXlsx.Write(p, cableLines, $"{project.Name}. Кабельный журнал АПС", project.Font));
         }
 
         if (alarmSpec.Count > 0)
         {
-            Write(outDir, AlarmSpecFile, files, p => AlarmSpecXlsx.Write(p, alarmSpec, $"{project.Name}. Спецификация оборудования АПС", project.Font));
+            Write(alarmDir, AlarmSpecFile, files, p => AlarmSpecXlsx.Write(p, alarmSpec, $"{project.Name}. Спецификация оборудования АПС", project.Font));
         }
 
         if (controlPoints.Count > 0)
         {
             var ti = project.Title;
             var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
-            Write(outDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
+            Write(alarmDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "АПС.ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
         }
 
         if (detectorLayout is not null || controlPoints.Count > 0)
@@ -1142,12 +1148,13 @@ public static class ProjectPipeline
             // Записка АПС — объяснение хода расчёта для проектировщика: исходные данные, выбор ИП, размещение, ЗКСПС, сигналы, АКБ.
             var tn = project.Title;
             var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
-                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning);
-            Write(outDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
+                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning,
+                [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile]);
+            Write(alarmDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
         }
 
-        Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
-        Write(outDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
+        Write(auptDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
+        Write(auptDir, SpecificationDocxFile, files, p => SpecificationDocx.Write(p, takeoff, Stamp(project, "ПТ.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
 
         var literature = registryPath is not null && File.Exists(registryPath)
             ? LiteratureRegistry.Parse(new StringReader(File.ReadAllText(registryPath)))
@@ -1186,14 +1193,14 @@ public static class ProjectPipeline
                 userTank,
                 design.Jockey),
             norms);
-        Write(outDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
+        Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
             new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
-        Write(outDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
+        Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet
             ? new PumpSetSummary(
@@ -1549,6 +1556,7 @@ public static class ProjectPipeline
 
     private static void Write(string dir, string name, List<string> files, Action<string> write)
     {
+        Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, name);
         write(path);
         files.Add(path);

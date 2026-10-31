@@ -94,6 +94,11 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
 
         var plan = result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));
+        // Тома: раздел АПС — своей папкой, АУПТ — своей; журнал замечаний — в корне.
+        Path.GetFileName(Path.GetDirectoryName(plan)).ShouldBe(ProjectPipeline.AlarmVolume);
+        result.Files.Where(f => Path.GetFileName(f).StartsWith("aps_", StringComparison.Ordinal)).ShouldAllBe(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.AlarmVolume);
+        Path.GetFileName(Path.GetDirectoryName(result.Files.Single(f => f.EndsWith(ProjectPipeline.PlanFile, StringComparison.Ordinal)))).ShouldBe(ProjectPipeline.AuptVolume);
+        Path.GetFileName(Path.GetDirectoryName(result.Files.Single(f => f.EndsWith(ProjectPipeline.IssuesFile, StringComparison.Ordinal)))).ShouldNotBe(ProjectPipeline.AlarmVolume);
         var doc = DxfReader.Read(plan);
         doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
         result.Issues.ShouldNotContain(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
