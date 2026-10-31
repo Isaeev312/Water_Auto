@@ -612,12 +612,12 @@ public static class ProjectPipeline
                         }
 
                         // Громкоговорители линии 100 В — не адресные устройства: в таблицу адресов и ДПЛС не идут.
-                        foreach (var s in sounderEntry?.Speaker is null ? soue?.Sounders ?? [] : [])
+                        foreach (var s in sounderEntry is { Speaker: null, Device.Addresses: > 0 } ? soue?.Sounders ?? [] : [])
                         {
                             addressDevices.Add(new(s.Id, $"{sounderEntry?.Model.Name} — {zoneById[s.RoomId].RoomName}", "Оповещение (выход)", "", sounderEntry?.Device.LoopCurrent ?? Current.Zero));
                         }
 
-                        foreach (var l in soue?.Lights ?? [])
+                        foreach (var l in lightEntry is { Device.Addresses: > 0 } ? soue?.Lights ?? [] : [])
                         {
                             addressDevices.Add(new(l.Id, $"{lightEntry?.Model.Name} — {zoneById[l.RoomId].RoomName}", "Оповещение (табло)", "", lightEntry?.Device.LoopCurrent ?? Current.Zero));
                         }
@@ -644,7 +644,7 @@ public static class ProjectPipeline
                         // Устройства по уровням (тот же порядок, что в таблице адресов); отметка уровня относительно поста (первый
                         // уровень) — кольцо обходит уровни подряд, стояк — на каждом переходе (CableJournal.Segments).
                         var devicePoints = (detectorLayout?.Detectors.Select(d => (d.Location, d.RoomId, d.Id)) ?? []).Concat(zoning?.Manuals.Select(m => (m.Location, m.RoomId, m.Id)) ?? [])
-                            .Concat(soue?.Sounders.Where(_ => sounderEntry?.Speaker is null).Select(s => (s.Location, s.RoomId, s.Id)) ?? []).Concat(soue?.Lights.Select(l => (l.Location, l.RoomId, l.Id)) ?? [])
+                            .Concat(soue?.Sounders.Where(_ => sounderEntry is { Speaker: null, Device.Addresses: > 0 }).Select(s => (s.Location, s.RoomId, s.Id)) ?? []).Concat(soue?.Lights.Where(_ => lightEntry is { Device.Addresses: > 0 }).Select(l => (l.Location, l.RoomId, l.Id)) ?? [])
                             .OrderBy(d => DeviceLevel(d.Id)).ToList();
                         var loops = new List<LoopLine>();
                         var offset = 0;
@@ -679,6 +679,29 @@ public static class ProjectPipeline
                             plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
                         issues.AddRange(journal.Issues);
                         var allLines = journal.Lines.ToList();
+
+                        // Неадресные оповещатели (адресов 0) — не на ДПЛС: линия 12 В от выхода релейного блока на посту через
+                        // оповещатели помещения цепочкой (по уровню — со стояком), отдельно звуковые и световые.
+                        var relayName = relayModel?.Name ?? "релейный блок";
+                        var notifierLine = 0;
+                        foreach (var (entry, list, purpose) in new[] { (sounderEntry, soue?.Sounders, "линия звукового оповещения 12 В"), (lightEntry, soue?.Lights, "линия светового оповещения 12 В") })
+                        {
+                            if (entry is not { Speaker: null, Device.Addresses: 0 } || list is not { Count: > 0 })
+                            {
+                                continue;
+                            }
+
+                            foreach (var room in list.GroupBy(x => x.RoomId))
+                            {
+                                var pts = room.Select(x => x.Location).ToList();
+                                var segs = CableJournal.Segments(new PlanPoint(panelPoint.X, panelPoint.Y), pts, [.. room.Select(x => LevelMm(x.Id))]);
+                                var baseM = segs.Take(segs.Count - 1).Sum(x => x.Mm) / 1000;
+                                notifierLine++;
+                                var roomName = detectorZones.FirstOrDefault(z => z.RoomId == room.Key)?.RoomName ?? room.Key;
+                                allLines.Add(new CableLine($"ЛОН{notifierLine}", $"{relayName} (выход)", $"{room.Count()} × {entry.Model.Name} — {roomName}", purpose, LoadCables(cablesPath).PowerName, Math.Round(baseM * LoadCables(cablesPath).Reserve, 0),
+                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"цепочка от поста через оповещатели помещения, ток {room.Count() * entry.Device.Alarm.Amperes * 1000:0} мА; сечение — по падению напряжения, проектировщик"), Math.Round(baseM, 0)));
+                            }
+                        }
                         if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
                         {
                             // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
@@ -1977,6 +2000,8 @@ public static class ProjectPipeline
             _ => SchemeDeviceKind.Module,
         };
     }
+
+    private static CableCatalog LoadCables(string path) => AlarmCableCatalog.Load(path);
 
     private static string WriteIssues(string dir, List<Issue> issues)
     {

@@ -131,8 +131,17 @@ public sealed class ProjectPipelineTests : IDisposable
         {
             Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
             Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40 },
+            Panel = new ProjectPoint { X = 1000, Y = 1000 },
         }));
         soueRun.Success.ShouldBeTrue(string.Join("; ", soueRun.Issues.Select(i => i.Message)));
+
+        // Неадресные МАЯК и ЛЮКС (адресов 0) — не на ДПЛС: нет в таблице адресов и в участках кольца; в журнале — линии 12 В от реле.
+        var soueAddresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
+        soueAddresses.ShouldNotContain(r => r[5].Contains("МАЯК", StringComparison.Ordinal) || r[5].Contains("ЛЮКС", StringComparison.Ordinal));
+        var soueJournal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        soueJournal.Where(r => r[1].StartsWith("ДПЛС", StringComparison.Ordinal)).ShouldAllBe(r => !r[2].Contains(".S", StringComparison.Ordinal) && !r[3].Contains(".S", StringComparison.Ordinal) && !r[2].Contains(".L", StringComparison.Ordinal) && !r[3].Contains(".L", StringComparison.Ordinal));
+        soueJournal.Count(r => r[1].StartsWith("ЛОН", StringComparison.Ordinal)).ShouldBe(2);
+        soueJournal.Single(r => r[1] == "ЛОН1")[4].ShouldContain("12 В");
         var souePlan = DxfReader.Read(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal)));
         souePlan.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.NotifierLayer).ShouldBeGreaterThanOrEqualTo(2);
         var soueSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
