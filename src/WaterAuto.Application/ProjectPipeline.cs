@@ -358,7 +358,7 @@ public static class ProjectPipeline
                 var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms);
                 powerBudget = power.Budget;
                 issues.AddRange(power.Issues);
-                addressRows = AddressTable.Build(controlPoints, alarmSet.Module, alarmSet.Controller.Name).Rows;
+                addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module).Rows;
             }
         }
 

@@ -21,35 +21,31 @@ public static class PowerBudgets
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var c = set.Controller;
         var m = set.Module;
-        var modules = inputs <= 0 ? 0 : (inputs + m.Inputs - 1) / m.Inputs;
-        var loopLoad = modules * m.LoopCurrent.Amperes;
+        var layout = LoopLayout.Plan(inputs, c, m);
+        var modules = layout.Modules;
+        var controllers = Math.Max(1, layout.Controllers);
 
         issues.Add(new Issue("aps.power.defaultSet", IssueLevel.Info,
             $"Расчёт АКБ — для набора из каталога ({c.Name}, {m.Name}, {set.Supply.Name}, {set.Battery.Name}), только приборы автоматики АУПТ; пульт и приборы АПС, СОУЭ (этапы 2–3) не учтены."));
-        if (modules > m.MaxPerLoop)
+        if (controllers > 1)
         {
-            issues.Add(new Issue("aps.power.loopModules", IssueLevel.Warning,
-                $"{m.Name}: {modules} шт. — больше {m.MaxPerLoop} на одну линию {c.Name} по паспорту; нужен второй контроллер."));
+            issues.Add(new Issue("aps.power.controllers", IssueLevel.Info,
+                $"{m.Name}: {modules} шт. — на одну линию {c.Name} по паспорту не больше {layout.ModulesPerLine}; принято {controllers} контроллера, модули по линиям: {string.Join(", ", layout.ModulesByController)}."));
         }
 
-        // Адресов у модуля столько, сколько входов использовано (паспорт АР8, п. 2.2.5.3).
-        if (loopLoad > c.MaxLoopLoad.Amperes || inputs > c.MaxAddresses)
-        {
-            issues.Add(new Issue("aps.power.loopLoad", IssueLevel.Warning,
-                string.Create(ru, $"Нагрузка линии {c.Name} {loopLoad * 1000:0.#} мА, адресов {inputs} — больше паспортных {c.MaxLoopLoad.Amperes * 1000:0.#} мА или {c.MaxAddresses}.")));
-        }
-
-        // Ток контроллера в дежурном режиме — линейно между двумя точками паспорта (без нагрузки и с известной нагрузкой линии).
-        var standby = new Current(c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * loopLoad / c.LoadOfLoaded.Amperes));
-        var alarm = c.Max;
+        // Ток каждого контроллера в дежурном режиме — линейно между двумя точками паспорта по нагрузке его линии
+        // (адресов у модуля столько, сколько входов использовано — паспорт АР8, п. 2.2.5.3); сумма — по всем контроллерам.
+        var loads = layout.Controllers == 0 ? [0.0] : layout.ModulesByController.Select(n => n * m.LoopCurrent.Amperes).ToList();
+        var standby = new Current(loads.Sum(load => c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * load / c.LoadOfLoaded.Amperes)));
+        var alarm = new Current(c.Max.Amperes * controllers);
         issues.Add(new Issue("aps.power.controllerStandby", IssueLevel.Info,
-            string.Create(ru, $"Ток {c.Name} в дежурном режиме — по нагрузке линии {loopLoad * 1000:0.#} мА линейно между двумя точками паспорта (допущение программы).")));
+            string.Create(ru, $"Ток {c.Name} в дежурном режиме — по нагрузке линии ({string.Join("; ", loads.Select(l => (l * 1000).ToString("0.#", ru)))} мА) линейно между двумя точками паспорта (допущение программы).")));
         issues.Add(new Issue("aps.power.controllerAlarm", IssueLevel.Info,
             $"Отдельного тока режима «Пожар» у {c.Name} в паспорте нет — принят максимальный (в запас; вопрос А-10)."));
 
         var lines = new List<PowerLine>
         {
-            new(c.Name, 1, standby, alarm, "дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
+            new(c.Name, controllers, standby, alarm, "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
             new(m.Name, modules, null, null, $"питание от линии {c.Name}, входит в его ток", m.Source),
             new(set.Supply.Name, 1, set.Supply.OwnCurrent, set.Supply.OwnCurrent, "собственный ток от АКБ (Iибэ)", set.Supply.Source),
         };
