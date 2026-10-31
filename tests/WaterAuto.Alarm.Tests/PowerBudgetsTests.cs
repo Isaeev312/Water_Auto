@@ -43,6 +43,43 @@ public class PowerBudgetsTests
         b.AgingFactor!.Value.ShouldBe(1.25, 1e-12);
     }
 
+    private static readonly AlarmPowerSet WithDetectors = Set with
+    {
+        Detectors = new Dictionary<string, LoopDevice>
+        {
+            ["smoke"] = new("ДИП-34А-03", new Current(0.0006), "РЭ ДИП"),
+            ["heat"] = new("С2000-ИП-03", new Current(0.0006), "РЭ ИП"),
+        },
+    };
+
+    [Fact]
+    public void Detectors_add_line_load_and_may_require_a_second_controller()
+    {
+        // 8 входов — 1 АР8 (4 мА) + 120 дымовых по 0,6 мА = 76 мА > 64 мА → 2 контроллера; адресов 128 > 127 — тот же вывод.
+        var result = PowerBudgets.Build(8, WithDetectors, Norms, new Dictionary<string, int> { ["smoke"] = 120 });
+
+        var b = result.Budget;
+        b.Lines.Single(l => l.Name == "С2000-КДЛ").Count.ShouldBe(2);
+        b.Lines.Single(l => l.Name == "ДИП-34А-03").Count.ShouldBe(120);
+        b.Alarm.Amperes.ShouldBe(0.8, 1e-12);
+        // Дежурный: линия 1 — 4 мА + 60·0,6; линия 2 — 60·0,6 мА.
+        var l1 = 0.004 + 0.036; var l2 = 0.036;
+        b.Standby.Amperes.ShouldBe(0.16 + (0.08 * (l1 + l2) / 0.0635), 1e-12);
+        result.Issues.ShouldContain(i => i.Code == "aps.power.controllers");
+    }
+
+    [Fact]
+    public void Few_detectors_stay_on_one_controller_and_unknown_kind_is_an_error()
+    {
+        var ok = PowerBudgets.Build(8, WithDetectors, Norms, new Dictionary<string, int> { ["smoke"] = 12, ["heat"] = 0 });
+        ok.Budget.Lines.Single(l => l.Name == "С2000-КДЛ").Count.ShouldBe(1);
+        ok.Budget.Lines.ShouldNotContain(l => l.Name == "С2000-ИП-03");
+        ok.Budget.Standby.Amperes.ShouldBe(0.08 + (0.08 * (0.004 + (12 * 0.0006)) / 0.0635), 1e-12);
+
+        var bad = PowerBudgets.Build(8, Set, Norms, new Dictionary<string, int> { ["smoke"] = 12 });
+        bad.Issues.ShouldContain(i => i.Code == "aps.power.noDetector" && i.Level == IssueLevel.Error);
+    }
+
     [Fact]
     public void Second_controller_doubles_alarm_current_and_adds_its_idle_current()
     {

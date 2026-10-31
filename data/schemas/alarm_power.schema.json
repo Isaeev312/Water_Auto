@@ -50,6 +50,20 @@
         "source": { "type": "string", "minLength": 1 }
       }
     },
+    "detectors": {
+      "type": "object",
+      "description": "Адресные извещатели набора по ключам smoke, heat, manual: ток от линии контроллера, один адрес.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "loopCurrent", "source"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "loopCurrent": { "type": "number", "minimum": 0, "description": "Ток от линии контроллера, А (паспорт: «не более»)." },
+          "source": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "battery": {
       "type": "object",
       "additionalProperties": false,

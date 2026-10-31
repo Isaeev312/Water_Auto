@@ -14,9 +14,11 @@ public static class PowerBudgets
     private const string Doc = "СП 6.13130.2025, прил. Б";
 
     /// <param name="inputs">Число входов модулей — по одному на точку управления.</param>
-    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms)
+    /// <param name="detectors">Число извещателей по ключам каталога набора (smoke, heat, manual); null — без извещателей.</param>
+    public static PowerBudgetResult Build(int inputs, AlarmPowerSet set, INormsProvider norms, IReadOnlyDictionary<string, int>? detectors = null)
     {
         ArgumentNullException.ThrowIfNull(set);
+        detectors ??= new Dictionary<string, int>();
         var issues = new List<Issue>();
         var ru = CultureInfo.GetCultureInfo("ru-RU");
         var c = set.Controller;
@@ -29,7 +31,22 @@ public static class PowerBudgets
             return new(new PowerBudget(set.Voltage, [], Current.Zero, Current.Zero, set.Supply.OwnCurrent, set.Battery, null, null, null, null), issues);
         }
 
-        var layout = LoopLayout.Plan(inputs, c, m);
+        var deviceLines = new List<PowerLine>();
+        var devices = new List<(int Count, Current Current)>();
+        foreach (var (key, count) in detectors.Where(kv => kv.Value > 0))
+        {
+            if (!set.Detectors.TryGetValue(key, out var device))
+            {
+                issues.Add(new Issue("aps.power.noDetector", IssueLevel.Error,
+                    $"В каталоге приборов питания нет извещателя с ключом «{key}» — {count} ИП в нагрузке линии не учтены."));
+                continue;
+            }
+
+            devices.Add((count, device.LoopCurrent));
+            deviceLines.Add(new PowerLine(device.Name, count, null, null, $"питание от линии {c.Name}, входит в его ток; 1 адрес", device.Source));
+        }
+
+        var layout = LoopLayout.Plan(inputs, c, m, devices);
         var modules = layout.Modules;
         var controllers = Math.Max(1, layout.Controllers);
 
@@ -38,12 +55,12 @@ public static class PowerBudgets
         if (controllers > 1)
         {
             issues.Add(new Issue("aps.power.controllers", IssueLevel.Info,
-                $"{m.Name}: {modules} шт. — на одну линию {c.Name} по паспорту не больше {layout.ModulesPerLine}; принято {controllers} контроллера, модули по линиям: {string.Join(", ", layout.ModulesByController)}."));
+                string.Create(ru, $"Принято {controllers} контроллера {c.Name}: на одну линию по паспорту не больше {layout.ModulesPerLine} модулей {m.Name}, {c.MaxAddresses} адресов и {c.MaxLoopLoad.Amperes * 1000:0.#} мА; модули по линиям: {string.Join(", ", layout.ModulesByController)}, извещатели: {string.Join(", ", layout.DevicesByController)}.")));
         }
 
         // Ток каждого контроллера в дежурном режиме — линейно между двумя точками паспорта по нагрузке его линии
         // (адресов у модуля столько, сколько входов использовано — паспорт АР8, п. 2.2.5.3); сумма — по всем контроллерам.
-        var loads = layout.Controllers == 0 ? [0.0] : layout.ModulesByController.Select(n => n * m.LoopCurrent.Amperes).ToList();
+        var loads = layout.Controllers == 0 ? [0.0] : layout.LoadByController.Select(l => l.Amperes).ToList();
         var standby = new Current(loads.Sum(load => c.Idle.Amperes + ((c.Loaded.Amperes - c.Idle.Amperes) * load / c.LoadOfLoaded.Amperes)));
         var alarm = new Current(c.Max.Amperes * controllers);
         issues.Add(new Issue("aps.power.controllerStandby", IssueLevel.Info,
@@ -51,12 +68,13 @@ public static class PowerBudgets
         issues.Add(new Issue("aps.power.controllerAlarm", IssueLevel.Info,
             $"Отдельного тока режима «Пожар» у {c.Name} в паспорте нет — принят максимальный (в запас; вопрос А-10)."));
 
-        var lines = new List<PowerLine>
-        {
+        List<PowerLine> lines =
+        [
             new(c.Name, controllers, standby, alarm, "всего по контроллерам: дежурный — по нагрузке линии, «Пожар» — максимальный", c.Source),
             new(m.Name, modules, null, null, $"питание от линии {c.Name}, входит в его ток", m.Source),
+            .. deviceLines,
             new(set.Supply.Name, 1, set.Supply.OwnCurrent, set.Supply.OwnCurrent, "собственный ток от АКБ (Iибэ)", set.Supply.Source),
-        };
+        ];
 
         var own = set.Supply.OwnCurrent;
         var hourIssues = new List<Issue>();

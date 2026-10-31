@@ -31,6 +31,15 @@ public static class AlarmPowerCatalog
             }
         }
 
+        var detectors = new Dictionary<string, LoopDevice>();
+        if (root.TryGetProperty("detectors", out var list))
+        {
+            foreach (var d in list.EnumerateObject())
+            {
+                detectors[d.Name] = new LoopDevice(Text(d.Value, "name"), A(d.Value, "loopCurrent"), Text(d.Value, "source"));
+            }
+        }
+
         return new AlarmPowerSet(
             voltage,
             new LoopController(Text(c, "name"), A(c, "idle"), A(c, "loaded"), A(c, "loadOfLoaded"), A(c, "max"), A(c, "maxLoopLoad"),
@@ -39,7 +48,8 @@ public static class AlarmPowerCatalog
             new PowerSupply(Text(s, "name"), A(s, "ownCurrent"), Text(s, "source")),
             new BatteryModel(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
                 b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
-                Text(b, "source")));
+                Text(b, "source")))
+        { Detectors = detectors };
     }
 
     private static Current A(JsonElement e, string name) => new(e.GetProperty(name).GetDouble());

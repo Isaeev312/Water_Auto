@@ -386,7 +386,12 @@ public static class ProjectPipeline
 
                 if (alarmSet is not null)
                 {
-                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms);
+                    var detectorCounts = detectorLayout is null ? null : new Dictionary<string, int>
+                    {
+                        ["smoke"] = detectorLayout.Detectors.Count(d => d.Kind == DetectorKind.Smoke),
+                        ["heat"] = detectorLayout.Detectors.Count(d => d.Kind == DetectorKind.Heat),
+                    };
+                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts);
                     powerBudget = power.Budget;
                     issues.AddRange(power.Issues);
                     addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module).Rows;

@@ -17,6 +17,8 @@ public class AlarmPowerCatalogTests
         set.Battery.Nominal.AmpereHours.ShouldBe(17);
         set.Battery.Discharge[TimeSpan.FromHours(24)].Amperes.ShouldBe(0.727);
         set.Battery.Discharge[TimeSpan.FromHours(1)].Amperes.ShouldBe(10.41);
+        set.Detectors["smoke"].LoopCurrent.Amperes.ShouldBe(0.0006);
+        set.Detectors["manual"].Name.ShouldBe("ИПР 513-3АМ");
     }
 
     [Fact]

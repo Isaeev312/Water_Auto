@@ -9,6 +9,9 @@ public sealed record LoopController(string Name, Current Idle, Current Loaded, C
 /// <summary>Адресный модуль входов: питается от линии контроллера, ток — нагрузка линии.</summary>
 public sealed record LoopModule(string Name, int Inputs, Current LoopCurrent, int MaxPerLoop, string Source);
 
+/// <summary>Адресное устройство линии контроллера без своего питания (извещатель): ток от линии, один адрес.</summary>
+public sealed record LoopDevice(string Name, Current LoopCurrent, string Source);
+
 /// <summary>Резервированный источник питания: собственный ток от АКБ при отсутствии сети (Iибэ).</summary>
 public sealed record PowerSupply(string Name, Current OwnCurrent, string Source);
 
@@ -19,7 +22,11 @@ public sealed record PowerSupply(string Name, Current OwnCurrent, string Source)
 public sealed record BatteryModel(string Name, Charge Nominal, double EndOfLifePercent, IReadOnlyDictionary<TimeSpan, Current> Discharge, string Source);
 
 /// <summary>Набор приборов питания автоматики АУПТ в АПС из каталога; все токи — при напряжении <paramref name="Voltage"/>, В.</summary>
-public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, LoopModule Module, PowerSupply Supply, BatteryModel Battery);
+public sealed record AlarmPowerSet(Voltage Voltage, LoopController Controller, LoopModule Module, PowerSupply Supply, BatteryModel Battery)
+{
+    /// <summary>Извещатели набора по ключам каталога (smoke, heat, manual); их число берётся из раскладки.</summary>
+    public IReadOnlyDictionary<string, LoopDevice> Detectors { get; init; } = new Dictionary<string, LoopDevice>();
+}
 
 /// <summary>Строка расчёта питания: прибор, количество, токи на единицу (null — питается не от РИП), пояснение и источник.</summary>
 public sealed record PowerLine(string Name, int Count, Current? Standby, Current? Alarm, string Note, string Source);
