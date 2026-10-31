@@ -11,7 +11,8 @@ namespace WaterAuto.Export;
 /// Собирается из расчёта (Application): Export не знает про Calc. Positions — номер позиции спецификации по роли элемента
 /// (pump, valveS, teeS…); у элемента без номера выноска не ставится. Outlets — выходы гребёнки к сети секций (подпись точки
 /// ввода на плане); по одному узлу управления на выход. Inlets — число входных всасывающих вводов (п. 6.10.27): каждый
-/// рисуется отдельной линией со своей задвижкой; по умолчанию 1.
+/// рисуется отдельной линией со своей задвижкой; по умолчанию 1. Marks — обозначения устройств по роли из перечня сигналов АПС
+/// (ЗД1, УУ1…) в порядке устройств: вводы, агрегаты, у секции — затвор до и после узла управления; пишутся у устройства.
 /// </summary>
 public sealed record PumpSchemeData(
     int Pumps,
@@ -26,7 +27,8 @@ public sealed record PumpSchemeData(
     IReadOnlyList<string> Notes,
     IReadOnlyDictionary<string, int>? Positions = null,
     IReadOnlyList<string>? Outlets = null,
-    int Inlets = 1);
+    int Inlets = 1,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? Marks = null);
 
 /// <summary>
 /// Принципиальная схема насосной станции пожаротушения на листе A3 с рамкой и основной надписью по форме 3:
@@ -70,6 +72,18 @@ public static class PumpSchemeDxfWriter
             }
         }
 
+        // Обозначение устройства из перечня сигналов АПС (index — номер устройства роли с нуля).
+        void Mark(double x, double y, string role, int index)
+        {
+            if (data.Marks?.TryGetValue(role, out var list) == true && index < list.Count)
+            {
+                d.Text(x, y, list[index], 2.5);
+            }
+        }
+
+        string BoxMark(string role, int index, string fallback) =>
+            data.Marks?.TryGetValue(role, out var list) == true && index < list.Count ? list[index] : fallback;
+
         // Вводы (п. 6.10.27): всасывающий коллектор; каждый ввод — отдельная линия со своей задвижкой до коллектора.
         d.Pipe(25, yS, xJ + 8, yS);
         d.Cap(xJ + 8, yS, horizontal: true);
@@ -81,6 +95,7 @@ public static class PumpSchemeDxfWriter
         d.Arrow(40, yS, 1, 0);
         d.Valve(85, yS, vertical: false, sensor: true);
         Pos(85, yS, "inletValve", -1);
+        Mark(80, yS - 7, "inletValve", 0);
         for (var k = 1; k < Math.Max(1, data.Inlets); k++)
         {
             // Второй и следующие вводы — отдельными ветвями слева; задвижка — на ветви до общего коллектора.
@@ -91,6 +106,7 @@ public static class PumpSchemeDxfWriter
             d.Valve(45, yIn, vertical: false, sensor: true);
             d.Text(27, yIn + 3, $"Ввод {k + 1}", 2.5);
             Pos(45, yIn, "inletValve");
+            Mark(40, yIn - 6, "inletValve", k);
         }
 
         for (var k = 0; k < branches.Count; k++)
@@ -108,6 +124,8 @@ public static class PumpSchemeDxfWriter
             d.Gauge(x, 168, "Р", vacuum: false);
             d.Check(x, 175);
             d.Valve(x, 183, vertical: true, sensor: true);
+            Mark(x - 13, 112, "valveS", k);
+            Mark(x - 13, 186, "valveD", k);
             d.Text(x + 6, 104, $"DN{data.SuctionDn}", 2.5);
             d.Text(x - 16, 182, $"DN{data.DischargeDn}", 2.5);
             Pos(x - 8, 145, "pump", -1);
@@ -132,7 +150,7 @@ public static class PumpSchemeDxfWriter
         d.Text(26, 160, data.PumpText, 2.5, width: 62);
 
         // Шкаф управления насосами — у агрегатов.
-        d.Box(branches[0] + 22, 140, "ШУ");
+        d.Box(branches[0] + 22, 140, BoxMark("cabinet", 0, "ШУ"));
         Pos(branches[0] + 36, 140, "cabinet");
 
         // Жокей-насос с мембранным баком — между коллекторами.
@@ -156,7 +174,9 @@ public static class PumpSchemeDxfWriter
             d.Pipe(x, yD, x, 250);
             d.Valve(x, 199, vertical: true, sensor: true);
             d.Gauge(x, 206, "Р", vacuum: false);
-            d.Box(x - 7, 216, "УУ");
+            d.Box(x - 7, 216, BoxMark("cu", k, "УУ"));
+            Mark(x - 14, 200, "cuValve", 2 * k);
+            Mark(x - 14, 234, "cuValve", (2 * k) + 1);
             d.Valve(x, 233, vertical: true, sensor: true);
             d.Gauge(x, 239, "Р", vacuum: false);
             d.Arrow(x, 250, 0, 1);
