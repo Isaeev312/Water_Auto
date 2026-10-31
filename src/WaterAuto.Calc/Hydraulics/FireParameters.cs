@@ -60,7 +60,12 @@ public sealed record FireParameters(
             var band = bands.FirstOrDefault(r => storage.Meters > V(r, "hMin") + 1e-9 && storage.Meters <= V(r, "hMax") + 1e-9);
             if (band is null)
             {
-                return Fail("params.storageTooHigh", $"Высота складирования {storage} больше {new Length(V(note, "storageMax"))}: табл. 6.2 не охватывает высокостеллажные склады — нужны специальные технические условия.", "табл. 6.2");
+                // П. 1.3: склады с высотой складирования более 5,5 м — вне области СП 485 (СТУ), а не просто вне табл. 6.2.
+                var scope = norms.Find("sp485.p1_3.scope");
+                return Fail("params.storageTooHigh", scope is null
+                    ? $"Высота складирования {storage} больше {new Length(V(note, "storageMax"))}: табл. 6.2 не охватывает высокостеллажные склады — нужны специальные технические условия."
+                    : $"Высота складирования {storage} больше {new Length(V(scope, "storageHeightMax"))}: по п. 1.3 СП 485 не распространяется на такие склады — АУП проектируется по специальным техническим условиям (СТУ); программа параметры не подставляет.",
+                    scope is null ? "табл. 6.2" : "п. 1.3");
             }
 
             if (band.Values.GetValueOrDefault("i_water") is not { } i || band.Values.GetValueOrDefault("Q_water") is not { } q)

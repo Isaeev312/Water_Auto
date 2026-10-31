@@ -80,6 +80,7 @@ public class FireParametersTests
     {
         Error("5", room: 8).Code.ShouldBe("params.noStorageHeight");
         Error("5", room: 8, storage: 6).Code.ShouldBe("params.storageTooHigh");
+        Error("5", room: 8, storage: 6).Clause.ShouldBe("п. 1.3"); // склады выше 5,5 м — вне области СП 485, СТУ
         Error("6", room: 31, storage: 3).Code.ShouldBe("params.roomTooHigh");
     }
 
