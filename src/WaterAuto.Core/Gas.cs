@@ -50,3 +50,12 @@ public sealed record GasRoom(
 
 /// <summary>Результат: концентрация, плотность ρ1, K2, K3, δ, массы Mр и Mг, площадь проёма сброса (null — не считалась, 0 — не нужен).</summary>
 public sealed record GasMassResult(string RoomId, double Concentration, double Rho1, double K2, double K3, double Delta, double DischargeTimeS, double DesignMass, double TotalMass, double? ReliefAreaM2, IReadOnlyList<Issue> Issues);
+
+/// <summary>Заправка модуля одним ГОТВ по ТД: коэффициент наполнения, кг/л, и остаток после выпуска, кг (null — в ТД нет).</summary>
+public sealed record GasModuleCharge(double MaxFillKgPerL, double? ResidueKg);
+
+/// <summary>Модуль газового пожаротушения: вместимость сосуда, допустимые ГОТВ (ключ — как в ID записи табл. Г) и источник.</summary>
+public sealed record GasModuleModel(string Id, string Name, double VolumeL, IReadOnlyDictionary<string, GasModuleCharge> Charges, string Source);
+
+/// <summary>Число модулей, масса ГОТВ в модуле и наполнение в % от максимального; масса по Д.1 с остатком в модулях.</summary>
+public sealed record GasModulesResult(int Modules, double MassPerModule, double FillPercent, GasMassResult Mass, IReadOnlyList<Issue> Issues);

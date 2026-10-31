@@ -484,7 +484,7 @@ public sealed class ProjectPipelineTests : IDisposable
             Powder = new ProjectPowder
             {
                 Module = "epotos.buran_8u",
-                Rooms = [new ProjectPowderRoom { Room = "Автостоянка", Method = PowderMethod.Area, FireClass = "B", Substance = "sp485.tI_1.petrol", CeilingHeight = 4, ShadedArea = 0 }],
+                Rooms = [new ProjectPowderRoom { Room = "Автостоянка", Method = PowderMethod.Area, FireClass = "B", Substance = "sp485.tI_1.petrol", CeilingHeight = 4, ShadedArea = 0, Doors = 2 }],
             },
         });
         var result = Run(Write("powder.waproj", json));
@@ -502,6 +502,12 @@ public sealed class ProjectPipelineTests : IDisposable
         spec.Single(r => r[2] == "Буран-8У")[5].ShouldBe("48");
         // Пуск: ток пуска Буран-8У 0,7 А, выход С2000-КПБ до 2,5 А → 3 модуля на выход; 24 модуля → 8 выходов → 2 блока по 6 выходов.
         spec.Single(r => r[2] == "С2000-КПБ")[5].ShouldBe("2");
+        // Сигнализация режимов (пп. 7.6.3, 7.6.5 СП 484): две двери — по табло каждого вида и датчику положения на дверь, звуковой — на зону.
+        spec.Single(r => r[1].Contains("«Порошок — уходи!»", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("«Порошок — не входить!»", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("«Автоматика отключена»", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("датчик положения двери", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("звуковой", StringComparison.Ordinal))[5].ShouldBe("1");
         // Блоки пуска питаются от РИП — расчёт АКБ выпускается и без раздела alarm.
         names.ShouldContain(ProjectPipeline.BatteryFile);
         var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.BatteryFile, StringComparison.Ordinal)));
@@ -559,6 +565,48 @@ public sealed class ProjectPipelineTests : IDisposable
         text.ShouldContain("спринклерная водозаполненная");
         text.ShouldContain("Заполняется проектировщиком");
         text.ShouldContain(result.Design!.PumpHead.Meters.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")));
+    }
+
+    [Fact]
+    public void Gas_section_produces_the_gas_volume_with_mass_by_appendix_D()
+    {
+        // Помещение 30 × 20 м, h = 3 м (1800 м³), хладон 227еа, н-гептан 7,2 %, 0,5 м² проёмов, Tм = 20 °С, 800 м:
+        // δ = 2,8e-4 ≤ 0,0023 (табл. Г.16, 1500–2000 м³); K2 = 0,4·δ·10·√3 = 0,0019; Mр = 1800·7,28·1,0019·7,2/92,8 = 1018,6 кг; Mг = 1,05·Mр = 1069,6 → 1070 кг.
+        Drawing(withInlet: false);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Архив (пример)",
+            Drawing = "floor.dxf",
+            Aupt = false,
+            Gas = new ProjectGas
+            {
+                Altitude = 800,
+                Rooms = [new ProjectGasRoom { Room = "Автостоянка", Agent = "hfc227ea", Material = "heptane", CeilingHeight = 3, OpenArea = 0.5, MinTemperature = 20, MaxOverpressure = 0.002 }],
+            },
+        });
+        var result = Run(Write("gas.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        // Модули из каталога: наименьшее число 6 дают 180 и 187 л, берётся меньший: МПА-КД (50-180-50), 180 кг; 1,05·(1018,6 + 6·0,3) = 1071,4 кг → 6; запас 6.
+        var gasSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.GasSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        gasSpec.Single(r => r[2] == "МПА-КД (50-180-50)")[5].ShouldBe("12");
+        var note = result.Files.Single(f => f.EndsWith(ProjectPipeline.GasNoteFile, StringComparison.Ordinal));
+        Path.GetFileName(Path.GetDirectoryName(note)).ShouldBe(ProjectPipeline.GasVolume);
+        using (var doc = WordprocessingDocument.Open(note, false))
+        {
+            var text = doc.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("хладон 227еа");
+            text.ShouldContain("Mг = 1,05");
+            text.ShouldContain("= 1071 кг"); // с остатком 6 × 0,3 кг в модулях
+            text.ShouldContain("Г.17");
+        }
+
+        result.Issues.ShouldContain(i => i.Code == "gas.pipeResidue");
+        result.Issues.ShouldContain(i => i.Code == "gas.relief");
+
+        // CO₂ в помещении более чем на 50 человек — ошибка 9.1.2.
+        var co2 = Run(Write("co2.waproj", json.Replace("\"hfc227ea\"", "\"co2\"", StringComparison.Ordinal).Replace("\"people\": 0", "\"people\": 60", StringComparison.Ordinal)));
+        co2.Issues.ShouldContain(i => i.Code == "gas.co2.people" && i.Level == IssueLevel.Error);
     }
 
     [Fact]

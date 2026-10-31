@@ -118,6 +118,11 @@ public static class ProjectPipeline
     public const string AuptVolume = "АУПТ";
     public const string AlarmVolume = "АПС";
 
+    /// <summary>Том газового пожаротушения (АУГП, СП 485 разд. 9).</summary>
+    public const string GasVolume = "АГП";
+    public const string GasNoteFile = "agp_pz.docx";
+    public const string GasSpecFile = "agp_spec.xlsx";
+
     /// <summary>Том порошкового пожаротушения (АУПП, СП 485 разд. 10).</summary>
     public const string PowderVolume = "АПТ";
     public const string PowderNoteFile = "apt_pz.docx";
@@ -666,7 +671,8 @@ public static class ProjectPipeline
             PowderStartPlan? start = null;
             PowderStartUnitEntry? unit = null;
             var notifierFile = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
-            if (File.Exists(notifierFile) && AlarmNotifierCatalog.Load(notifierFile).StartUnits is { Count: > 0 } startUnits)
+            var notifierCatalog = File.Exists(notifierFile) ? AlarmNotifierCatalog.Load(notifierFile) : null;
+            if (notifierCatalog?.StartUnits is { Count: > 0 } startUnits)
             {
                 unit = startUnits[0];
                 start = WaterAuto.Calc.Powder.PowderStart.Plan([.. result.Rooms.Select(r => (r.RoomId, r.Modules))], entry.StartCurrent, entry.MonitorCurrent, unit.Model);
@@ -680,6 +686,42 @@ public static class ProjectPipeline
             else
             {
                 issues.Add(new Issue("powder.start.noUnit", IssueLevel.Warning, "В каталоге нет блока пуска АУП (startUnits) — цепи пуска модулей не рассчитаны."));
+            }
+
+            // Сигнализация режимов (СП 484 пп. 7.6.3, 7.6.5): табло над каждой дверью, датчик положения двери, звуковой оповещатель на зону.
+            var signItems = new List<AlarmSpecItem>();
+            var signs = norms.Find("sp484.p7_6_5.signs");
+            var doorNorm = norms.Find("sp484.p7_6_3.doorSensors");
+            if (signs is null || doorNorm is null)
+            {
+                issues.Add(new Issue("powder.signs.noNorm", IssueLevel.Warning, "В данных норм нет пп. 7.6.3, 7.6.5 СП 484 — табло и датчики положения дверей не подобраны."));
+            }
+            else
+            {
+                var doors = result.Rooms.Sum(rr => Math.Max(1, powder.Rooms.FirstOrDefault(x => string.Equals(x.Room, rooms.First(y => y.Id == rr.RoomId).Name, StringComparison.OrdinalIgnoreCase))?.Doors ?? 1));
+                var lights = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Light).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                var sounders = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Sound).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                const string Rule = "СП 484.1311500.2020, п. 7.6.5";
+                foreach (var (text, key, side) in new[] { ("Автоматика отключена", "automaticOffOutside", "со стороны входа"), ("Порошок — не входить!", "keepOutOutside", "со стороны входа"), ("Порошок — уходи!", "leaveInside", "со стороны выхода") })
+                {
+                    var n = (int)Math.Ceiling(doors * signs.Values[key]!.Value - 1e-9);
+                    var light = lights.Count > 0 ? lights[0] : null;
+                    signItems.Add(new($"Оповещатель пожарный световой (табло) «{text}»", light?.Model.Name ?? "подобрать", light?.Manufacturer ?? "", "шт.", n, light?.Device.Certificate, $"над каждой дверью {side}; {Rule}"));
+                    if (light is not null)
+                    {
+                        poweredDevices.Add((light.Device, n));
+                    }
+                }
+
+                signItems.Add(new("Извещатель магнитоконтактный — датчик положения двери", "подобрать", "", "шт.", (int)Math.Ceiling(doors * doorNorm.Values["perDoor"]!.Value - 1e-9), null,
+                    "открытие двери переводит АУП в «Автоматика отключена»; СП 484.1311500.2020, п. 7.6.3"));
+                var zoneSounders = (int)Math.Ceiling(result.Rooms.Count * signs.Values["soundersPerZone"]!.Value - 1e-9);
+                var sounder = sounders.Count > 0 ? sounders[0] : null;
+                signItems.Add(new("Оповещатель пожарный звуковой", sounder?.Model.Name ?? "подобрать", sounder?.Manufacturer ?? "", "шт.", zoneSounders, sounder?.Device.Certificate, $"звуковая сигнализация режимов раздельно для каждой зоны пожаротушения; {Rule}"));
+                if (sounder is not null)
+                {
+                    poweredDevices.Add((sounder.Device, zoneSounders));
+                }
             }
 
             var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, start, unit?.Model);
@@ -703,7 +745,7 @@ public static class ProjectPipeline
             Write(dir, PowderPlanFile, files, p => PowderPlanDxfWriter.Write(p, planRooms, entry.Model.Name, 1, [
                 "Расстановка — равномерной сеткой по габаритам помещения; уточнить по диаграмме распыла и затенениям по ТД на модуль (п. 10.2.13 СП 485).",
                 "Все модули помещения срабатывают в интервале не более 3 с (п. 10.2.4); пуск — от прибора управления АПС после задержки на эвакуацию (п. 10.4.3).",
-                "Крепление модулей — на пятикратный вес (п. 10.2.14); над модулями и у входов — табло «Порошок — уходи!», «Порошок — не входи!» (п. 10.3.1).",
+                "Крепление модулей — на пятикратный вес (п. 10.2.14); над каждой дверью — табло «Автоматика отключена», «Порошок — не входить!» снаружи и «Порошок — уходи!» изнутри, датчик положения двери (пп. 7.6.3, 7.6.5 СП 484).",
             ], Stamp(project, "АПТ", "План расстановки модулей порошкового пожаротушения"), project.Font));
             Write(dir, PowderNoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "АПТ.ПЗ", "Порошковое пожаротушение. Пояснительная записка"), project.Font));
             var total = result.Rooms.Sum(x => x.Modules);
@@ -714,17 +756,111 @@ public static class ProjectPipeline
                 .. start is { Units: > 0 } && unit is not null
                     ? new AlarmSpecItem[] { new($"Блок пуска модулей ({unit.Designation})", unit.Model.Name, unit.Manufacturer, "шт.", start.Units, unit.Device.Certificate, $"{start.OutputsByRoom.Values.Sum()} выходов, до {start.ModulesPerOutput} модулей на выход; питание 12 В от РИП (в расчёте АКБ)") }
                     : [],
+                .. signItems,
             ];
             Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
         }
 
+        // Газовое пожаротушение (СП 485 разд. 9, прил. Г, Д, Ж): масса ГОТВ и проём сброса по помещениям, том АГП.
+        void BuildGas()
+        {
+            if (project.Gas is not { } gas)
+            {
+                return;
+            }
+
+            var results = new List<(GasRoom Room, string Agent, GasMassResult Result)>();
+            var chosen = new List<(GasRoom Room, GasModuleEntry Entry, GasModulesResult Result)>();
+            var gasCatalogFile = EquipmentSet.PathFor(normsDir, GasCatalog.File);
+            var gasCatalog = gas.Modular && File.Exists(gasCatalogFile) ? GasCatalog.Load(gasCatalogFile) : [];
+            if (gas.Modular && gasCatalog.Count == 0)
+            {
+                issues.Add(new Issue("gas.noCatalog", IssueLevel.Warning, $"Нет каталога модулей {GasCatalog.File}: число модулей не подобрано."));
+            }
+
+            foreach (var r in gas.Rooms)
+            {
+                var found = plan.Rooms.FirstOrDefault(x => string.Equals(x.Name, r.Room, StringComparison.OrdinalIgnoreCase));
+                if (found is null)
+                {
+                    issues.Add(new Issue("gas.noRoom", IssueLevel.Warning, $"АУГП: помещение «{r.Room}» на чертеже не найдено (слой ПТ_КОНТУР)."));
+                    continue;
+                }
+
+                var agentId = $"sp485.tG.{r.Agent}";
+                var agentName = norms.Find(agentId)?.Attributes.GetValueOrDefault("agent") ?? r.Agent;
+                if (r.Agent == "co2" && norms.Find("sp485.p9_1_2.co2People") is { } co2 && r.People > co2.Values["maxPeople"]!.Value)
+                {
+                    issues.Add(new Issue("gas.co2.people", IssueLevel.Error,
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"«{found.Name}»: объёмное углекислотное тушение запрещено в помещениях с пребыванием более {co2.Values["maxPeople"]:0} человек (задано {r.People}) — выбрать другое ГОТВ."),
+                        found.Id, "СП 485.1311500.2020, п. 9.1.2"));
+                }
+
+                var room = new GasRoom(found.Id, found.Name, found.Contour.AreaMm2 / 1e6 * r.CeilingHeight, r.CeilingHeight, agentId, r.Material, r.OpenArea, r.Openings, r.MinTemperature, gas.Altitude,
+                    gas.Modular, r.ClassA1, r.DischargeTime, r.ModuleResidue, r.Modules, r.PipeResidue, r.MaxOverpressure);
+                var result = WaterAuto.Calc.Gas.GasMass.Calculate(room, norms);
+                // Модули: заданный или из каталога — наименьшее число без ошибок наполнения, при равенстве меньшая вместимость.
+                var candidates = gas.Module is { } mid ? gasCatalog.Where(e => e.Model.Id == mid).ToList() : [.. gasCatalog.Where(e => e.Model.Charges.ContainsKey(r.Agent))];
+                if (gas.Module is not null && candidates.Count == 0)
+                {
+                    issues.Add(new Issue("gas.module.unknown", IssueLevel.Error, $"Модуля «{gas.Module}» нет в каталоге {GasCatalog.File}."));
+                }
+
+                var pick = candidates.Select(e => (Entry: e, Result: WaterAuto.Calc.Gas.GasModules.Select(room, e.Model, norms)))
+                    .OrderBy(x => x.Result.Issues.Any(i => i.Level == IssueLevel.Error && i.Code.StartsWith("gas.module.", StringComparison.Ordinal)) ? 1 : 0)
+                    .ThenBy(x => x.Result.Modules).ThenBy(x => x.Entry.Model.VolumeL).FirstOrDefault();
+                if (pick.Entry is not null && pick.Result.Modules > 0)
+                {
+                    result = pick.Result.Mass;
+                    room = room with { Modules = pick.Result.Modules, ModuleResidueKg = pick.Entry.Model.Charges.GetValueOrDefault(r.Agent)?.ResidueKg ?? 0 };
+                    issues.AddRange(pick.Result.Issues.Where(i => i.Code.StartsWith("gas.module.", StringComparison.Ordinal)));
+                    chosen.Add((room, pick.Entry, pick.Result));
+                }
+                else if (gas.Modular && gasCatalog.Count > 0 && gas.Module is null)
+                {
+                    issues.Add(new Issue("gas.module.none", IssueLevel.Warning, $"«{found.Name}»: в каталоге нет модуля под {agentName} — число модулей не подобрано.", found.Id));
+                }
+
+                issues.AddRange(result.Issues);
+                if (result.TotalMass > 0)
+                {
+                    results.Add((room, agentName, result));
+                }
+            }
+
+            if (results.Count == 0)
+            {
+                return;
+            }
+
+            var tg = project.Title;
+            var gasNote = GasNote.Build(new NoteTitle(tg.Organization, tg.Subject, tg.Document, tg.Author, tg.Supervisor, tg.CityYear, project.Name), results, gas.Altitude, issues,
+                [.. chosen.Select(c => (c.Room.Name, c.Entry.Model.Name, c.Result))]);
+            Write(Path.Combine(outDir, GasVolume), GasNoteFile, files, p => NoteDocx.Write(p, gasNote, Stamp(project, "АГП.ПЗ", "Газовое пожаротушение. Пояснительная записка"), project.Font));
+            if (chosen.Count > 0)
+            {
+                // Запас 100 % (п. 9.6.2) — по помещению с наибольшим числом модулей каждой модели.
+                var ru = CultureInfo.GetCultureInfo("ru-RU");
+                AlarmSpecItem[] gasItems = [.. chosen.GroupBy(c => c.Entry.Model.Id).Select(g =>
+                {
+                    var e = g.First().Entry;
+                    var inUse = g.Sum(c => c.Result.Modules);
+                    var reserve = g.Max(c => c.Result.Modules);
+                    return new AlarmSpecItem($"Модуль газового пожаротушения {e.Designation}", e.Model.Name, e.Manufacturer, "шт.", inUse + reserve, e.Certificate,
+                        string.Create(ru, $"в установке {inUse} ({string.Join(", ", g.Select(c => $"{c.Room.Name} — {c.Result.Modules} × {c.Result.MassPerModule:0.#} кг"))}), запас {reserve} (п. 9.6.2 СП 485){(e.StartCurrent is { } sc ? $"; ток пуска не более {sc:0.##} А" : "")}"));
+                })];
+                Write(Path.Combine(outDir, GasVolume), GasSpecFile, files, p => AlarmSpecXlsx.Write(p, gasItems, $"{project.Name}. Спецификация оборудования АУГП", project.Font));
+            }
+        }
+
         // Порошок считается до питания АПС: блоки пуска модулей входят в расчёт АКБ.
         BuildPowder();
+        BuildGas();
 
         // Проект без водяной АУПТ: только том АПС и (или) АПТ, раздел design не нужен.
         if (!project.Aupt)
         {
-            if (detectorLayout is null && project.Powder is null)
+            if (detectorLayout is null && project.Powder is null && project.Gas is null)
             {
                 issues.Add(new Issue("project.nothingToDo", IssueLevel.Error, "В проекте нет водяной АУПТ (aupt: false) и нет разделов alarm или powder с помещениями — выпускать нечего."));
                 return Stop();
@@ -734,7 +870,7 @@ public static class ProjectPipeline
             WriteAlarmPlans([.. issues]);
             WriteAlarmDocs();
             files.Add(WriteIssues(outDir, issues));
-            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal))), files, issues, null);
+            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal) || i.Code.StartsWith("gas.", StringComparison.Ordinal))), files, issues, null);
         }
 
         // Группы помещений (design.rooms): раскладка и трассы — по правилам своей группы; без записей — одна группа design.roomGroup.
@@ -1753,6 +1889,11 @@ public static class ProjectPipeline
             if (project.Powder is not null)
             {
                 volumes87.Add("модульная установка порошкового пожаротушения — том АПТ");
+            }
+
+            if (project.Gas is not null)
+            {
+                volumes87.Add("модульная установка газового пожаротушения — том АГП");
             }
 
             var schemes87 = new List<string> { "принципиальная схема насосной станции (лист ПТ)", "аксонометрическая схема трубопроводов АУП (лист ПТ)" };
