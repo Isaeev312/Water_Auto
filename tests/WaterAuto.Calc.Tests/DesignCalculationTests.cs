@@ -145,6 +145,8 @@ public class DesignCalculationTests
             var r = Calculate(velocity);
             r.Issues.ShouldNotContain(i => i.Code == "dictating.notMinimum", string.Join("; ", r.Issues.Where(i => i.Code == "dictating.notMinimum").Select(i => i.Message)));
             r.ZoneSprinklers.ShouldContain(r.DictatingSprinklerId);
+            r.ZoneCenterId.ShouldNotBeNull();
+            r.ZoneSprinklers.ShouldContain(r.ZoneCenterId!);
         }
     }
 
