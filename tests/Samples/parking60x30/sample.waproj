@@ -54,10 +54,13 @@
       "y": 2000
     },
     "warning": {
-      "method": "Sound",
+      "method": "Speech",
       "methodRow": "sp3.tB_1m.undergroundParking",
-      "indicator": 45,
-      "backgroundRow": "sp3.tB_1.parking"
+      "indicator": 90,
+      "backgroundRow": "sp3.tB_1.parking",
+      "backgroundDba": 60,
+      "sounder": "bolid.opr_s103_1",
+      "speakerTap": 3
     },
     "hvac": {
       "generalVentilation": [

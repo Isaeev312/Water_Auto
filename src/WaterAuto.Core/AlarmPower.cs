@@ -106,7 +106,8 @@ public sealed record CableLine(string Id, string From, string To, string Purpose
 public sealed record LoopCableSection(double SectionMm2, IReadOnlyDictionary<double, double> MaxLengthMByLoadMa);
 
 /// <summary>Каталог кабелей АПС: запас длины, условная длина в посту, марки по умолчанию и таблица длин ДПЛС.</summary>
-public sealed record CableCatalog(double Reserve, double InCabinetM, string LoopName, IReadOnlyList<LoopCableSection> LoopSections, string LoopSource, string PowerName, string MainsName, string SignalName)
+public sealed record CableCatalog(double Reserve, double InCabinetM, string LoopName, IReadOnlyList<LoopCableSection> LoopSections, string LoopSource, string PowerName, string MainsName, string SignalName,
+    string? SpeechName = null, IReadOnlyList<double>? SpeechSections = null, double? Resistivity = null, string? SpeechSource = null)
 {
     public double MaxLoopSection => LoopSections.Max(s => s.SectionMm2);
 

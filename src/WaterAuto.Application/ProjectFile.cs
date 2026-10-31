@@ -426,6 +426,12 @@ public sealed class ProjectWarning
     public string? Sounder { get; init; }
 
     public string? Light { get; init; }
+
+    /// <summary>Речевое оповещение: отвод громкоговорителя — акустическая мощность, Вт (из паспорта модели); null — наибольший.</summary>
+    public double? SpeakerTap { get; init; }
+
+    /// <summary>Речевое оповещение: ID усилителя (блока речевого оповещения) из каталога; null — первый.</summary>
+    public string? Amplifier { get; init; }
 }
 
 /// <summary>Дымовая зона: вытяжная система, подпор (может отсутствовать), число клапанов дымоудаления.</summary>

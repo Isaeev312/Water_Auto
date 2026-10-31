@@ -9,7 +9,7 @@ namespace WaterAuto.Application;
 public static class AlarmSpecification
 {
     public static IReadOnlyList<AlarmSpecItem> Build(PowerBudget? budget, AlarmPowerSet? set, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyDictionary<string, DetectorModel> models, DetectorModel? manualModel, int manuals, int isolators,
-        IReadOnlyList<(NotifierEntry Entry, int Count)>? notifiers = null, RelayModel? relay = null, int relays = 0)
+        IReadOnlyList<(NotifierEntry Entry, int Count)>? notifiers = null, RelayModel? relay = null, int relays = 0, SpeechPlan? speech = null, SpeechAmplifier? amplifier = null, LineMonitor? lineMonitor = null)
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -42,12 +42,33 @@ public static class AlarmSpecification
             items.Add(new($"Извещатель пожарный ручной адресный {manualModel.Designation}", manualModel.Name, manualModel.Manufacturer, "шт.", manuals, manualModel.Certificate, manualModel.Isolator ? "со встроенным изолятором КЗ" : null));
         }
 
+        var ru = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
         foreach (var (entry, count) in notifiers ?? [])
         {
             if (count > 0)
             {
-                items.Add(new($"Оповещатель пожарный {(entry.Model.Kind == NotifierKind.Light ? "световой" : entry.Model.Kind == NotifierKind.Speech ? "речевой" : "звуковой")} адресный", entry.Model.Name, entry.Manufacturer, "шт.", count, entry.Device.Certificate,
-                    entry.Model.LevelAt1m is { } lv ? string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"{lv:0} дБ на 1 м; СОУЭ по СП 3.13130.2026") : "СОУЭ по СП 3.13130.2026"));
+                var kindText = entry.Model.Kind == NotifierKind.Light ? "световой" : entry.Model.Kind == NotifierKind.Speech ? "речевой" : "звуковой";
+                var wiring = entry.Speaker is not null ? ", линия 100 В" : entry.Device.Addresses > 0 ? " адресный" : " неадресный";
+                var note = entry.Speaker is not null && speech is not null
+                    ? string.Create(ru, $"отвод {speech.Tap.AcousticW:0.#} Вт ({speech.Tap.ConsumedW:0.##} Вт от линии), {speech.LevelAt1m:0.#} дБ на 1 м по В.1; СОУЭ по СП 3.13130.2026")
+                    : entry.Model.LevelAt1m is { } lv ? string.Create(ru, $"{lv:0} дБ на 1 м; СОУЭ по СП 3.13130.2026") : "СОУЭ по СП 3.13130.2026";
+                items.Add(new($"Оповещатель пожарный {kindText}{wiring}", entry.Model.Name, entry.Manufacturer, "шт.", count, entry.Device.Certificate, note));
+            }
+        }
+
+        if (speech is { Amplifiers: > 0 } && amplifier is not null)
+        {
+            items.Add(new("Блок речевого оповещения (усилитель линий 100 В)", amplifier.Name, amplifier.Manufacturer, "шт.", speech.Amplifiers, amplifier.Certificate,
+                string.Create(ru, $"нагрузка {speech.TotalConsumedW:0.#} Вт из {amplifier.MaxConsumedW:0} Вт на блок; {speech.Lines.Count} линий; питание 220 В до {amplifier.MainsW:0} Вт")));
+            if (amplifier.Batteries > 0)
+            {
+                items.Add(new("Аккумуляторная батарея блока речевого оповещения", amplifier.BatteryName, amplifier.Manufacturer, "шт.", speech.Amplifiers * amplifier.Batteries, null,
+                    string.Create(ru, $"встроенный резерв блока: {amplifier.BackupStandbyH:0} ч дежурный, {amplifier.BackupAlarmH:0} ч оповещение по паспорту")));
+            }
+
+            if (lineMonitor is not null)
+            {
+                items.Add(new("Модуль контроля линии оповещения (оконечный)", lineMonitor.Name, lineMonitor.Manufacturer, "шт.", speech.Lines.Count, lineMonitor.Certificate, "по одному в конце каждой линии; питание от линии"));
             }
         }
 

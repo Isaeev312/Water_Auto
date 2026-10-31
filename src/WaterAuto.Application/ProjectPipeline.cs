@@ -176,6 +176,10 @@ public static class ProjectPipeline
         var soueRelayOutputs = 0;
         NotifierEntry? sounderEntry = null;
         NotifierEntry? lightEntry = null;
+        SpeakerTap? speakerTap = null;
+        SpeechAmplifier? amplifier = null;
+        LineMonitor? lineMonitor = null;
+        SpeechPlan? speechPlan = null;
         DetectorModel? manualModel = null;
         var detectorModels = new Dictionary<string, DetectorModel>();
         if (detectorLayout is not null)
@@ -208,7 +212,8 @@ public static class ProjectPipeline
             var notifierPath = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
             if (project.Alarm?.Warning is { } warning && File.Exists(notifierPath))
             {
-                var (notifiers, relays) = AlarmNotifierCatalog.Load(notifierPath);
+                var notifierCatalog = AlarmNotifierCatalog.Load(notifierPath);
+                var notifiers = notifierCatalog.Notifiers;
                 var wantKind = warning.Method == WarningMethod.Speech ? NotifierKind.Speech : NotifierKind.Sound;
                 sounderEntry = warning.Sounder is { } sid ? notifiers.FirstOrDefault(n => n.Id == sid) : notifiers.FirstOrDefault(n => n.Model.Kind == wantKind);
                 lightEntry = warning.Light is { } lid ? notifiers.FirstOrDefault(n => n.Id == lid) : notifiers.FirstOrDefault(n => n.Model.Kind == NotifierKind.Light);
@@ -218,6 +223,30 @@ public static class ProjectPipeline
                 }
                 else
                 {
+                    // Громкоговоритель линии 100 В: уровень на 1 м — по В.1 от чувствительности и отвода (паспорт), усилитель — из каталога.
+                    if (sounderEntry.Speaker is { } speaker)
+                    {
+                        speakerTap = SpeechLines.ChooseTap(speaker, warning.SpeakerTap);
+                        if (speakerTap is null)
+                        {
+                            issues.Add(new Issue("soue.speech.tap", IssueLevel.Error, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"СОУЭ: у {sounderEntry.Model.Name} нет отвода {warning.SpeakerTap:0.##} Вт; отводы по паспорту — {string.Join(", ", speaker.Taps.Select(t => t.AcousticW.ToString("0.##", CultureInfo.GetCultureInfo("ru-RU"))))} Вт (alarm.warning.speakerTap).")));
+                            speakerTap = SpeechLines.ChooseTap(speaker, null);
+                        }
+
+                        var l1 = SpeechLines.LevelAt1m(speaker, speakerTap!, norms);
+                        sounderEntry = sounderEntry with { Model = sounderEntry.Model with { LevelAt1m = double.IsNaN(l1) ? null : l1 } };
+                        amplifier = warning.Amplifier is { } aid ? notifierCatalog.Amplifiers.FirstOrDefault(a => a.Id == aid)?.Model : (notifierCatalog.Amplifiers.Count > 0 ? notifierCatalog.Amplifiers[0].Model : null);
+                        lineMonitor = notifierCatalog.LineMonitors.Count > 0 ? notifierCatalog.LineMonitors[0] : null;
+                        if (amplifier is null)
+                        {
+                            issues.Add(new Issue("soue.speech.noAmplifier", IssueLevel.Error, $"СОУЭ: в каталоге {AlarmNotifierCatalog.File} нет усилителя речевого оповещения (amplifiers{(warning.Amplifier is { } wa ? $", задан «{wa}»" : "")}) — линии и усилители не рассчитаны."));
+                        }
+                    }
+                    else if (warning.Method == WarningMethod.Speech)
+                    {
+                        issues.Add(new Issue("soue.speech.noSpeaker", IssueLevel.Warning, $"СОУЭ: у {sounderEntry.Model.Name} в каталоге нет чувствительности и отводов (sensitivityDb, taps) — уровень взят из levelAt1m, линии 100 В и усилители не рассчитаны."));
+                    }
+
                     if (sounderEntry.Model.Kind != wantKind)
                     {
                         issues.Add(new Issue("soue.model.kind", IssueLevel.Warning, $"СОУЭ: оповещатель {sounderEntry.Model.Name} — {sounderEntry.Model.Kind}, а способ оповещения — {warning.Method}."));
@@ -238,10 +267,27 @@ public static class ProjectPipeline
                         var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)).ToList();
                         soue = SoueLayouter.Layout(soueZones, sounderEntry.Model, lightEntry.Model, norms);
                         issues.AddRange(soue.Issues);
-                        if (soue.Sounders.Count > 0) { poweredDevices.Add((sounderEntry.Device, soue.Sounders.Count)); }
+                        var speakersOnLine = sounderEntry.Speaker is not null;
+                        if (soue.Sounders.Count > 0 && !speakersOnLine) { poweredDevices.Add((sounderEntry.Device, soue.Sounders.Count)); }
                         if (soue.Lights.Count > 0) { poweredDevices.Add((lightEntry.Device, soue.Lights.Count)); }
                         // Неадресные оповещатели включаются выходом реле: по выходу на линию звуковых и на линию световых в каждом помещении.
-                        soueRelayOutputs = soueZones.Count * ((sounderEntry.Device.Addresses == 0 && soue.Sounders.Count > 0 ? 1 : 0) + (lightEntry.Device.Addresses == 0 && soue.Lights.Count > 0 ? 1 : 0));
+                        // Громкоговорители линии 100 В включает усилитель — реле им не нужны.
+                        soueRelayOutputs = soueZones.Count * ((sounderEntry.Device.Addresses == 0 && !speakersOnLine && soue.Sounders.Count > 0 ? 1 : 0) + (lightEntry.Device.Addresses == 0 && soue.Lights.Count > 0 ? 1 : 0));
+                        if (speakersOnLine && amplifier is { } amp && speakerTap is { } tap && sounderEntry.Speaker is { } spk && File.Exists(EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File)))
+                        {
+                            // Линии речевого оповещения — по уровню: громкоговорители уровня, стояк от поста (первый уровень) до уровня.
+                            var baseElev = levels[0].Elevation;
+                            var groups = levels.Select(l =>
+                            {
+                                var rooms = l.Zones.Select(z => z.RoomId).ToHashSet(StringComparer.Ordinal);
+                                var riser = l.Index > 0 && l.Elevation is { } e && baseElev is { } b ? Math.Abs(e - b) * 1000 : 0;
+                                return (l.Name.Length > 0 ? l.Name : "линия", (IReadOnlyList<PlanPoint>)[.. soue.Sounders.Where(s => rooms.Contains(s.RoomId)).Select(s => s.Location)], riser);
+                            }).ToList();
+                            speechPlan = SpeechLines.Build(groups, spk, tap, amp, lineMonitor, AlarmCableCatalog.Load(EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File)),
+                                project.Alarm?.Panel is { } pp ? new PlanPoint(pp.X, pp.Y) : null, norms);
+                            issues.AddRange(speechPlan.Issues);
+                        }
+
                         if (soueRelayOutputs > 0)
                         {
                             issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — {soueRelayOutputs} выходов реле на линии оповещения (по помещениям); учтены в релейных блоках и питании."));
@@ -469,7 +515,7 @@ public static class ProjectPipeline
         PowerBudget? powerBudget = null;
         IReadOnlyList<AddressRow> addressRows = [];
         IReadOnlyList<AlarmSpecItem> alarmSpec = [];
-        IReadOnlyList<CableLine> cableLines = [];
+        List<CableLine> cableLines = [];
         AlarmPowerSet? alarmSetForDocs = null;
         if (File.Exists(stationSet))
         {
@@ -573,7 +619,8 @@ public static class ProjectPipeline
                     issues.AddRange(power.Issues);
                     addressRows = AddressTable.Build(controlPoints, alarmSet.Controller, alarmSet.Module, addressDevices).Rows;
                     alarmSpec = AlarmSpecification.Build(powerBudget, alarmSet, detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), detectorModels, manualModel, zoning?.Manuals.Count ?? 0, zoning?.Isolators ?? 0,
-                        [.. soue is null ? [] : new[] { (sounderEntry!, soue.Sounders.Count), (lightEntry!, soue.Lights.Count) }], relayModel, poweredDevices.FirstOrDefault(x => relayModel is not null && x.Device == relayModel.Device).Count);
+                        [.. soue is null ? [] : new[] { (sounderEntry!, soue.Sounders.Count), (lightEntry!, soue.Lights.Count) }], relayModel, poweredDevices.FirstOrDefault(x => relayModel is not null && x.Device == relayModel.Device).Count,
+                        speechPlan, amplifier, lineMonitor);
 
                     // Кабельный журнал — только при заданной точке пожарного поста: без неё длин линий нет.
                     var cablesPath = EquipmentSet.PathFor(normsDir, AlarmCableCatalog.File);
@@ -606,8 +653,26 @@ public static class ProjectPipeline
 
                         var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
                             plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
-                        cableLines = journal.Lines;
                         issues.AddRange(journal.Issues);
+                        var allLines = journal.Lines.ToList();
+                        if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
+                        {
+                            // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
+                            var speechCables = AlarmCableCatalog.Load(cablesPath);
+                            foreach (var line in sp.Lines)
+                            {
+                                var mark = speechCables.SpeechName is { } sn ? sn.Replace("{section}", (line.SectionMm2 ?? speechCables.SpeechSections?.Max() ?? 0).ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")), StringComparison.Ordinal) : "по проекту";
+                                allLines.Add(new CableLine($"ЛО{line.Number}", ampl.Name, $"{line.Speakers} громкоговорителей {sounderEntry?.Model.Name} ({line.Group}){(lineMonitor is not null ? $", {lineMonitor.Name} в конце" : "")}", "линия речевого оповещения 100 В (дерево)", mark, line.LengthM,
+                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{line.ConsumedW:0.#} Вт от линии, I = {line.ConsumedW / ampl.LineVoltage:0.###} А; сечение по формуле РЭ при ΔU ≤ 10 % (В.3.4); отдельно от ДПЛС")));
+                            }
+
+                            for (var k = 1; k <= sp.Amplifiers; k++)
+                            {
+                                allLines.Add(new CableLine($"С{k + 2}", "ВРУ (ввод 1)", $"{ampl.Name} №{k}", "питание 220 В, I категория", speechCables.MainsName, 0, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"до {ampl.MainsW:0} Вт; встроенные АКБ {ampl.Batteries} × {ampl.BatteryName}; длина — по месту ВРУ")));
+                            }
+                        }
+
+                        cableLines = allLines;
                     }
                     else if (project.Alarm is not null && project.Alarm.Panel is null)
                     {
@@ -1300,7 +1365,7 @@ public static class ProjectPipeline
             var tn = project.Title;
             var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
                 detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning, soue,
-                [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile]);
+                [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile], speechPlan, amplifier);
             Write(alarmDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
         }
 

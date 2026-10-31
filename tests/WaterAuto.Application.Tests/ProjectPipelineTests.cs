@@ -226,6 +226,27 @@ public sealed class ProjectPipelineTests : IDisposable
         journal.Where(r => r[1].StartsWith("ДПЛС", StringComparison.Ordinal)).ShouldContain(r => r[7].Contains("стояков 6 м", StringComparison.Ordinal));
         result.Issues.ShouldNotContain(i => i.Code == "aps.cable.noElevation");
 
+        // Речевое оповещение на двух уровнях: ОПР-С103.1 на отводе 3 Вт (91 + 10·lg 3 = 95,8 дБ на 1 м), фон 60 → 70 дБА; линии 100 В
+        // по уровням, Рупор-300 и Рупор-300-МК в спецификации, линии ЛО1/ЛО2 в журнале; громкоговорители не идут через реле и РИП.
+        var speech = Run(Project(alarm: new ProjectAlarm
+        {
+            Zones = alarm.Zones,
+            Levels = alarm.Levels,
+            Panel = alarm.Panel,
+            Warning = new ProjectWarning { Method = WarningMethod.Speech, MethodRow = "sp3.tB_1m.undergroundParking", Indicator = 90, BackgroundDba = 60, Sounder = "bolid.opr_s103_1", SpeakerTap = 3 },
+        }));
+        speech.Issues.ShouldNotContain(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level == IssueLevel.Error, string.Join("; ", speech.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Message)));
+        speech.Issues.ShouldContain(i => i.Code == "soue.speech.amplifiers" && i.Message.Contains("95,8 дБ", StringComparison.Ordinal) && i.Message.Contains("2 линии", StringComparison.Ordinal));
+        var speechSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(speech.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        speechSpec.Single(r => r[2] == "Рупор-300")[5].ShouldBe("1");
+        speechSpec.Single(r => r[2] == "Рупор-300-МК")[5].ShouldBe("2");
+        speechSpec.Single(r => r[2] == "ОПР-С103.1")[1].ShouldContain("линия 100 В");
+        var speechJournal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(speech.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
+        speechJournal.Select(r => r[1]).ShouldContain("ЛО1");
+        speechJournal.Select(r => r[1]).ShouldContain("ЛО2");
+        speechJournal.Single(r => r[1] == "ЛО2")[5].ShouldStartWith("КПСнг(А)-FRLS 1×2×");
+        double.Parse(speechJournal.Single(r => r[1] == "ЛО2")[6], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(double.Parse(speechJournal.Single(r => r[1] == "ЛО1")[6], System.Globalization.CultureInfo.InvariantCulture) - 60);
+
         // Без отметок — предупреждение, что стояки не учтены.
         var noElevation = Run(Project(alarm: new ProjectAlarm
         {

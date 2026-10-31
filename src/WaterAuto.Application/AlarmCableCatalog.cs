@@ -22,6 +22,7 @@ public static class AlarmCableCatalog
             table.Add(new LoopCableSection(row.GetProperty("section").GetDouble(), byLoad));
         }
 
+        var speech = root.TryGetProperty("speech", out var sp) ? sp : (JsonElement?)null;
         return new CableCatalog(
             root.GetProperty("reserve").GetDouble(),
             root.GetProperty("inCabinetM").GetDouble(),
@@ -30,6 +31,10 @@ public static class AlarmCableCatalog
             loop.GetProperty("source").GetString()!,
             root.GetProperty("power").GetProperty("name").GetString()!,
             root.GetProperty("mains").GetProperty("name").GetString()!,
-            root.GetProperty("signal").GetProperty("name").GetString()!);
+            root.GetProperty("signal").GetProperty("name").GetString()!,
+            speech?.GetProperty("name").GetString(),
+            speech is { } s1 ? [.. s1.GetProperty("sections").EnumerateArray().Select(x => x.GetDouble())] : null,
+            speech?.GetProperty("resistivity").GetDouble(),
+            speech?.GetProperty("source").GetString());
     }
 }
