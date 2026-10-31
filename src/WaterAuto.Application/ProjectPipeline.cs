@@ -95,6 +95,7 @@ public static class ProjectPipeline
     public const string AlarmNoteFile = "aps_pz.docx";
     public const string AlarmSpecFile = "aps_spec.xlsx";
     public const string CableJournalFile = "aps_cables.xlsx";
+    public const string CableJournalDocxFile = "aps_cables.docx";
     public const string AlarmGeneralDataFile = "aps_general_data.docx";
     public const string HvacSpecFile = "aps_hvac.docx";
     public const string IssuesFile = "issues.txt";
@@ -1135,6 +1136,7 @@ public static class ProjectPipeline
         if (cableLines.Count > 0)
         {
             Write(alarmDir, CableJournalFile, files, p => CableJournalXlsx.Write(p, cableLines, $"{project.Name}. Кабельный журнал АПС", project.Font));
+            Write(alarmDir, CableJournalDocxFile, files, p => CableJournalDocx.Write(p, cableLines, Stamp(project, "АПС.КЖ", "Кабельный журнал"), project.Font));
         }
 
         if (alarmSpec.Count > 0)

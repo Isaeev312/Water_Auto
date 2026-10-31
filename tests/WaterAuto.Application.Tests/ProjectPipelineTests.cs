@@ -146,6 +146,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var withPanel = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }], Panel = new ProjectPoint { X = 1000, Y = 1000 } }));
         var journal = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(withPanel.Files.Single(f => f.EndsWith(ProjectPipeline.CableJournalFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.CableJournalXlsx.HeaderRow).ToList();
         journal.Select(r => r[1]).ShouldContain("ДПЛС1");
+        withPanel.Files.ShouldContain(f => f.EndsWith(ProjectPipeline.CableJournalDocxFile, StringComparison.Ordinal));
         journal.Single(r => r[1] == "ДПЛС1")[5].ShouldStartWith("КПСнг(А)-FRLS 1×2×");
         double.Parse(journal.Single(r => r[1] == "ДПЛС1")[6], System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(50);
 
