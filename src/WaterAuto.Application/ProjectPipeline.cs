@@ -549,7 +549,7 @@ public static class ProjectPipeline
         {
             if (powerBudget is not null)
             {
-                Write(alarmDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
+                Write(alarmDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов {(controlPoints.Count > 0 ? "АПС и автоматики АУПТ" : "АПС")}", project.Font));
             }
 
             if (addressRows.Count > 0)
