@@ -34,5 +34,8 @@ public sealed record DetectorZone(string RoomId, string RoomName, Polygon Outlin
 /// <summary>Извещатель раскладки; ID — «ID помещения.D номер».</summary>
 public sealed record PlacedDetector(string Id, string RoomId, PlanPoint Location, DetectorKind Kind);
 
+/// <summary>Ручной извещатель (ИПР) на стене; ID — «ID помещения.M номер».</summary>
+public sealed record PlacedManual(string Id, string RoomId, PlanPoint Location);
+
 /// <summary>Результат раскладки извещателей: ИП, число ИП по помещениям и замечания.</summary>
 public sealed record DetectorLayout(IReadOnlyList<PlacedDetector> Detectors, IReadOnlyDictionary<string, int> CountByRoom, IReadOnlyList<Issue> Issues);
