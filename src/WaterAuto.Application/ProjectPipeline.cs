@@ -661,7 +661,8 @@ public static class ProjectPipeline
             PowderStartPlan? start = null;
             PowderStartUnitEntry? unit = null;
             var notifierFile = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
-            if (File.Exists(notifierFile) && AlarmNotifierCatalog.Load(notifierFile).StartUnits is { Count: > 0 } startUnits)
+            var notifierCatalog = File.Exists(notifierFile) ? AlarmNotifierCatalog.Load(notifierFile) : null;
+            if (notifierCatalog?.StartUnits is { Count: > 0 } startUnits)
             {
                 unit = startUnits[0];
                 start = WaterAuto.Calc.Powder.PowderStart.Plan([.. result.Rooms.Select(r => (r.RoomId, r.Modules))], entry.StartCurrent, entry.MonitorCurrent, unit.Model);
@@ -675,6 +676,42 @@ public static class ProjectPipeline
             else
             {
                 issues.Add(new Issue("powder.start.noUnit", IssueLevel.Warning, "В каталоге нет блока пуска АУП (startUnits) — цепи пуска модулей не рассчитаны."));
+            }
+
+            // Сигнализация режимов (СП 484 пп. 7.6.3, 7.6.5): табло над каждой дверью, датчик положения двери, звуковой оповещатель на зону.
+            var signItems = new List<AlarmSpecItem>();
+            var signs = norms.Find("sp484.p7_6_5.signs");
+            var doorNorm = norms.Find("sp484.p7_6_3.doorSensors");
+            if (signs is null || doorNorm is null)
+            {
+                issues.Add(new Issue("powder.signs.noNorm", IssueLevel.Warning, "В данных норм нет пп. 7.6.3, 7.6.5 СП 484 — табло и датчики положения дверей не подобраны."));
+            }
+            else
+            {
+                var doors = result.Rooms.Sum(rr => Math.Max(1, powder.Rooms.FirstOrDefault(x => string.Equals(x.Room, rooms.First(y => y.Id == rr.RoomId).Name, StringComparison.OrdinalIgnoreCase))?.Doors ?? 1));
+                var lights = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Light).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                var sounders = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Sound).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                const string Rule = "СП 484.1311500.2020, п. 7.6.5";
+                foreach (var (text, key, side) in new[] { ("Автоматика отключена", "automaticOffOutside", "со стороны входа"), ("Порошок — не входить!", "keepOutOutside", "со стороны входа"), ("Порошок — уходи!", "leaveInside", "со стороны выхода") })
+                {
+                    var n = (int)Math.Ceiling(doors * signs.Values[key]!.Value - 1e-9);
+                    var light = lights.Count > 0 ? lights[0] : null;
+                    signItems.Add(new($"Оповещатель пожарный световой (табло) «{text}»", light?.Model.Name ?? "подобрать", light?.Manufacturer ?? "", "шт.", n, light?.Device.Certificate, $"над каждой дверью {side}; {Rule}"));
+                    if (light is not null)
+                    {
+                        poweredDevices.Add((light.Device, n));
+                    }
+                }
+
+                signItems.Add(new("Извещатель магнитоконтактный — датчик положения двери", "подобрать", "", "шт.", (int)Math.Ceiling(doors * doorNorm.Values["perDoor"]!.Value - 1e-9), null,
+                    "открытие двери переводит АУП в «Автоматика отключена»; СП 484.1311500.2020, п. 7.6.3"));
+                var zoneSounders = (int)Math.Ceiling(result.Rooms.Count * signs.Values["soundersPerZone"]!.Value - 1e-9);
+                var sounder = sounders.Count > 0 ? sounders[0] : null;
+                signItems.Add(new("Оповещатель пожарный звуковой", sounder?.Model.Name ?? "подобрать", sounder?.Manufacturer ?? "", "шт.", zoneSounders, sounder?.Device.Certificate, $"звуковая сигнализация режимов раздельно для каждой зоны пожаротушения; {Rule}"));
+                if (sounder is not null)
+                {
+                    poweredDevices.Add((sounder.Device, zoneSounders));
+                }
             }
 
             var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, start, unit?.Model);
@@ -698,7 +735,7 @@ public static class ProjectPipeline
             Write(dir, PowderPlanFile, files, p => PowderPlanDxfWriter.Write(p, planRooms, entry.Model.Name, 1, [
                 "Расстановка — равномерной сеткой по габаритам помещения; уточнить по диаграмме распыла и затенениям по ТД на модуль (п. 10.2.13 СП 485).",
                 "Все модули помещения срабатывают в интервале не более 3 с (п. 10.2.4); пуск — от прибора управления АПС после задержки на эвакуацию (п. 10.4.3).",
-                "Крепление модулей — на пятикратный вес (п. 10.2.14); над модулями и у входов — табло «Порошок — уходи!», «Порошок — не входи!» (п. 10.3.1).",
+                "Крепление модулей — на пятикратный вес (п. 10.2.14); над каждой дверью — табло «Автоматика отключена», «Порошок — не входить!» снаружи и «Порошок — уходи!» изнутри, датчик положения двери (пп. 7.6.3, 7.6.5 СП 484).",
             ], Stamp(project, "АПТ", "План расстановки модулей порошкового пожаротушения"), project.Font));
             Write(dir, PowderNoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "АПТ.ПЗ", "Порошковое пожаротушение. Пояснительная записка"), project.Font));
             var total = result.Rooms.Sum(x => x.Modules);
@@ -709,6 +746,7 @@ public static class ProjectPipeline
                 .. start is { Units: > 0 } && unit is not null
                     ? new AlarmSpecItem[] { new($"Блок пуска модулей ({unit.Designation})", unit.Model.Name, unit.Manufacturer, "шт.", start.Units, unit.Device.Certificate, $"{start.OutputsByRoom.Values.Sum()} выходов, до {start.ModulesPerOutput} модулей на выход; питание 12 В от РИП (в расчёте АКБ)") }
                     : [],
+                .. signItems,
             ];
             Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
         }
