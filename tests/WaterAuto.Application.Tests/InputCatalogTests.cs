@@ -45,7 +45,7 @@ public sealed class InputCatalogTests
     [Fact]
     public void Pipe_dns_are_the_accepted_assortment()
     {
-        InputCatalog.PipeDns(_norms).ShouldBe([50, 65, 80, 100, 125, 150]);
+        InputCatalog.PipeDns(_norms).ShouldBe([50, 65, 80, 100, 125, 150, 200]);
     }
 
     [Fact]

@@ -622,9 +622,16 @@ public sealed class ProjectPipelineTests : IDisposable
         water.Issues.ShouldContain(i => i.Code == "params.noWater" && i.Message.Contains("design.foam", StringComparison.Ordinal));
 
         // Сквозной расчёт пеной — склад группы 5 (22,5 л/с раствора): сеть стоянки для 54 л/с группы 7 мала.
-        var result = Run(Write("foam.waproj", ProjectFile.ToJson(project with { Design = store with { RoomGroup = "5", Foam = new ProjectFoam { Name = "ПО-6ЦТ", Concentration = 6 } } })));
-        result.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty(string.Join(" | ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Message)));
-        result.Design!.Parameters.Intensity.ShouldBe(0.12); // группа 5, 2–3 м: раствором 0,12 против 0,24 водой
+        var foam = new ProjectFoam { Name = "ПО-6ЦТ", Concentration = 6 };
+        // Группа 7 пеной: трубы до DN200 (Б.8) подбираются; насосной установки на 217 м³/ч и 149 м в каталоге нет — ограничение каталога.
+        var g7 = Run(Write("foam7.waproj", ProjectFile.ToJson(project with { Design = store with { Foam = foam } })));
+        g7.Issues.ShouldNotContain(i => i.Code == "design.noDiameter");
+        g7.Issues.Where(i => i.Level == IssueLevel.Error && i.Code != "pump.noSet").ShouldBeEmpty();
+
+        // Выпуск документов — склад группы 5 пеной (22,5 л/с): 0,12 л/(с·м²) против 0,24 водой.
+        var result = Run(Write("foam.waproj", ProjectFile.ToJson(project with { Design = store with { RoomGroup = "5", Foam = foam } })));
+        result.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty();
+        result.Design!.Parameters.Intensity.ShouldBe(0.12);
         result.Design.Parameters.Foam.ShouldBeTrue();
         result.Issues.ShouldContain(i => i.Code == "foam.amount");
         var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
