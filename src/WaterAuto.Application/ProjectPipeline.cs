@@ -160,6 +160,7 @@ public static class ProjectPipeline
         SoueLayout? soue = null;
         var poweredDevices = new List<(PoweredDevice Device, int Count)>();
         RelayModel? relayModel = null;
+        var soueRelayOutputs = 0;
         NotifierEntry? sounderEntry = null;
         NotifierEntry? lightEntry = null;
         DetectorModel? manualModel = null;
@@ -226,15 +227,26 @@ public static class ProjectPipeline
                         issues.AddRange(soue.Issues);
                         if (soue.Sounders.Count > 0) { poweredDevices.Add((sounderEntry.Device, soue.Sounders.Count)); }
                         if (soue.Lights.Count > 0) { poweredDevices.Add((lightEntry.Device, soue.Lights.Count)); }
+                        // Неадресные оповещатели включаются выходом реле: по выходу на линию звуковых и на линию световых в каждом помещении.
+                        soueRelayOutputs = soueZones.Count * ((sounderEntry.Device.Addresses == 0 && soue.Sounders.Count > 0 ? 1 : 0) + (lightEntry.Device.Addresses == 0 && soue.Lights.Count > 0 ? 1 : 0));
+                        if (soueRelayOutputs > 0)
+                        {
+                            issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — {soueRelayOutputs} выходов реле на линии оповещения (по помещениям); учтены в релейных блоках и питании."));
+                        }
                     }
                 }
             }
 
             // Релейный блок для команд АППЗ — из того же каталога, независимо от СОУЭ.
-            if (project.Alarm?.Hvac is { } hvacForRelay && File.Exists(notifierPath))
+            if ((project.Alarm?.Hvac is not null || soueRelayOutputs > 0) && File.Exists(notifierPath))
             {
                 var relays = AlarmNotifierCatalog.Load(notifierPath).Relays;
-                relayModel = hvacForRelay.Relay is { } rid ? relays.FirstOrDefault(r => r.Id == rid) : (relays.Count > 0 ? relays[0] : null);
+                relayModel = project.Alarm?.Hvac?.Relay is { } rid ? relays.FirstOrDefault(r => r.Id == rid) : (relays.Count > 0 ? relays[0] : null);
+            }
+
+            if (soueRelayOutputs > 0 && relayModel is not null && project.Alarm?.Hvac is null)
+            {
+                poweredDevices.Add((relayModel.Device, (soueRelayOutputs + relayModel.Outputs - 1) / relayModel.Outputs));
             }
         }
 
@@ -252,7 +264,7 @@ public static class ProjectPipeline
                 }
                 else
                 {
-                    poweredDevices.Add((relayModel.Device, (hvacCommands.Outputs + relayModel.Outputs - 1) / relayModel.Outputs));
+                    poweredDevices.Add((relayModel.Device, (hvacCommands.Outputs + soueRelayOutputs + relayModel.Outputs - 1) / relayModel.Outputs));
                 }
             }
             if (hvacCommands.Commands.Count > 0)

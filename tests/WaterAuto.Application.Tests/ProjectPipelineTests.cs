@@ -125,20 +125,21 @@ public sealed class ProjectPipelineTests : IDisposable
         var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.AddressTableFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).ToList();
         addresses.Count(r => r[4].StartsWith("Автостоянка", StringComparison.Ordinal) || r[7] == "ЗКСПС-1").ShouldBeGreaterThanOrEqualTo(12);
 
-        // СОУЭ: раздел warning — оповещатели на плане, в спецификации, записке и расчёте питания.
+        // СОУЭ: раздел warning — оповещатели на плане, в спецификации и расчёте питания; фон автостоянки 70 дБА → 85 дБА,
+        // МАЯК-12-ЗМ (105 дБ) даёт радиус 10 м; неадресные оповещатели — через выходы реле.
         var soueRun = Run(Project(alarm: new ProjectAlarm
         {
             Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3 }],
-            // Фон 50 дБА задан явно: при фоне автостоянки 70 дБА С2000-ОПЗ (85 дБ) непригоден — это проверяет SoueLayouterTests.
-            Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40, BackgroundDba = 50 },
+            Warning = new ProjectWarning { Method = WaterAuto.Core.WarningMethod.Sound, Indicator = 40 },
         }));
         soueRun.Success.ShouldBeTrue(string.Join("; ", soueRun.Issues.Select(i => i.Message)));
         var souePlan = DxfReader.Read(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal)));
         souePlan.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.NotifierLayer).ShouldBeGreaterThanOrEqualTo(2);
         var soueSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(soueRun.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
-        soueSpec.Select(r => r[2]).ShouldContain("С2000-ОПЗ");
-        soueSpec.Select(r => r[2]).ShouldContain("С2000-ОСТ («Выход»)");
-        soueRun.Issues.ShouldContain(i => i.Code == "aps.power.noCertificate" && i.Message.Contains("С2000-ОПЗ")); // сертификат 043 истёк
+        soueSpec.Select(r => r[2]).ShouldContain("МАЯК-12-ЗМ");
+        soueSpec.Select(r => r[2]).ShouldContain("ЛЮКС-12 («Выход»)");
+        soueSpec.Select(r => r[2]).ShouldContain("С2000-СП2 исп.02");
+        soueRun.Issues.ShouldContain(i => i.Code == "soue.relayOutputs");
         soueRun.Issues.ShouldNotContain(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
 
         // АППЗ: раздел hvac даёт ТЗ на вентиляцию с командами.
