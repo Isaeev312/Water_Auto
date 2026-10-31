@@ -101,6 +101,12 @@ public sealed record ProjectDesign
     /// <summary>Максимальная температура среды в зоне оросителей, °С (п. 6.2.17) — для номинальной температуры срабатывания (табл. 6.4).</summary>
     public double? MaxAmbientTemperature { get; init; }
 
+    /// <summary>Минимальная температура воздуха в защищаемых помещениях, °С — для выбора водо- или воздухозаполненной (п. 6.2.1, 6.2.19).</summary>
+    public double? MinAmbientTemperature { get; init; }
+
+    /// <summary>Установка спринклерная воздухозаполненная (п. 3.90): питающие и распределительные трубопроводы — под давлением воздуха.</summary>
+    public bool AirFilled { get; init; }
+
     /// <summary>Положение розетки для автоподбора: up (вверх), down (вниз), horizontal, concealed.</summary>
     public string SprinklerDeflector { get; init; } = "up";
 
@@ -139,6 +145,12 @@ public sealed record ProjectDesign
 
     /// <summary>Высота складирования, м — для складов (группы 5–7, табл. 6.2).</summary>
     public double? StorageHeight { get; init; }
+
+    /// <summary>Помещения другой группы, чем <see cref="RoomGroup"/>, со своими высотами; остальные — по RoomGroup.</summary>
+    public IReadOnlyList<ProjectRoomGroup> Rooms { get; init; } = [];
+
+    /// <summary>Другие этажи сети: чертёж (с вводом — местом стояка, слой ПТ_ВВОД) и отметка пола; основной этаж — Drawing проекта.</summary>
+    public IReadOnlyList<ProjectAuptLevel> Levels { get; init; } = [];
 
     /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
     public double? FloorElevation { get; init; }
@@ -189,6 +201,30 @@ public sealed record ProjectDesign
 /// Комплектная насосная установка проекта: конкретная установка каталога вместо автоподбора по требуемым подаче и напору.
 /// Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — количество насосов в выпуске берётся по ней.
 /// </summary>
+/// <summary>Этаж АУПТ: имя для листа, чертёж и отметка пола, м (основной этаж — design.floorElevation, по умолчанию 0).</summary>
+public sealed record ProjectAuptLevel
+{
+    public string Name { get; init; } = "";
+
+    public string Drawing { get; init; } = "";
+
+    public double Elevation { get; init; }
+}
+
+/// <summary>Помещение со своей группой по приложению А СП 485 (имя — текст внутри контура ПТ_КОНТУР) и высотами для табл. 6.2, 6.3.</summary>
+public sealed record ProjectRoomGroup
+{
+    public string Room { get; init; } = "";
+
+    public string Group { get; init; } = "";
+
+    /// <summary>Высота помещения, м; null — design.roomHeight.</summary>
+    public double? RoomHeight { get; init; }
+
+    /// <summary>Высота складирования, м (группы 5–7).</summary>
+    public double? StorageHeight { get; init; }
+}
+
 public sealed record ProjectPumpStation
 {
     /// <summary>

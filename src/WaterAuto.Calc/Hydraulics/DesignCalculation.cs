@@ -95,12 +95,14 @@ public sealed record DesignResult(
     IReadOnlyList<Issue> Issues,
     IReadOnlyList<ZoneCandidate> Candidates,
     HydrantResult? Hydrants = null,
-    RingCheck? Ring = null);
+    RingCheck? Ring = null,
+    string? ZoneCenterId = null);
 
 /// <summary>
 /// Проектный расчёт спринклерной АУП по приложению Б СП 485 (ADR 0008):
 /// диктующий ороситель — тот конец ветви, при зоне вокруг которого давление насоса наибольшее (перебор, В-01); расход и давление у него — Б.1 с верхним множителем (В-08);
-/// диктующая зона — N = ⌈S / (l·b)⌉ ближайших к нему оросителей (Б.2, Б.3; форма зоны — В-01);
+/// диктующая зона — N = ⌈S / (l·b)⌉ оросителей, ближайших к кандидату (Б.2, Б.3; форма зоны — В-01); если в зоне давление
+/// другого оросителя ниже, диктующим становится он при той же зоне (Б.1.2.1);
 /// сеть — последовательный расчёт (Б.4–Б.23) с местными потерями 20 % на всех участках от диктующего оросителя
 /// до насоса, включая узел управления (Б.1.3.13; В-02, В-03); расход насоса — Б.24–Б.26; давление — Б.30 с Z = H/100;
 /// скорости — п. 6.7.1.37; запас воды — Q·t по табл. 6.1 с заполнением резервуара по п. 6.9.13.
@@ -124,15 +126,39 @@ public static class DesignCalculation
         var ends = sprinklers.Where(n => !feeding.Contains(n.Id)).ToList();
         var results = new List<DesignResult>();
         var tried = new HashSet<string>((ends.Count > 0 ? ends : sprinklers).Select(n => n.Id), StringComparer.Ordinal);
-        void RunOne(string id) => results.Add(RunFor(route, norms, rules, settings, parameters, hydrants, id));
+        DesignResult RunOne(string id, string? zoneCenter = null)
+        {
+            // Диктующий — ороситель с наименьшим давлением в зоне (Б.1.2.1): если у другого оросителя той же зоны давление
+            // ниже, зона остаётся прежней, а диктующим назначается он (p1 — у него), пока проверка не сойдётся.
+            var r = RunFor(route, norms, rules, settings, parameters, hydrants, id, zoneCenter);
+            var center = zoneCenter ?? id;
+            var seen = new HashSet<string>(StringComparer.Ordinal) { id };
+            for (var step = 0; step < 10; step++)
+            {
+                var lowest = r.Issues.Where(i => i.Code == "dictating.notMinimum" && i.ElementId is not null && r.ZoneSprinklers.Contains(i.ElementId) && !seen.Contains(i.ElementId))
+                    .Select(i => i.ElementId!)
+                    .FirstOrDefault();
+                if (lowest is null)
+                {
+                    break;
+                }
+
+                seen.Add(lowest);
+                r = RunFor(route, norms, rules, settings, parameters, hydrants, lowest, center);
+            }
+
+            // Центр зоны — для записки: при переносе p1 зона строится вокруг одного оросителя, диктующий — другой.
+            r = r with { ZoneCenterId = center };
+            results.Add(r);
+            return r;
+        }
+
         foreach (var id in tried.OrderByDescending(PathLength).ToList())
         {
             RunOne(id);
         }
 
-        // Диктующий — ороситель с наименьшим давлением (Б.1.2.1). Если в зоне выбранного кандидата давление другого
-        // оросителя ниже, диктующим должен быть он: добавляем такие узлы в кандидаты и повторяем, пока расчёт не сойдётся
-        // или пока кандидаты не исчерпаются (ограничение — защита от зацикливания).
+        // Ороситель вне зоны кандидата с давлением ниже диктующего (защита) — новый кандидат со своей зоной.
         for (var iteration = 0; iteration < 10; iteration++)
         {
             var currentWorst = results.Aggregate((a, x) => x.PumpPressure.Mpa > a.PumpPressure.Mpa + 1e-12 ? x : a);
@@ -157,7 +183,8 @@ public static class DesignCalculation
         return worst with { Candidates = [new ZoneCandidate(worst.DictatingSprinklerId, worst.PumpPressure), .. candidates] };
     }
 
-    private static DesignResult RunFor(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters, HydrantInput? hydrants, string dictatingId)
+    /// <param name="zoneCenterId">Ороситель, вокруг которого строится зона (Б.2, Б.3); null — сам диктующий.</param>
+    private static DesignResult RunFor(PipeRoute route, INormsProvider norms, LayoutRules rules, DesignSettings settings, FireParameters? parameters, HydrantInput? hydrants, string dictatingId, string? zoneCenterId = null)
     {
         var issues = new List<Issue>();
         var table = norms.Find(rules.NormIds[0])!;
@@ -187,13 +214,14 @@ public static class DesignCalculation
         var sprinklers = route.Nodes.Where(n => n.Kind == RouteNodeKind.Sprinkler).ToList();
         double PathLength(string id) => byTo.TryGetValue(id, out var seg) ? seg.Length.Meters + PathLength(seg.From) : 0;
         var dictating = nodes[dictatingId];
+        var center = nodes[zoneCenterId ?? dictatingId];
 
-        // Б.3: условная площадь на ороситель l·b по сетке у диктующего оросителя.
-        var (l, b) = Spacing(dictating, sprinklers);
+        // Б.3: условная площадь на ороситель l·b по сетке у оросителя, вокруг которого строится зона.
+        var (l, b) = Spacing(center, sprinklers);
         var area = l * b;
         var n = (int)Math.Ceiling((s / area) - 1e-9);
         var zone = sprinklers
-            .OrderBy(x => Dist(x.Location, dictating.Location))
+            .OrderBy(x => Dist(x.Location, center.Location))
             .ThenByDescending(x => PathLength(x.Id))
             .Take(n)
             .Select(x => x.Id)

@@ -18,7 +18,7 @@ public sealed class ProjectPipelineTests : IDisposable
     public void Dispose() => Directory.Delete(_dir, true);
 
     // Этаж 30 × 20 м: помещение с именем, колонна, ввод — по соглашению о слоях (README §7).
-    private string Drawing(bool withInlet = true, string name = "floor.dxf", double width = 30000, double depth = 20000)
+    private string Drawing(bool withInlet = true, string name = "floor.dxf", double width = 30000, double depth = 20000, double storeWidth = 0)
     {
         var doc = new CadDocument(ACadVersion.AC1032);
         doc.Header.InsUnits = UnitsType.Millimeters;
@@ -39,6 +39,16 @@ public sealed class ProjectPipelineTests : IDisposable
         room.Layer = L(FloorPlanImporter.ContourLayer);
         doc.Entities.Add(room);
         doc.Entities.Add(new TextEntity("Автостоянка") { InsertPoint = new XYZ(width / 2, depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+        if (storeWidth > 0)
+        {
+            // Второе помещение справа через стену 200 мм — «Склад».
+            var store = Rect(width + 200, 0, width + 200 + storeWidth, depth);
+            store.Layer = L(FloorPlanImporter.ContourLayer);
+            doc.Entities.Add(store);
+            doc.Entities.Add(new TextEntity("Склад") { InsertPoint = new XYZ(width + (storeWidth / 2), depth / 2, 0), Height = 250, Layer = L(FloorPlanImporter.ContourLayer) });
+            doc.Entities.Add(new Point(new XYZ(width + 700, 500, 0)) { Layer = L(FloorPlanImporter.InletLayer) });
+        }
+
         var column = Rect(7300, 7300, 7700, 7700);
         column.Layer = L(FloorPlanImporter.ColumnLayer);
         doc.Entities.Add(column);
@@ -273,6 +283,105 @@ public sealed class ProjectPipelineTests : IDisposable
             Panel = alarm.Panel,
         }));
         noElevation.Issues.ShouldContain(i => i.Code == "aps.cable.noElevation");
+    }
+
+    [Fact]
+    public void Rooms_of_different_groups_are_laid_out_and_calculated_by_their_own_tables()
+    {
+        // Стоянка — группа 2 (табл. 6.1: 0,12 л/(с·м²), 120 м², шаг 4 м); склад — группа 5, складирование 3 м (табл. 6.2).
+        // Насос — по огибающей: наибольший расход и наибольший напор из расчётов групп; бак — наибольший объём воды.
+        Drawing(storeWidth: 15000);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Стоянка и склад",
+            Drawing = "floor.dxf",
+            Design = new ProjectDesign
+            {
+                RoomGroup = "2",
+                SprinklerK = 0.47,
+                SprinklerModel = "по каталогу",
+                PipeElevation = -1.5,
+                DictatingAboveAxis = 3.5,
+                SupplyLength = 30,
+                SupplyDn = 125,
+                InletPressure = 0.1,
+                DesignVelocity = 5,
+                Rooms = [new ProjectRoomGroup { Room = "Склад", Group = "5", StorageHeight = 3 }],
+            },
+        });
+        var result = Run(Write("groups.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        var envelope = result.Issues.Single(i => i.Code == "design.groups.envelope");
+        envelope.Message.ShouldContain("группа 2");
+        envelope.Message.ShouldContain("группа 5");
+        // Склад группы 5 требует большего расхода, чем стоянка группы 2: насос — не меньше расхода склада.
+        result.Pump.ShouldNotBeNull();
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("табл. 6.2");
+        text.ShouldContain("принято по огибающей");
+        // Склад группы 5 (табл. 6.2, 3 м) требует и большего расхода, и большего напора: насос — по нему.
+        envelope.Message.ShouldContain("группа 5 (табл. 6.2)");
+        result.Design!.PumpFlow.LitersPerSecond.ShouldBe(48.5, 0.05);
+        result.Design.PumpHead.Meters.ShouldBe(95.6, 0.05);
+    }
+
+    [Fact]
+    public void Upper_level_is_fed_by_the_riser_and_governs_the_pump_head()
+    {
+        // Тот же этаж на отметке +3,3 м: диктующий выше на 3,3 м, подводящий длиннее на стояк — напор больше более чем на 3,3 м;
+        // оросители обоих этажей — в спецификации, план этажа — отдельным листом, основной план — только свой этаж.
+        // Прогоны пишут в одну папку — числа одноэтажного снимаются до второго.
+        static int Count(string path) => DxfReader.Read(path).Entities.Count(e => e.Layer.Name == "ПТ_ОРОСИТЕЛИ");
+        static int Installed(PipelineResult r) => int.Parse(WaterAuto.Reports.XlsxPreview.ReadFirstSheet(r.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)))
+            .First(x => x.Any(c => c.StartsWith("Ороситель спринклерный", StringComparison.Ordinal) && !c.Contains("запас", StringComparison.Ordinal)))[6], System.Globalization.CultureInfo.InvariantCulture);
+        Drawing();
+        var single = Run(Project());
+        single.Success.ShouldBeTrue();
+        var singleHead = single.Design!.PumpHead.Meters;
+        var singlePlan = Count(single.Files.Single(f => f.EndsWith(ProjectPipeline.PlanDxfFile, StringComparison.Ordinal)));
+        var singleInstalled = Installed(single);
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var json = ProjectFile.ToJson(project with
+        {
+            Design = project.Design with { Levels = [new ProjectAuptLevel { Name = "2 этаж", Drawing = "floor.dxf", Elevation = 3.3 }] },
+        });
+        var result = Run(Write("levels.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        result.Design!.PumpHead.Meters.ShouldBeGreaterThan(singleHead + 3.3);
+        result.Design.Route.RoomId.ShouldStartWith("L1.");
+        result.Issues.ShouldContain(i => i.Code == "design.levels.governing");
+        Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.PlanDxfFile, StringComparison.Ordinal))).ShouldBe(singlePlan);
+        Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.LevelPlanFile(1), StringComparison.Ordinal))).ShouldBe(singlePlan);
+        Installed(result).ShouldBe(2 * singleInstalled);
+    }
+
+    [Fact]
+    public void Air_filled_installation_reports_air_volume_and_changes_the_control_unit_and_note()
+    {
+        // Неотапливаемый склад (−20 °С): воздухозаполненная АУП — объём воздуха, требование 180 с, узел воздухозаполненный, компрессор.
+        Drawing();
+        Run(Project());
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("air.waproj", ProjectFile.ToJson(project with { Design = project.Design with { AirFilled = true, MinAmbientTemperature = -20 } })));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        result.Issues.ShouldContain(i => i.Code == "air.delay");
+        result.Issues.ShouldContain(i => i.Code == "air.fill");
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.Contains("компрессор", StringComparison.Ordinal)));
+        spec.ShouldNotContain(r => r.Any(c => c.Contains("водозаполненный", StringComparison.Ordinal)));
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("спринклерная воздухозаполненная");
+        text.ShouldContain("п. 6.2.4");
+        text.ShouldContain("п. 6.7.1.21");
+
+        // Водозаполненная при −20 °С — замечание (п. 6.2.1, 6.7.1.41).
+        var cold = Run(Write("cold.waproj", ProjectFile.ToJson(project with { Design = project.Design with { MinAmbientTemperature = -20 } })));
+        cold.Issues.ShouldContain(i => i.Code == "air.coldWaterFilled");
     }
 
     [Fact]
