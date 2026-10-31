@@ -146,6 +146,7 @@ public static class ProjectPipeline
         if (detectorLayout is not null)
         {
             issues.AddRange(detectorLayout.Issues);
+            issues.AddRange(ZoneChecks.Check(detectorZones, detectorLayout, norms));
         }
 
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
