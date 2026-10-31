@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "name": "Подземная автостоянка (пример)",
+  "drawing": "floor.dxf",
+  "design": {
+    "roomGroup": "2",
+    "sprinklerK": 0.47,
+    "sprinklerModel": "по каталогу",
+    "pipeElevation": -1.5,
+    "dictatingAboveAxis": 3.5,
+    "supplyLength": 30,
+    "supplyDn": 125,
+    "inletPressure": 0.1,
+    "designVelocity": 5,
+    "roomHeight": 3.0,
+    "pumpRoom": {
+      "floorElevation": -3,
+      "groundElevation": 0,
+      "height": 4.5,
+      "underground": true
+    },
+    "pumpStation": {
+      "setDesignation": ""
+    }
+  },
+  "title": {
+    "organization": "ОсОО «Пример»",
+    "subject": "Подземная автостоянка",
+    "document": "Проект",
+    "author": "Исаев А.",
+    "supervisor": "",
+    "cityYear": "Бишкек 2026"
+  },
+  "alarm": {
+    "zones": [
+      {
+        "room": "Автостоянка",
+        "detector": "Smoke",
+        "algorithm": "C",
+        "addressable": true,
+        "ceilingHeight": 3.0,
+        "model": "bolid.dip34a_03"
+      }
+    ],
+    "manualModel": "bolid.ipr513_3am",
+    "panel": {
+      "x": 14000,
+      "y": 2000
+    }
+  }
+}

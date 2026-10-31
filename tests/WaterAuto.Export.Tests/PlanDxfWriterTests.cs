@@ -221,4 +221,23 @@ public class PlanDxfWriterTests
         texts.ShouldContain(t => t.Contains("routing.throughColumn"));
         texts.ShouldContain(t => t.Contains("routing.noDnTable") && t.Contains("Нет табл. Б.4."));
     }
+
+    [Fact]
+    public void Base_drawing_from_another_cad_without_the_default_dimension_style_is_written()
+    {
+        // Чертёж из ezdxf содержит только стиль размеров Standard; заголовок ACadSharp ссылается на ISO-25 — запись DWG падала.
+        var root = new DirectoryInfo(AppContext.BaseDirectory);
+        while (root is not null && !File.Exists(Path.Combine(root.FullName, "WaterAuto.sln"))) { root = root.Parent; }
+        var fixture = Path.Combine(root!.FullName, "tests", "Samples", "parking60x30", "floor.dxf");
+        var path = Path.Combine(Path.GetTempPath(), $"base_{Guid.NewGuid():N}.dwg");
+        try
+        {
+            Should.NotThrow(() => PlanDxfWriter.Write(path, new SprinklerLayout([], [], []), [], [], basePath: fixture));
+            new FileInfo(path).Length.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
