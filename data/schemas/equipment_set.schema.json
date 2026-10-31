@@ -79,6 +79,31 @@
           "role": {
             "type": "string",
             "description": "Роль элемента на принципиальной схеме — по ней схема ставит номер позиции спецификации."
+          },
+          "signals": {
+            "type": "array",
+            "description": "Сигналы позиции в систему пожарной сигнализации (ADR 0012): по одному на каждое устройство позиции.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "valvePosition",
+                    "pressureSwitch"
+                  ],
+                  "description": "valvePosition — положение запорного устройства, pressureSwitch — срабатывание сигнализатора давления."
+                },
+                "clause": {
+                  "type": "string",
+                  "description": "Документ и пункт, по которому нужен контроль, если он есть в данных."
+                }
+              }
+            }
           }
         }
       }

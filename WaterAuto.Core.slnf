@@ -2,6 +2,7 @@
   "solution": {
     "path": "WaterAuto.sln",
     "projects": [
+      "src\\WaterAuto.Alarm\\WaterAuto.Alarm.csproj",
       "src\\WaterAuto.Application\\WaterAuto.Application.csproj",
       "src\\WaterAuto.Calc\\WaterAuto.Calc.csproj",
       "src\\WaterAuto.Catalog\\WaterAuto.Catalog.csproj",

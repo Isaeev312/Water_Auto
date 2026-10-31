@@ -34,7 +34,8 @@ public sealed record NoteInputs(
     PumpRoomPlan? RoomPlan = null,
     PipingResult? Piping = null,
     string? PipingSource = null,
-    UserTank? Tank = null);
+    UserTank? Tank = null,
+    ProjectJockey? Jockey = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -239,6 +240,10 @@ public static class ExplanatoryNoteComposer
 
     private static string F(double v, string format = "0.###") => v.ToString(format, Ru);
 
+    // Обязательная запись норм: если её нет, выпуск останавливается с явной ошибкой, а не подставляет «?? 0».
+    private static NormRecord Need(INormsProvider norms, string id) =>
+        norms.Find(id) ?? throw new InvalidOperationException($"В данных норм нет записи {id}.");
+
     private static NoteSection Hydraulics(NoteInputs i, INormsProvider norms)
     {
         var d = i.Design;
@@ -406,15 +411,45 @@ public static class ExplanatoryNoteComposer
         var supplyDn = d.SupplyPipe?.Dn ?? s.SupplyDn;
         var kt = d.SupplyPipe?.Kt.Kt ?? 0;
         var m3h = d.PumpFlow.LitersPerSecond * 3.6;
-        var jockey = norms.Find("sp485.p6_9_4.jockeyTank");
+        var jockey = Need(norms, "sp485.p6_9_4.jockeyTank");
         return new NoteSection("6", "Насосная установка", [
             .. PumpHeadBlocks(i, supplyDn, kt, m3h, jockey),
-            .. i.Station is { } st ? StationBlocks(st, norms) : [],
+            .. i.Station is { } st ? StationBlocks(st, norms, i.SetChoice) : [],
+            .. JockeyBlocks(i, jockey),
             .. SetBlocks(i),
         ]);
     }
 
-    private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord? jockey)
+    // Жокей-насос — решение проектировщика (В-07): норма расход и уставки не задаёт. В записку идут только заданные
+    // данные, без выдуманных уставок; ёмкость мембранного бака — из данных норм (п. 6.9.4).
+    private static IEnumerable<NoteBlock> JockeyBlocks(NoteInputs i, NormRecord jockeyRule)
+    {
+        if (i.Jockey is not { } jockey
+            || (jockey.FlowLitersPerSecond is null && jockey.StartPressureMpa is null && jockey.StopPressureMpa is null))
+        {
+            yield break;
+        }
+
+        var parts = new List<string>();
+        if (jockey.FlowLitersPerSecond is { } flow)
+        {
+            parts.Add($"расход {F(flow, "0.###")} л/с");
+        }
+
+        if (jockey.StartPressureMpa is { } start)
+        {
+            parts.Add($"включение при *P*_{{вкл}} = {F(start, "0.###")} МПа");
+        }
+
+        if (jockey.StopPressureMpa is { } stop)
+        {
+            parts.Add($"отключение при *P*_{{откл}} = {F(stop, "0.###")} МПа");
+        }
+
+        yield return new NoteParagraph($"**Жокей-насос.** Принято решением проектировщика: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
+    }
+
+    private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord jockey)
     {
         var d = i.Design;
         var s = i.DesignSettings;
@@ -448,7 +483,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Требования к насосной установке по СП 485:"),
             new NoteList([
                 "при любом количестве рабочих агрегатов предусматривается не менее одного резервного, обеспечивающего подачу и напор наиболее производительного рабочего; резервный включается автоматически (п. 6.10.3);",
-                $"автоматический водопитатель — жокей-насос с мембранной ёмкостью вместимостью не менее {F(jockey?.Values["minVolume"] ?? 0)} л, вода — от {F(jockey?.Values["waterShareMin"] ?? 0)} до {F(jockey?.Values["waterShareMax"] ?? 0)} % вместимости (п. 6.9.4); при включении пожарного насоса он отключается (п. 6.9.5);",
+                $"автоматический водопитатель — жокей-насос с мембранной ёмкостью вместимостью не менее {F(jockey.Values["minVolume"]!.Value)} л, вода — от {F(jockey.Values["waterShareMin"]!.Value)} до {F(jockey.Values["waterShareMax"]!.Value)} % вместимости (п. 6.9.4); при включении пожарного насоса он отключается (п. 6.9.5);",
                 "вспомогательный водопитатель — если выход пожарного насоса на режим занимает более 60 с (п. 6.9.8);",
                 "насосы относятся ко II категории по обеспеченности подачи воды и к I категории надёжности электроснабжения (п. 6.10.5);",
                 "насосная станция — на первом, цокольном или первом подземном этаже, отделена противопожарными стенами (перегородками) 1-го типа и перекрытиями 2-го типа (пп. 6.10.9, 6.10.11);",
@@ -485,14 +520,16 @@ public static class ExplanatoryNoteComposer
         return blocks;
     }
 
-    // Насосная станция: состав агрегатов, обвязка по скорости (6.7.1.37), проходы (6.10.16), патрубки (6.10.17, 6.10.18), микроклимат (6.10.12).
-    private static List<NoteBlock> StationBlocks(PumpStationResult st, INormsProvider norms)
+    // Насосная станция: состав агрегатов (по выбранной установке или п. 6.10.3), обвязка по скорости (6.7.1.37), проходы (6.10.16), патрубки (6.10.17, 6.10.18), микроклимат (6.10.12).
+    private static List<NoteBlock> StationBlocks(PumpStationResult st, INormsProvider norms, PumpSetChoice? setChoice)
     {
         double V(StationPipe p) => (p.Pipe.OuterDiameterMm - (2 * p.Pipe.WallMm)) / 1000;
         var q = st.PumpFlow.LitersPerSecond / 1000;
         var blocks = new List<NoteBlock>
         {
-            new NoteParagraph($"**Насосная станция.** Принято {st.WorkingPumps} рабочий и {st.StandbyPumps} резервный насосный агрегат одинаковой конструкции, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении."),
+            new NoteParagraph(setChoice?.Chosen is { } set
+                ? string.Create(Ru, $"**Насосная станция.** Принята комплектная установка {set.Designation} ({set.Pump}): основных насосов — {set.MainPumps}, резервных — {set.StandbyPumps}, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении.")
+                : $"**Насосная станция.** Принято {st.WorkingPumps} рабочий и {st.StandbyPumps} резервный насосный агрегат одинаковой конструкции, каждый на полную подачу *Q* = {F(st.PumpFlow.LitersPerSecond, "0.00")} л/с и напор *H* = {F(st.PumpHead.Meters, "0.0")} м (п. 6.10.3). Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении."),
             new NoteParagraph("Диаметры всасывающего и напорного трубопроводов агрегата подобраны по скорости воды *v* = 4·*Q* / (π·*d*^{2}) (п. 6.7.1.37):"),
             new NoteFormula($"*v*_{{вс}} = 4·{F(q, "0.0000")} / (π·{F(V(st.Suction), "0.000")}^{{2}}) = **{F(st.Suction.Velocity, "0.00")} м/с** ≤ {F(st.SuctionLimit)} м/с — DN{st.Suction.Pipe.Dn} (Ø{F(st.Suction.Pipe.OuterDiameterMm, "0.#")}×{F(st.Suction.Pipe.WallMm, "0.#")} мм);", "6.6", []),
             new NoteFormula($"*v*_{{нап}} = 4·{F(q, "0.0000")} / (π·{F(V(st.Discharge), "0.000")}^{{2}}) = **{F(st.Discharge.Velocity, "0.00")} м/с** ≤ {F(st.DischargeLimit)} м/с — DN{st.Discharge.Pipe.Dn} (Ø{F(st.Discharge.Pipe.OuterDiameterMm, "0.#")}×{F(st.Discharge.Pipe.WallMm, "0.#")} мм).", "6.7", [
@@ -530,7 +567,7 @@ public static class ExplanatoryNoteComposer
     {
         var d = i.Design;
         var s = i.DesignSettings;
-        var limit = norms.Find("sp485.p6_9_12.minNetworkPressure")?.Values["pressure"] ?? 0;
+        var limit = Need(norms, "sp485.p6_9_12.minNetworkPressure").Values["pressure"]!.Value;
         var needed = s.InletPressure.Mpa < limit;
         return new NoteSection("7", "Запас воды", [
             new NoteParagraph($"Продолжительность подачи воды для группы помещений {i.RoomGroup} — *t* = {F(d.Duration)} мин (таблица 6.1). Расчётный объём воды на пожаротушение:"),

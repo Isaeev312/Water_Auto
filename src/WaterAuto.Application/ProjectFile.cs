@@ -61,6 +61,10 @@ public sealed record ProjectFile
     }
 
     public static string ToJson(ProjectFile project) => JsonSerializer.Serialize(project, Indented);
+
+    /// <summary>Проект из строки JSON (тем же форматом, что и файл проекта) — для проверок без записи на диск.</summary>
+    public static ProjectFile FromJson(string json) =>
+        JsonSerializer.Deserialize<ProjectFile>(json, Options) ?? throw new InvalidDataException("Пустой JSON проекта.");
 }
 
 /// <summary>Исходные данные расчёта.</summary>
@@ -141,7 +145,7 @@ public sealed record ProjectDesign
     /// <summary>Давление на входе насоса (гарантированный напор по ТУ), МПа; по умолчанию 0,10 МПа (10 м вод. ст.) — уточнить по ТУ.</summary>
     public double InletPressure { get; init; } = 0.10;
 
-    /// <summary>Скорость для подбора диаметров по Б.5, м/с; null — диаметры по табл. Б.4.</summary>
+    /// <summary>Скорость для подбора диаметров по Б.5, м/с; null — скорость из data/catalog/pipe_sizes.json (defaultDesignVelocity), без неё — табл. Б.4.</summary>
     public double? DesignVelocity { get; init; }
 
     /// <summary>Кольцевой питающий трубопровод (рис. Б.2, секции В, Г; ADR 0011).</summary>
@@ -159,8 +163,43 @@ public sealed record ProjectDesign
     /// <summary>Помещение насосной станции: отметки и конструкция (слои ПТ_НС*).</summary>
     public ProjectPumpRoom PumpRoom { get; init; } = new();
 
+    /// <summary>Комплектная насосная установка: ручной выбор из каталога (data/catalog/pump_sets_*.json) или автоподбор по Q и H.</summary>
+    public ProjectPumpStation PumpStation { get; init; } = new();
+
+    /// <summary>Жокей-насос: расход и уставки — решение проектировщика (норма их не задаёт, вопрос В-07); null — не заданы.</summary>
+    public ProjectJockey? Jockey { get; init; }
+
     /// <summary>Резервуар пожарного запаса пользователя (габариты и мёртвый слой); null — без сравнения с требуемым объёмом.</summary>
     public ProjectTank? Tank { get; init; }
+}
+
+/// <summary>
+/// Комплектная насосная установка проекта: конкретная установка каталога вместо автоподбора по требуемым подаче и напору.
+/// Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — количество насосов в выпуске берётся по ней.
+/// </summary>
+public sealed record ProjectPumpStation
+{
+    /// <summary>
+    /// Обозначение установки из каталога (designation, напр. «Hydro MX-A 2/1 CR 45-4»); пусто — установка подбирается
+    /// автоматически по расчётным Q и H. Неизвестное обозначение — ошибка проекта (Issue pump.setNotFound).
+    /// </summary>
+    public string SetDesignation { get; init; } = "";
+}
+
+/// <summary>
+/// Жокей-насос: расход и уставки — решение проектировщика (норма их не задаёт, вопрос В-07). Пустые поля не заданы;
+/// параметры не влияют на расчёт Q/H и спецификацию — только на замечания и пояснительную записку.
+/// </summary>
+public sealed record ProjectJockey
+{
+    /// <summary>Расход жокей-насоса, л/с; норма его не задаёт (В-07) — по опросному листу изготовителя.</summary>
+    public double? FlowLitersPerSecond { get; init; }
+
+    /// <summary>Давление включения жокей-насоса, МПа; норма уставку не задаёт (В-07).</summary>
+    public double? StartPressureMpa { get; init; }
+
+    /// <summary>Давление отключения жокей-насоса, МПа; норма уставку не задаёт (В-07).</summary>
+    public double? StopPressureMpa { get; init; }
 }
 
 /// <summary>Резервуар пожарного запаса: габариты и мёртвый слой, м (ARCHITECTURE §5).</summary>
@@ -188,8 +227,11 @@ public sealed class ProjectPumpRoom
     /// <summary>Отметка пола насосной.</summary>
     public double FloorElevation { get; init; }
 
-    /// <summary>Отметка уровня земли (планировочная) — для выводов на фасад (патрубки ГМ, п. 6.10.18).</summary>
-    public double GroundElevation { get; init; } = 3.0;
+    /// <summary>
+    /// Отметка уровня земли (планировочная) — для выводов на фасад (патрубки ГМ, п. 6.10.18).
+    /// По умолчанию пол насосной и земля на одном уровне (план этажа без разрезов); для заглублённой насосной задаётся в проекте.
+    /// </summary>
+    public double GroundElevation { get; init; }
 
     /// <summary>Заглубление ввода от уровня земли.</summary>
     public double InletDepth { get; init; } = 1.6;

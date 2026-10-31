@@ -128,7 +128,7 @@ public static class InletRouteDxfWriter
                 doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.5 * h, Layer = route });
                 doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm + (3 * h), at.YMm - (3 * h))) { Layer = text });
                 doc.Entities.Add(new Line(P(at.XMm + (3 * h), at.YMm - (3 * h)), P(at.XMm + (12 * h), at.YMm - (3 * h))) { Layer = text });
-                Text(at.XMm + (3.2 * h), at.YMm - (2.8 * h), string.Create(ru, $"отм. {top:+0.000} / {bottom:+0.000}"), 0.7 * h);
+                Text(at.XMm + (3.2 * h), at.YMm - (2.8 * h), $"отм. {Elev(top)} / {Elev(bottom)}", 0.7 * h);
             }
 
             if (line.Vent is { } vent)
@@ -182,6 +182,10 @@ public static class InletRouteDxfWriter
 
         return doc;
     }
+
+    // Отметка со знаком по правилам чертежей: +3,300 / −1,600 / 0,000. Формат "+0.000" без секции
+    // отрицательных значений для отрицательного числа давал «-+1,600» (минус перед литералом «+»).
+    private static string Elev(double m) => m.ToString("+0.000;−0.000;0.000", CultureInfo.GetCultureInfo("ru-RU"));
 
     private static XYZ At(PlanPoint a, PlanPoint b, double t) => new(a.XMm + ((b.XMm - a.XMm) * t), a.YMm + ((b.YMm - a.YMm) * t), 0);
 }

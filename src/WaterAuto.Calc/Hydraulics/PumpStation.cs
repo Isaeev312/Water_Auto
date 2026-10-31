@@ -57,6 +57,7 @@ public static class PumpStation
 
         var suction = Pipe(suctionLimit, "всасывающего");
         var discharge = Pipe(dischargeLimit, "напорного");
+        issues.AddRange(series.Issues);
         return new PumpStationResult(
             pumpFlow,
             pumpHead,

@@ -14,6 +14,15 @@ public static class EquipmentSet
     public const string FlushingFile = "flushing_set.json";
     public const string PumpStationFile = "pump_station.json";
 
+    /// <summary>
+    /// Роли строк шаблона насосной, которые входят в комплектную установку: при её подборе строки заменяются одной
+    /// строкой установки, а сигналы этих позиций не выдаются.
+    /// </summary>
+    public static readonly IReadOnlySet<string> PumpSetRoles = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "pump", "cabinet", "valveS", "valveD", "checkD", "insertS", "insertD", "vacuum", "gauge", "cock", "teeS", "teeD", "reducerS", "reducerD", "capS", "capD",
+    };
+
     public static string PathFor(string normsDir, string file) => Path.Combine(Path.GetDirectoryName(SprinklerCatalog.PathFor(normsDir))!, file);
 
     /// <param name="places">DN каждого места установки.</param>
@@ -80,6 +89,69 @@ public static class EquipmentSet
         }
 
         return Merge(items);
+    }
+
+    /// <summary>
+    /// Сигналы в АПС по полю signals шаблона (ADR 0012): по одному источнику на сигнал позиции, количество — как у строки
+    /// спецификации (per × множитель count). Подстановки и множители — как в <see cref="Items(string, TakeoffGroup, IReadOnlyDictionary{string, string}, IReadOnlyDictionary{string, int})"/>.
+    /// Позиции с ролью из <paramref name="excludedRoles"/> пропускаются — так сигналы совпадают со спецификацией,
+    /// когда строки заменены комплектной установкой (<see cref="PumpSetRoles"/>).
+    /// </summary>
+    public static IReadOnlyList<SignalSource> Signals(string path, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts, IReadOnlySet<string>? excludedRoles = null)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(counts);
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var signals = new List<SignalSource>();
+        foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
+        {
+            var role = t.TryGetProperty("role", out var r) ? r.GetString() : null;
+            if (!t.TryGetProperty("signals", out var list) || (role is not null && excludedRoles?.Contains(role) == true))
+            {
+                continue;
+            }
+
+            var times = t.TryGetProperty("count", out var c) ? counts.GetValueOrDefault(c.GetString()!) : 1;
+            if (times == 0)
+            {
+                continue;
+            }
+
+            var name = tokens.Aggregate(t.GetProperty("name").GetString()!, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+            var count = (int)Math.Round(t.GetProperty("per").GetDouble() * times);
+            foreach (var s in list.EnumerateArray())
+            {
+                signals.Add(new SignalSource(
+                    role,
+                    name,
+                    s.GetProperty("kind").GetString() switch
+                    {
+                        "valvePosition" => SignalKind.ValvePosition,
+                        "pressureSwitch" => SignalKind.PressureSwitch,
+                        var kind => throw new InvalidDataException($"{path}: неизвестный вид сигнала «{kind}»."),
+                    },
+                    count,
+                    s.TryGetProperty("clause", out var cl) ? cl.GetString() : null));
+            }
+        }
+
+        return signals;
+    }
+
+    /// <summary>Сигналы комплекта на каждое место установки (<paramref name="places"/> — DN мест), сложенные по DN.</summary>
+    /// <remarks>
+    /// Сквозной расчёт узлы управления берёт из шаблона насосной (роли cu, cuValve); control_unit.json вместе с ним
+    /// не читается, иначе сигналы узлов посчитались бы дважды.
+    /// </remarks>
+    public static IReadOnlyList<SignalSource> Signals(string path, IEnumerable<int> places)
+    {
+        ArgumentNullException.ThrowIfNull(places);
+        return places
+            .GroupBy(dn => dn)
+            .OrderBy(g => g.Key)
+            .SelectMany(g => Signals(path, new Dictionary<string, string> { ["dn"] = g.Key.ToString(CultureInfo.InvariantCulture) }, new Dictionary<string, int>())
+                .Select(s => s with { Count = s.Count * g.Count() }))
+            .ToList();
     }
 
     private static List<TakeoffItem> Merge(List<TakeoffItem> items)

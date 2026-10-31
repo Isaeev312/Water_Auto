@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using ACadSharp;
 using ACadSharp.Entities;
 using ACadSharp.IO;
@@ -34,7 +35,16 @@ public static class FloorPlanImporter
     public const string PumpTruckLayer = "ПТ_НС_ГМ";
     public const string BuildingInletLayer = "ПТ_ВВОД_ЗД";
 
-    private static readonly string[] KnownLayers = [ContourLayer, ColumnLayer, BeamLayer, DuctLayer, NoSprinklerLayer, InletLayer, PumpRoomLayer, PumpInletLayer, PumpOutletLayer, PumpTruckLayer, BuildingInletLayer];
+    /// <summary>Слой высотных отметок: тексты «-1,200», «±0,000», «отм. +3,600» — отметки в метрах.</summary>
+    public const string LevelMarkLayer = "ПТ_ОТМЕТКИ";
+
+    private static readonly string[] KnownLayers = [ContourLayer, ColumnLayer, BeamLayer, DuctLayer, NoSprinklerLayer, InletLayer, PumpRoomLayer, PumpInletLayer, PumpOutletLayer, PumpTruckLayer, BuildingInletLayer, LevelMarkLayer];
+
+    // Высотная отметка текстом: необязательное «отм.» (с точкой или без), знак («+», «-», «−», «±») и число в метрах
+    // с запятой или точкой. Примеры: «-1,200», «±0,000», «0.000», «отм. +3,600».
+    private static readonly Regex LevelMarkText = new(
+        @"^\s*(?:отм\.?\s*)?(?<sign>[+\-−±])?\s*(?<value>\d+(?:[.,]\d+)?)\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     // Шаг разбиения дуг полилиний (bulge) и окружностей колонн, радиан.
     private const double ArcStep = Math.PI / 18;
@@ -95,6 +105,7 @@ public static class FloorPlanImporter
         var truckInlets = new List<PlanPoint>();
         var buildingInlets = new List<PlanPoint>();
         var zoneTexts = new List<(PlanPoint Point, string Text, string Id)>();
+        var levelMarks = new List<LevelMark>();
 
         foreach (var entity in doc.Entities)
         {
@@ -134,6 +145,12 @@ public static class FloorPlanImporter
                     break;
                 case (NoSprinklerLayer, MText t):
                     zoneTexts.Add((P(t.InsertPoint), t.PlainText, id));
+                    break;
+                case (LevelMarkLayer, TextEntity t):
+                    ReadLevelMark(levelMarks, W(P(t.InsertPoint), mirror), t.Value, id, issues);
+                    break;
+                case (LevelMarkLayer, MText t):
+                    ReadLevelMark(levelMarks, P(t.InsertPoint), t.PlainText, id, issues);
                     break;
                 case (PumpRoomLayer, TextEntity or MText):
                     break;
@@ -277,6 +294,7 @@ public static class FloorPlanImporter
         var plan = issues.Any(i => i.Level == IssueLevel.Error) ? null : new FloorPlan(rooms, columns, beams, ducts, zones, inlets)
         {
             BuildingInlets = buildingInlets,
+            LevelMarks = levelMarks,
 
             // Дверь — точка слоя ПТ_НС на контуре или рядом с ним (не дальше 0,5 м).
             // Ввод и выпуски — точки слоёв ПТ_НС_ВВОД и ПТ_НС_ВЫПУСК на стене насосной (не дальше 0,5 м).
@@ -299,6 +317,34 @@ public static class FloorPlanImporter
 
         var upper = name.Trim().ToUpperInvariant();
         return KnownLayers.FirstOrDefault(l => l == upper);
+    }
+
+    // Высотная отметка текстом: значение в метрах; непарсящийся текст — Warning (импорт не останавливается).
+    private static void ReadLevelMark(List<LevelMark> marks, PlanPoint at, string text, string id, List<Issue> issues)
+    {
+        if (ParseLevelMark(text) is { } elevation)
+        {
+            marks.Add(new LevelMark(id, at, new Length(elevation)));
+            return;
+        }
+
+        issues.Add(new Issue("import.levelMark", IssueLevel.Warning,
+            $"Текст «{text.Trim()}» на слое {LevelMarkLayer} не распознан как высотная отметка в метрах (примеры: «-1,200», «±0,000», «отм. +3,600»).",
+            id, null, at));
+    }
+
+    // «-1,200» → −1,2; «±0,000» → 0; «отм. +3,600» → 3,6; «0.000» → 0; null — не отметка.
+    private static double? ParseLevelMark(string text)
+    {
+        var match = LevelMarkText.Match(text);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var value = double.Parse(match.Groups["value"].Value.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture);
+        var sign = match.Groups["sign"].Value;
+        return sign is "-" or "−" ? -value : value;
     }
 
     // Слой «почти ПТ_»: латинские буквы вместо кириллических или опечатка — пользователь иначе увидит только «нет ПТ_ВВОД».
@@ -522,6 +568,7 @@ public static class FloorPlanImporter
         PumpInletLayer or PumpOutletLayer => "точка или блок на стене насосной",
         PumpTruckLayer => "точка на наружной стене насосной",
         BuildingInletLayer => "точка или блок на наружной стене (ввод водопровода в здание)",
+        LevelMarkLayer => "текст с высотной отметкой в метрах (например, -1,200)",
         ContourLayer => "замкнутая полилиния (и текст с именем)",
         _ => "замкнутая полилиния",
     };

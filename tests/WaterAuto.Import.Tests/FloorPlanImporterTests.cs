@@ -1,6 +1,8 @@
 using System.Text;
 using ACadSharp;
+using ACadSharp.Entities;
 using ACadSharp.Types.Units;
+using CSMath;
 using WaterAuto.Core;
 
 namespace WaterAuto.Import.Tests;
@@ -381,5 +383,79 @@ public class FloorPlanImporterTests
         b.Point(FloorPlanImporter.BuildingInletLayer, 0, 5000);
         b.Point(FloorPlanImporter.BuildingInletLayer, 0, 8000);
         ImportDxf(b).Plan!.BuildingInlets.ShouldBe([new PlanPoint(0, 5000), new PlanPoint(0, 8000)]);
+    }
+
+    // ---------- Высотные отметки (слой ПТ_ОТМЕТКИ) ----------
+
+    private static LevelMark MarkAt(ImportResult r, double x, double y) =>
+        r.Plan!.LevelMarks.Single(m => Math.Abs(m.Location.XMm - x) < 1 && Math.Abs(m.Location.YMm - y) < 1);
+
+    [Fact]
+    public void Level_marks_are_read_from_texts_in_metres()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Text(FloorPlanImporter.LevelMarkLayer, 5000, 5000, "-1,200");
+        b.Text(FloorPlanImporter.LevelMarkLayer, 6000, 5000, "±0,000");
+        b.Text(FloorPlanImporter.LevelMarkLayer, 7000, 5000, "отм. +3,600");
+        b.Text(FloorPlanImporter.LevelMarkLayer, 8000, 5000, "Отм 0.000");
+        b.MText(FloorPlanImporter.LevelMarkLayer, 9000, 5000, "отм -2,5");
+        b.Text(FloorPlanImporter.LevelMarkLayer, 10000, 5000, "−0,600"); // типографский минус
+
+        var r = ImportDxf(b);
+
+        r.HasErrors.ShouldBeFalse(string.Join("; ", r.Issues.Select(i => i.Message)));
+        r.Issues.ShouldNotContain(i => i.Code == "import.unknownLayer");
+        r.Plan!.LevelMarks.Count.ShouldBe(6);
+        MarkAt(r, 5000, 5000).Elevation.Meters.ShouldBe(-1.2, 1e-9);
+        MarkAt(r, 6000, 5000).Elevation.Meters.ShouldBe(0, 1e-9);
+        MarkAt(r, 7000, 5000).Elevation.Meters.ShouldBe(3.6, 1e-9);
+        MarkAt(r, 8000, 5000).Elevation.Meters.ShouldBe(0, 1e-9);
+        MarkAt(r, 9000, 5000).Elevation.Meters.ShouldBe(-2.5, 1e-9);
+        MarkAt(r, 10000, 5000).Elevation.Meters.ShouldBe(-0.6, 1e-9);
+        r.Plan.LevelMarks.ShouldAllBe(m => m.Id.StartsWith('H') && m.Location.YMm == 5000);
+    }
+
+    [Fact]
+    public void Mirrored_level_mark_text_is_placed_in_world_coordinates()
+    {
+        // Нормаль (0, 0, −1): OCS X = −9000 соответствует миру X = 9000.
+        var b = DrawingBuilder.ValidFloor();
+        var mark = new TextEntity("-2,500") { InsertPoint = new XYZ(-9000, 5000, 0), Height = 250, Layer = b.Layer(FloorPlanImporter.LevelMarkLayer) };
+        mark.Normal = new XYZ(0, 0, -1);
+        b.Document.Entities.Add(mark);
+
+        var r = ImportDxf(b);
+
+        r.HasErrors.ShouldBeFalse(string.Join("; ", r.Issues.Select(i => i.Message)));
+        var only = r.Plan!.LevelMarks.ShouldHaveSingleItem();
+        only.Location.ShouldBe(new PlanPoint(9000, 5000));
+        only.Elevation.Meters.ShouldBe(-2.5, 1e-9);
+    }
+
+    [Fact]
+    public void Unrecognized_level_mark_text_is_a_warning_and_the_plan_is_imported()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Text(FloorPlanImporter.LevelMarkLayer, 5000, 5000, "низ перекрытия");
+
+        var r = ImportDxf(b);
+
+        r.HasErrors.ShouldBeFalse(string.Join("; ", r.Issues.Select(i => i.Message)));
+        var warning = Single(r, "import.levelMark");
+        warning.Level.ShouldBe(IssueLevel.Warning);
+        warning.Location.ShouldBe(new PlanPoint(5000, 5000));
+        r.Plan!.LevelMarks.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Geometry_on_the_level_mark_layer_is_unsupported()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Line(FloorPlanImporter.LevelMarkLayer, 0, 0, 5000, 0);
+
+        var e = Single(ImportDxf(b), "import.unsupportedEntity");
+
+        e.Level.ShouldBe(IssueLevel.Error);
+        e.Message.ShouldContain("отмет");
     }
 }

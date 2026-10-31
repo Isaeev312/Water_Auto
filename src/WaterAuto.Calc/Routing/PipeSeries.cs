@@ -25,15 +25,18 @@ public sealed class PipeSeries
     private readonly IReadOnlyList<PipeSize> _sizes;
 
     /// <param name="sizes">Принятые размеры труб по DN; для DN из списка вместо первой строки табл. Б.2 берётся этот размер.</param>
-    public PipeSeries(INormsProvider norms, string standard, IReadOnlyList<PipeSize>? sizes = null)
+    /// <param name="includeOutdoorOnly">Разрешить строки табл. Б.2, отмеченные «*» (трубы наружных сетей): нужно для обвязки
+    /// насосной, где внутренний сортамент кончается на DN 150. Каждое такое применение сопровождается Info-замечанием.</param>
+    public PipeSeries(INormsProvider norms, string standard, IReadOnlyList<PipeSize>? sizes = null, bool includeOutdoorOnly = false)
     {
         ArgumentNullException.ThrowIfNull(norms);
         _norms = norms;
         _sizes = sizes ?? [];
         _standard = standard;
+        _includeOutdoorOnly = includeOutdoorOnly;
         var parts = Parse(standard);
         _rows = norms.ByClause("табл. Б.2")
-            .Where(r => r.Attributes.GetValueOrDefault("outdoorOnly") != "true")
+            .Where(r => includeOutdoorOnly || r.Attributes.GetValueOrDefault("outdoorOnly") != "true")
             .Where(r => parts.Any(p => Matches(p.Standard, r) && r.Values["dn"]!.Value >= p.FromDn && r.Values["dn"]!.Value < p.ToDn))
             .OrderBy(r => r.Values["dn"])
             .ToList();
@@ -41,6 +44,8 @@ public sealed class PipeSeries
     }
 
     private readonly Func<NormRecord, string> _designation;
+
+    private readonly bool _includeOutdoorOnly;
 
     private const string LargeMark = " от DN";
 
@@ -94,6 +99,12 @@ public sealed class PipeSeries
 
         var rows = _rows.Where(r => (int)r.Values["dn"]!.Value == actual).ToList();
         var row = rows[0];
+        if (_includeOutdoorOnly && row.Attributes.GetValueOrDefault("outdoorOnly") == "true")
+        {
+            _issues.Add(new Issue("pipe.outdoorOnly", IssueLevel.Info,
+                $"DN {actual}: принята труба из строки табл. Б.2, отмеченной «*» (трубы наружных сетей); для обвязки насосной согласовать с экспертизой.", row.Id, "табл. Б.2"));
+        }
+
         var designation = _designation(row);
         var baseStandard = row.Attributes.GetValueOrDefault("standard") ?? "";
         if (_sizes.FirstOrDefault(s => s.Dn == actual && s.Standard == baseStandard) is { } size)
@@ -128,3 +139,4 @@ public sealed class PipeSeries
             _designation(row));
     }
 }
+

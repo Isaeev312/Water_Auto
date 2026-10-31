@@ -1,0 +1,15 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Акцент: синий (по умолчанию). Набор ключей одинаков для всех Accent.*.xaml.
+        Accent.Soft — полупрозрачная заливка акцента: корректно смотрится и в светлой, и в тёмной теме.
+    -->
+
+    <SolidColorBrush x:Key="Brush.Accent" Color="#2563EB" />
+    <SolidColorBrush x:Key="Brush.Accent.Hover" Color="#1D4ED8" />
+    <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="#1E40AF" />
+    <SolidColorBrush x:Key="Brush.Accent.Soft" Color="#1A2563EB" />
+    <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
+
+</ResourceDictionary>

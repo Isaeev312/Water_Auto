@@ -1,0 +1,12 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Акцент: индиго. Набор ключей одинаков для всех Accent.*.xaml. -->
+
+    <SolidColorBrush x:Key="Brush.Accent" Color="#4F46E5" />
+    <SolidColorBrush x:Key="Brush.Accent.Hover" Color="#4338CA" />
+    <SolidColorBrush x:Key="Brush.Accent.Pressed" Color="#3730A3" />
+    <SolidColorBrush x:Key="Brush.Accent.Soft" Color="#1A4F46E5" />
+    <SolidColorBrush x:Key="Brush.Text.OnAccent" Color="#FFFFFF" />
+
+</ResourceDictionary>
