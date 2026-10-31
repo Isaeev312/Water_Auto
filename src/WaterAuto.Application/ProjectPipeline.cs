@@ -238,6 +238,32 @@ public static class ProjectPipeline
             }
         }
 
+        if (project.Alarm?.Hvac is { } hvac)
+        {
+            // АППЗ: команды СПС в вентиляцию — ТЗ разделу ОВ; состав систем — исходные данные проекта.
+            var hvacInputs = new HvacInputs(hvac.GeneralVentilation, [.. hvac.SmokeZones.Select(z => new SmokeZone(z.Name, z.ExhaustSystem, z.SupplySystem, z.SmokeDampers))], hvac.NormallyOpenDampers);
+            var hvacCommands = HvacCommands.Build(hvacInputs, norms);
+            issues.AddRange(hvacCommands.Issues);
+            if (hvacCommands.Outputs > 0)
+            {
+                if (relayModel is null)
+                {
+                    issues.Add(new Issue("aps.hvac.noRelay", IssueLevel.Warning, $"АППЗ: релейный блок не выбран (каталог {AlarmNotifierCatalog.File}) — {hvacCommands.Outputs} выходов не учтены в питании и спецификации."));
+                }
+                else
+                {
+                    poweredDevices.Add((relayModel.Device, (hvacCommands.Outputs + relayModel.Outputs - 1) / relayModel.Outputs));
+                }
+            }
+            if (hvacCommands.Commands.Count > 0)
+            {
+                var th = project.Title;
+                var hvacSpec = HvacSpec.Build(new NoteTitle(th.Organization, th.Subject, th.Document, th.Author, th.Supervisor, th.CityYear, project.Name), hvacInputs, hvacCommands.Commands);
+                Write(alarmDir, HvacSpecFile, files, p => NoteDocx.Write(p, hvacSpec, Stamp(project, "АПС.ТЗ-ОВ", "Техническое задание на автоматизацию вентиляции при пожаре"), project.Font));
+            }
+        }
+
+
         // Столбец табл. Б.4 — «до порога давления» (большие диаметры); окончательно диаметры подбирает Б.5 в расчёте.
         var routing = PipeRouter.Route(plan, layout, norms, rules, Pressure.Zero, design.Ring);
         issues.AddRange(routing.Issues);
@@ -1214,31 +1240,6 @@ public static class ProjectPipeline
             var ti = project.Title;
             var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
             Write(alarmDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "АПС.ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
-        }
-
-        if (project.Alarm?.Hvac is { } hvac)
-        {
-            // АППЗ: команды СПС в вентиляцию — ТЗ разделу ОВ; состав систем — исходные данные проекта.
-            var hvacInputs = new HvacInputs(hvac.GeneralVentilation, [.. hvac.SmokeZones.Select(z => new SmokeZone(z.Name, z.ExhaustSystem, z.SupplySystem, z.SmokeDampers))], hvac.NormallyOpenDampers);
-            var hvacCommands = HvacCommands.Build(hvacInputs, norms);
-            issues.AddRange(hvacCommands.Issues);
-            if (hvacCommands.Outputs > 0)
-            {
-                if (relayModel is null)
-                {
-                    issues.Add(new Issue("aps.hvac.noRelay", IssueLevel.Warning, $"АППЗ: релейный блок не выбран (каталог {AlarmNotifierCatalog.File}) — {hvacCommands.Outputs} выходов не учтены в питании и спецификации."));
-                }
-                else
-                {
-                    poweredDevices.Add((relayModel.Device, (hvacCommands.Outputs + relayModel.Outputs - 1) / relayModel.Outputs));
-                }
-            }
-            if (hvacCommands.Commands.Count > 0)
-            {
-                var th = project.Title;
-                var hvacSpec = HvacSpec.Build(new NoteTitle(th.Organization, th.Subject, th.Document, th.Author, th.Supervisor, th.CityYear, project.Name), hvacInputs, hvacCommands.Commands);
-                Write(alarmDir, HvacSpecFile, files, p => NoteDocx.Write(p, hvacSpec, Stamp(project, "АПС.ТЗ-ОВ", "Техническое задание на автоматизацию вентиляции при пожаре"), project.Font));
-            }
         }
 
         if (detectorLayout is not null && project.Alarm is not null)
