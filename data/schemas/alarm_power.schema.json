@@ -4,53 +4,187 @@
   "title": "Приборы питания автоматики АУПТ в АПС для расчёта АКБ (ADR 0012, п. 5): токи и ёмкости из паспортов",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "schemaVersion", "voltage", "controller", "module", "supply", "battery"],
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "voltage",
+    "controller",
+    "module",
+    "supply",
+    "battery"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "verified": { "type": "boolean" },
-    "notes": { "type": "array", "items": { "type": "string" } },
-    "voltage": { "type": "number", "exclusiveMinimum": 0, "description": "Напряжение питания набора, В: все токи — при нём." },
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "voltage": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Напряжение питания набора, В: все токи — при нём."
+    },
     "controller": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "voltage", "idle", "loaded", "loadOfLoaded", "max", "maxLoopLoad", "maxAddresses", "source"],
-      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
+      "required": [
+        "name",
+        "voltage",
+        "idle",
+        "loaded",
+        "loadOfLoaded",
+        "max",
+        "maxLoopLoad",
+        "maxAddresses",
+        "source"
+      ],
+      "certificate": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+      },
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "voltage": { "type": "number", "description": "Напряжение, при котором заданы токи, В." },
-        "idle": { "type": "number", "minimum": 0, "description": "Ток без адресных устройств, А." },
-        "loaded": { "type": "number", "minimum": 0, "description": "Ток при нагрузке линии loadOfLoaded, А." },
-        "loadOfLoaded": { "type": "number", "exclusiveMinimum": 0, "description": "Нагрузка линии, при которой задан loaded, А." },
-        "max": { "type": "number", "minimum": 0, "description": "Максимальный ток, А." },
-        "maxLoopLoad": { "type": "number", "exclusiveMinimum": 0, "description": "Допустимый (рекомендуемый) суммарный ток адресных устройств, А." },
-        "maxAddresses": { "type": "integer", "minimum": 1 },
-        "source": { "type": "string", "minLength": 1, "description": "Документ, редакция, пункт или таблица и страница." }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "voltage": {
+          "type": "number",
+          "description": "Напряжение, при котором заданы токи, В."
+        },
+        "idle": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Ток без адресных устройств, А."
+        },
+        "loaded": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Ток при нагрузке линии loadOfLoaded, А."
+        },
+        "loadOfLoaded": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Нагрузка линии, при которой задан loaded, А."
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Максимальный ток, А."
+        },
+        "maxLoopLoad": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Допустимый (рекомендуемый) суммарный ток адресных устройств, А."
+        },
+        "maxAddresses": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Документ, редакция, пункт или таблица и страница."
+        },
+        "certificate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+        }
       }
     },
     "module": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "inputs", "loopCurrent", "maxPerLoop", "source"],
-      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
+      "required": [
+        "name",
+        "inputs",
+        "loopCurrent",
+        "maxPerLoop",
+        "source"
+      ],
+      "certificate": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+      },
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "inputs": { "type": "integer", "minimum": 1, "description": "Входов (контролируемых цепей) на модуль." },
-        "loopCurrent": { "type": "number", "minimum": 0, "description": "Ток от линии контроллера, А." },
-        "maxPerLoop": { "type": "integer", "minimum": 1 },
-        "source": { "type": "string", "minLength": 1 }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Входов (контролируемых цепей) на модуль."
+        },
+        "loopCurrent": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Ток от линии контроллера, А."
+        },
+        "maxPerLoop": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+        }
       }
     },
     "supply": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "voltage", "ownCurrent", "source"],
-      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
+      "required": [
+        "name",
+        "voltage",
+        "ownCurrent",
+        "source"
+      ],
+      "certificate": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+      },
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "voltage": { "type": "number", "description": "Номинальное напряжение выхода, В." },
-        "ownCurrent": { "type": "number", "minimum": 0, "description": "Собственный ток потребления от АКБ (Iибэ), А." },
-        "source": { "type": "string", "minLength": 1 }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "voltage": {
+          "type": "number",
+          "description": "Номинальное напряжение выхода, В."
+        },
+        "ownCurrent": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Собственный ток потребления от АКБ (Iибэ), А."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+        }
       }
     },
     "detectors": {
@@ -59,31 +193,84 @@
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "loopCurrent", "source"],
+        "required": [
+          "name",
+          "loopCurrent",
+          "source"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "loopCurrent": { "type": "number", "minimum": 0, "description": "Ток от линии контроллера, А (паспорт: «не более»)." },
-          "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
-          "source": { "type": "string", "minLength": 1 }
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "loopCurrent": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Ток от линии контроллера, А (паспорт: «не более»)."
+          },
+          "certificate": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
     "battery": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "nominal", "endOfLifePercent", "discharge", "source"],
-      "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)." },
+      "required": [
+        "name",
+        "nominal",
+        "endOfLifePercent",
+        "discharge",
+        "source"
+      ],
+      "certificate": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+      },
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "nominal": { "type": "number", "exclusiveMinimum": 0, "description": "Номинальная ёмкость C20, А·ч." },
-        "endOfLifePercent": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "description": "Ёмкость в конце срока службы S, % от начальной." },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nominal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Номинальная ёмкость C20, А·ч."
+        },
+        "endOfLifePercent": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "description": "Ёмкость в конце срока службы S, % от начальной."
+        },
         "discharge": {
           "type": "object",
           "description": "Ток разряда, А, по времени разряда, ч (ключ — часы).",
-          "propertyNames": { "pattern": "^[0-9]+(\\.[0-9]+)?$" },
-          "additionalProperties": { "type": "number", "exclusiveMinimum": 0 }
+          "propertyNames": {
+            "pattern": "^[0-9]+(\\.[0-9]+)?$"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
         },
-        "source": { "type": "string", "minLength": 1 }
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certificate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+        }
       }
     }
   }
