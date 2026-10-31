@@ -28,9 +28,12 @@ public class AlarmNoteTests
         var zone = new DetectorZone("R1", "Автостоянка", new Polygon([new(0, 0), new(20000, 0), new(20000, 10000), new(0, 10000)]), new Length(3), DetectorKind.Smoke, DetectionAlgorithm.C, true);
         var layout = DetectorLayouter.Layout([zone], Norms);
         var issues = layout.Issues.Concat(ZoneChecks.Check([zone], layout, Norms)).ToList();
+        var zoning = AlarmZoning.Build([zone], layout, Norms, manualIsolator: false);
 
-        var doc = AlarmNote.Build(Title, [zone], layout, issues, [], null, Norms);
+        var doc = AlarmNote.Build(Title, [zone], layout, issues, [], null, Norms, zoning);
         var text = Text(doc);
+        text.ShouldContain($"Ручные извещатели — {zoning.Manuals.Count} шт.");
+        text.ShouldContain("ЗКСПС-1 | Автостоянка");
 
         doc.Sections.Select(s => s.Heading).ShouldContain("Размещение извещателей");
         text.ShouldContain("6.6.16");

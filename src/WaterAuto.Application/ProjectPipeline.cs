@@ -1108,7 +1108,7 @@ public static class ProjectPipeline
             // Записка АПС — объяснение хода расчёта для проектировщика: исходные данные, выбор ИП, размещение, ЗКСПС, сигналы, АКБ.
             var tn = project.Title;
             var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
-                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms);
+                detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning);
             Write(outDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
         }
 

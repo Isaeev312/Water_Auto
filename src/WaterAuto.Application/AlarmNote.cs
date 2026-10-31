@@ -14,7 +14,7 @@ public static class AlarmNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null)
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -32,7 +32,7 @@ public static class AlarmNote
 
         sections.Add(new("2", "Выбор извещателей и алгоритма", Choice(zones, norms)));
         sections.Add(new("3", "Размещение извещателей", Placement(zones, layout, issues, norms)));
-        sections.Add(new("4", "Зоны контроля и прибор", Zones(zones, layout, issues)));
+        sections.Add(new("4", "Зоны контроля, ручные извещатели, изоляторы и прибор", Zones(zones, layout, issues, zoning)));
         sections.Add(new("5", "Сигналы от установки пожаротушения", Signals(points)));
         sections.Add(new("6", "Электропитание и аккумуляторная батарея", Power(budget)));
         return new NoteDocument(title with { Title = "Пожарная сигнализация. Пояснительная записка к расчёту" }, sections, []);
@@ -90,7 +90,7 @@ public static class AlarmNote
         return blocks;
     }
 
-    private static List<NoteBlock> Zones(IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues)
+    private static List<NoteBlock> Zones(IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, AlarmZoningResult? zoning)
     {
         var area = zones.Sum(z => z.Outline.AreaMm2) / 1e6;
         var blocks = new List<NoteBlock>
@@ -102,7 +102,17 @@ public static class AlarmNote
         blocks.Add(zoneIssues.Count == 0
             ? new NoteParagraph("Ограничения по ЗКСПС и ёмкости прибора выполнены.")
             : new NoteList([.. zoneIssues.Select(i => i.Message)]));
-        blocks.Add(new NotePending("Деление на ЗКСПС, расстановка ручных извещателей (п. 6.6.27) и изоляторов КЗ — решение проектировщика АПС; в расчёте не выполнены."));
+        if (zoning is null)
+        {
+            blocks.Add(new NotePending("Деление на ЗКСПС, расстановка ручных извещателей (п. 6.6.27) и изоляторов КЗ не выполнены."));
+            return blocks;
+        }
+
+        var zoneRows = zoning.ZoneOf.GroupBy(kv => kv.Value).OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => (IReadOnlyList<string>)[g.Key, string.Join(", ", g.Select(kv => kv.Key.Split('.')[0]).Distinct().Select(id => zones.FirstOrDefault(z => z.RoomId == id)?.RoomName ?? id)), g.Count().ToString(Ru), ((g.Count() + 23) / 24).ToString(Ru)]).ToList();
+        blocks.Add(new NoteTable("Зоны контроля пожарной сигнализации", ["ЗКСПС", "Помещение", "Автоматических ИП", "Групп по 24 ИП (изоляторов)"], zoneRows));
+        blocks.Add(new NoteParagraph(string.Create(Ru, $"Ручные извещатели — {zoning.Manuals.Count} шт., на стенах на высоте 1,5 м (п. 6.6.27). Выходы из помещений на чертеже не размечены, поэтому ИПР расставлены по правилу для неустановленной планировки: любая точка помещения не дальше 30 м от ближайшего ИПР; при известных выходах ИПР ставят у выходов, не дальше 45 м друг от друга и 30 м от выхода. Изоляторов короткого замыкания — {zoning.Isolators} шт.: по одному на группу не более 24 автоматических ИП в пределах ЗКСПС и на каждый ИПР без встроенного изолятора (п. 6.3.5); места установки по линии зависят от её топологии (кольцо или дерево) и уточняются на схеме соединений.")));
+        blocks.Add(new NotePending("Деление на ЗКСПС выполнено полосами по площади — условно; точные границы зон, положение ИПР у выходов и изоляторов на линии — решение проектировщика АПС."));
         return blocks;
     }
 
