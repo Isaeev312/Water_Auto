@@ -161,6 +161,13 @@ public static class ProjectPipeline
         // Уровни (alarm.levels): зоны собираются по чертежу каждого уровня с уникальными ID помещений; раскладка, ЗКСПС, СОУЭ,
         // питание и спецификация считаются по всем зонам разом, лист плана — на каждый уровень, стояки — в кабельный журнал.
         var levels = AlarmLevels(project, plan, projectPath, issues);
+
+        // Номер уровня устройства по его обозначению «помещение.D номер» (помещение — ID зоны уровня); не найдено — первый.
+        int DeviceLevel(string deviceId)
+        {
+            var room = deviceId[..Math.Max(0, deviceId.LastIndexOf('.'))];
+            return levels.FirstOrDefault(l => l.Zones.Any(z => z.RoomId == room))?.Index ?? 0;
+        }
         var detectorZones = new List<DetectorZone>();
         foreach (var level in levels)
         {
@@ -605,15 +612,19 @@ public static class ProjectPipeline
                         }
 
                         // Громкоговорители линии 100 В — не адресные устройства: в таблицу адресов и ДПЛС не идут.
-                        foreach (var s in sounderEntry?.Speaker is null ? soue?.Sounders ?? [] : [])
+                        foreach (var s in sounderEntry is { Speaker: null, Device.Addresses: > 0 } ? soue?.Sounders ?? [] : [])
                         {
                             addressDevices.Add(new(s.Id, $"{sounderEntry?.Model.Name} — {zoneById[s.RoomId].RoomName}", "Оповещение (выход)", "", sounderEntry?.Device.LoopCurrent ?? Current.Zero));
                         }
 
-                        foreach (var l in soue?.Lights ?? [])
+                        foreach (var l in lightEntry is { Device.Addresses: > 0 } ? soue?.Lights ?? [] : [])
                         {
                             addressDevices.Add(new(l.Id, $"{lightEntry?.Model.Name} — {zoneById[l.RoomId].RoomName}", "Оповещение (табло)", "", lightEntry?.Device.LoopCurrent ?? Current.Zero));
                         }
+
+                        // Порядок адресов — по уровням (стабильно): контроллеры берут устройства подряд, поэтому на линии уровни
+                        // идут блоками; тот же ключ сортирует точки кольца ниже — таблица адресов, схема и журнал совпадают.
+                        addressDevices = [.. addressDevices.OrderBy(d => DeviceLevel(d.Designation))];
                     }
 
                     var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0, poweredDevices);
@@ -630,22 +641,30 @@ public static class ProjectPipeline
                     {
                         var loopPlan = LoopLayout.Plan(controlPoints.Count, alarmSet.Controller, alarmSet.Module,
                             addressDevices.GroupBy(d => d.Current).Select(g => (g.Count(), g.Key, 1)).ToList());
-                        // Устройства с уровнем: кольцо на другом уровне идёт стояком от поста и обратно — к длине по плану прибавляется 2·Δотм.
-                        var levelOf = levels.SelectMany(l => l.Zones.Select(z => (z.RoomId, l))).ToDictionary(x => x.RoomId, x => x.l);
+                        // Устройства по уровням (тот же порядок, что в таблице адресов); отметка уровня относительно поста (первый
+                        // уровень) — кольцо обходит уровни подряд, стояк — на каждом переходе (CableJournal.Segments).
                         var devicePoints = (detectorLayout?.Detectors.Select(d => (d.Location, d.RoomId, d.Id)) ?? []).Concat(zoning?.Manuals.Select(m => (m.Location, m.RoomId, m.Id)) ?? [])
-                            .Concat(soue?.Sounders.Where(_ => sounderEntry?.Speaker is null).Select(s => (s.Location, s.RoomId, s.Id)) ?? []).Concat(soue?.Lights.Select(l => (l.Location, l.RoomId, l.Id)) ?? []).ToList();
+                            .Concat(soue?.Sounders.Where(_ => sounderEntry is { Speaker: null, Device.Addresses: > 0 }).Select(s => (s.Location, s.RoomId, s.Id)) ?? []).Concat(soue?.Lights.Where(_ => lightEntry is { Device.Addresses: > 0 }).Select(l => (l.Location, l.RoomId, l.Id)) ?? [])
+                            .OrderBy(d => DeviceLevel(d.Id)).ToList();
                         var loops = new List<LoopLine>();
                         var offset = 0;
                         var baseElevation = levels[0].Elevation;
+                        double LevelMm(string id) => levels[DeviceLevel(id)].Elevation is { } e && baseElevation is { } b ? (e - b) * 1000 : 0;
                         for (var k = 0; k < Math.Max(1, loopPlan.Controllers); k++)
                         {
                             var take = k < loopPlan.DevicesByController.Count ? loopPlan.DevicesByController[k] : 0;
                             var load = k < loopPlan.LoadByController.Count ? loopPlan.LoadByController[k] : Current.Zero;
                             var onLoop = devicePoints.Skip(offset).Take(take).ToList();
-                            var riserMm = onLoop.Select(d => levelOf.GetValueOrDefault(d.RoomId)).Where(l => l is not null && l.Index > 0).Distinct()
-                                .Sum(l => l!.Elevation is { } e && baseElevation is { } b ? 2 * Math.Abs(e - b) * 1000 : 0);
-                            loops.Add(new LoopLine(k + 1, onLoop.Select(d => d.Location).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0, riserMm, onLoop.Select(d => d.Id).ToList()));
+                            loops.Add(new LoopLine(k + 1, onLoop.Select(d => d.Location).ToList(), load, k < loopPlan.ModulesByController.Count && loopPlan.ModulesByController[k] > 0, 0,
+                                onLoop.Select(d => d.Id).ToList(), onLoop.Select(d => LevelMm(d.Id)).ToList()));
                             offset += take;
+                        }
+
+                        var mixed = loops.Count(l => l.DeviceIds is { } ids && ids.Select(DeviceLevel).Distinct().Count() > 1);
+                        if (levels.Count > 1 && mixed > 0)
+                        {
+                            issues.Add(new Issue("aps.loop.levels", IssueLevel.Info,
+                                $"Линии ДПЛС: устройства распределены по контроллерам подряд по уровням; {mixed} лини{(mixed == 1 ? "я проходит" : "и проходят")} через несколько уровней — кольцо обходит уровни блоками со стояком на каждом переходе. Отдельный контроллер на уровень не назначается (число контроллеров — по ёмкости линии); при другом решении — проектировщик."));
                         }
 
                         if (levels.Count > 1 && (baseElevation is null || levels.Any(l => l.Elevation is null)))
@@ -660,6 +679,29 @@ public static class ProjectPipeline
                             plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
                         issues.AddRange(journal.Issues);
                         var allLines = journal.Lines.ToList();
+
+                        // Неадресные оповещатели (адресов 0) — не на ДПЛС: линия 12 В от выхода релейного блока на посту через
+                        // оповещатели помещения цепочкой (по уровню — со стояком), отдельно звуковые и световые.
+                        var relayName = relayModel?.Name ?? "релейный блок";
+                        var notifierLine = 0;
+                        foreach (var (entry, list, purpose) in new[] { (sounderEntry, soue?.Sounders, "линия звукового оповещения 12 В"), (lightEntry, soue?.Lights, "линия светового оповещения 12 В") })
+                        {
+                            if (entry is not { Speaker: null, Device.Addresses: 0 } || list is not { Count: > 0 })
+                            {
+                                continue;
+                            }
+
+                            foreach (var room in list.GroupBy(x => x.RoomId))
+                            {
+                                var pts = room.Select(x => x.Location).ToList();
+                                var segs = CableJournal.Segments(new PlanPoint(panelPoint.X, panelPoint.Y), pts, [.. room.Select(x => LevelMm(x.Id))]);
+                                var baseM = segs.Take(segs.Count - 1).Sum(x => x.Mm) / 1000;
+                                notifierLine++;
+                                var roomName = detectorZones.FirstOrDefault(z => z.RoomId == room.Key)?.RoomName ?? room.Key;
+                                allLines.Add(new CableLine($"ЛОН{notifierLine}", $"{relayName} (выход)", $"{room.Count()} × {entry.Model.Name} — {roomName}", purpose, LoadCables(cablesPath).PowerName, Math.Round(baseM * LoadCables(cablesPath).Reserve, 0),
+                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"цепочка от поста через оповещатели помещения, ток {room.Count() * entry.Device.Alarm.Amperes * 1000:0} мА; сечение — по падению напряжения, проектировщик"), Math.Round(baseM, 0)));
+                            }
+                        }
                         if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
                         {
                             // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
@@ -1958,6 +2000,8 @@ public static class ProjectPipeline
             _ => SchemeDeviceKind.Module,
         };
     }
+
+    private static CableCatalog LoadCables(string path) => AlarmCableCatalog.Load(path);
 
     private static string WriteIssues(string dir, List<Issue> issues)
     {
