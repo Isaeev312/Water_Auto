@@ -88,6 +88,7 @@ public static class ProjectPipeline
     public const string PumpStationSpecXlsxFile = "specification_pns.xlsx";
     public const string SignalListFile = "aps_signals.xlsx";
     public const string BatteryFile = "aps_battery.xlsx";
+    public const string InteractionFile = "aps_interaction.docx";
     public const string IssuesFile = "issues.txt";
 
     public static PipelineResult Run(string projectPath, string outDir, string normsDir, string? registryPath)
@@ -980,6 +981,13 @@ public static class ProjectPipeline
         if (powerBudget is not null)
         {
             Write(outDir, BatteryFile, files, p => PowerBudgetXlsx.Write(p, powerBudget, $"{project.Name}. Расчёт ёмкости АКБ приборов автоматики АУПТ", project.Font));
+        }
+
+        if (controlPoints.Count > 0)
+        {
+            var ti = project.Title;
+            var spec = InteractionSpec.Build(new NoteTitle(ti.Organization, ti.Subject, ti.Document, ti.Author, ti.Supervisor, ti.CityYear, project.Name), controlPoints, powerBudget);
+            Write(outDir, InteractionFile, files, p => NoteDocx.Write(p, spec, Stamp(project, "ТЗ", "Техническое задание на взаимодействие с АПС"), project.Font));
         }
 
         Write(outDir, SpecificationFile, files, p => SpecificationXlsx.Write(p, takeoff, new SpecificationHeader($"{project.Name}. Спецификация оборудования, изделий и материалов"), project.Font));
