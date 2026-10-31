@@ -23,6 +23,12 @@ public sealed record DetectorZone(string RoomId, string RoomName, Polygon Outlin
 {
     /// <summary>Балки в помещении (слой ПТ_БАЛКИ): высота балки — для табл. 6.2 и 6.3 СП 484.</summary>
     public IReadOnlyList<Beam> Beams { get; init; } = [];
+
+    /// <summary>ID выбранной модели ИП из каталога извещателей; null — модель не выбрана.</summary>
+    public string? ModelId { get; init; }
+
+    /// <summary>Марка выбранной модели для записки и плана.</summary>
+    public string? ModelName { get; init; }
 }
 
 /// <summary>Извещатель раскладки; ID — «ID помещения.D номер».</summary>

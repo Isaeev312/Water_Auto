@@ -142,7 +142,7 @@ public static class ProjectPipeline
         issues.AddRange(layout.Issues);
 
         // АПС, этап 2 (ADR 0012): извещатели — только в помещениях и с параметрами, заданными проектировщиком.
-        var detectorZones = AlarmZones(project, plan, design, issues);
+        var detectorZones = AlarmZones(project, plan, design, normsDir, issues);
         var detectorLayout = detectorZones.Count > 0 ? DetectorLayouter.Layout(detectorZones, norms) : null;
         if (detectorLayout is not null)
         {
@@ -387,11 +387,17 @@ public static class ProjectPipeline
 
                 if (alarmSet is not null)
                 {
-                    var detectorCounts = detectorLayout is null ? null : new Dictionary<string, int>
+                    // Извещатели — по выбранным моделям: ток и сертификат из каталога извещателей, количество — из раскладки.
+                    Dictionary<string, int>? detectorCounts = null;
+                    if (detectorLayout is not null)
                     {
-                        ["smoke"] = detectorLayout.Detectors.Count(d => d.Kind == DetectorKind.Smoke),
-                        ["heat"] = detectorLayout.Detectors.Count(d => d.Kind == DetectorKind.Heat),
-                    };
+                        var models = AlarmDetectorCatalog.Load(EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File)).ToDictionary(m => m.Id);
+                        detectorCounts = detectorZones.Where(z => z.ModelId is not null)
+                            .GroupBy(z => z.ModelId!)
+                            .ToDictionary(g => g.Key, g => g.Sum(z => detectorLayout.CountByRoom.GetValueOrDefault(z.RoomId)));
+                        alarmSet = alarmSet with { Detectors = detectorCounts.Keys.Where(models.ContainsKey).ToDictionary(id => id, id => models[id].AsLoopDevice()) };
+                    }
+
                     var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts);
                     powerBudget = power.Budget;
                     issues.AddRange(power.Issues);
@@ -1467,9 +1473,16 @@ public static class ProjectPipeline
 
 
     /// <summary>Зоны раскладки ИП из раздела alarm проекта: помещение по имени с чертежа («*» — все), высота — из зоны или design.roomHeight.</summary>
-    private static List<DetectorZone> AlarmZones(ProjectFile project, FloorPlan plan, ProjectDesign design, List<Issue> issues)
+    private static List<DetectorZone> AlarmZones(ProjectFile project, FloorPlan plan, ProjectDesign design, string normsDir, List<Issue> issues)
     {
         var zones = new List<DetectorZone>();
+        var catalogPath = EquipmentSet.PathFor(normsDir, AlarmDetectorCatalog.File);
+        var catalog = (project.Alarm?.Zones.Count ?? 0) > 0 && File.Exists(catalogPath) ? AlarmDetectorCatalog.Load(catalogPath) : [];
+        if ((project.Alarm?.Zones.Count ?? 0) > 0 && catalog.Count == 0)
+        {
+            issues.Add(new Issue("aps.detector.noCatalog", IssueLevel.Warning, $"Нет каталога извещателей {AlarmDetectorCatalog.File}: модели ИП не выбраны, их ток в расчёте АКБ не учтён."));
+        }
+
         foreach (var z in project.Alarm?.Zones ?? [])
         {
             var rooms = z.Room == "*" ? plan.Rooms : plan.Rooms.Where(r => string.Equals(r.Name, z.Room, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -1494,8 +1507,15 @@ public static class ProjectPipeline
                     continue;
                 }
 
+                // Модель ИП — выбор проектировщика; без выбора — первая в каталоге, об этом Info. Паспорт модели идёт в расчёт АКБ.
+                var model = catalog.Count > 0 ? AlarmDetectorCatalog.Choose(catalog, z.Detector, z.Model, room.Name, issues) : null;
                 var beams = plan.Beams.Where(b => b.Outline.RelationTo(room.Contour) != PolygonRelation.Disjoint).ToList();
-                zones.Add(new DetectorZone(room.Id, room.Name, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable) { Beams = beams });
+                zones.Add(new DetectorZone(room.Id, room.Name, room.Contour, new Length(height.Value), z.Detector, z.Algorithm, z.Addressable)
+                {
+                    Beams = beams,
+                    ModelId = model?.Id,
+                    ModelName = model is null ? null : $"{model.Name} ({model.Designation})",
+                });
             }
         }
 

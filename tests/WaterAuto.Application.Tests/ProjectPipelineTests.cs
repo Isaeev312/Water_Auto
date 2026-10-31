@@ -97,6 +97,10 @@ public sealed class ProjectPipelineTests : IDisposable
         var doc = DxfReader.Read(plan);
         doc.Entities.OfType<Insert>().Count(i => i.Layer.Name == AlarmPlanDxfWriter.DetectorLayer).ShouldBe(12);
         result.Issues.ShouldNotContain(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level == IssueLevel.Error);
+        // Модель не выбрана — первая из каталога с замечанием; выбранная тепловая для дымовой зоны — ошибка.
+        result.Issues.ShouldContain(i => i.Code == "aps.detector.default" && i.Message.Contains("ДИП-34А-03"));
+        var mismatch = Run(Project(alarm: new ProjectAlarm { Zones = [new ProjectAlarmZone { Room = "Автостоянка", CeilingHeight = 3, Model = "bolid.s2000_ip_03" }] }));
+        mismatch.Issues.ShouldContain(i => i.Code == "aps.detector.kindMismatch");
 
         // Без раздела alarm листа АПС нет; имя не с чертежа — предупреждение и нет листа.
         Run(Project()).Files.ShouldNotContain(f => f.EndsWith(ProjectPipeline.AlarmPlanFile, StringComparison.Ordinal));

@@ -45,7 +45,7 @@ public static class AlarmPlanDxfWriter
             doc.Entities.Add(new LwPolyline(z.Outline.Vertices.Select(v => new XY(v.XMm, v.YMm)).ToList()) { IsClosed = true, Layer = contours });
             var c = z.Outline.Centroid;
             var count = layout.CountByRoom.GetValueOrDefault(z.RoomId);
-            doc.Entities.Add(new TextEntity(string.Create(ru, $"{z.RoomName}: {KindText(z.Kind)} ИП — {count} шт., алгоритм {z.Algorithm}, {(z.Addressable ? "адресные" : "безадресные")}, H = {z.CeilingHeight.Meters:0.##} м"))
+            doc.Entities.Add(new TextEntity(string.Create(ru, $"{z.RoomName}: {KindText(z.Kind)} ИП {z.ModelName ?? ""} — {count} шт., алгоритм {z.Algorithm}, {(z.Addressable ? "адресные" : "безадресные")}, H = {z.CeilingHeight.Meters:0.##} м"))
             {
                 InsertPoint = new XYZ(c.XMm, c.YMm - (2 * textHeightMm), 0),
                 Height = textHeightMm,

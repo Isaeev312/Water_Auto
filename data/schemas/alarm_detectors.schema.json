@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/alarm_detectors.schema.json",
+  "title": "Каталог пожарных извещателей для выбора в проекте (ADR 0012, этап 2): паспортные данные моделей",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schemaVersion", "detectors"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "verified": { "type": "boolean" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "detectors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "name", "designation", "manufacturer", "loopCurrent", "addresses", "isolator", "source"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$", "description": "Постоянный ID модели; выбирается в alarm.zones[].model." },
+          "kind": { "type": "string", "enum": ["smoke", "heat", "manual"] },
+          "name": { "type": "string", "minLength": 1, "description": "Марка, напр. «ДИП-34А-03»." },
+          "designation": { "type": "string", "minLength": 1, "description": "Обозначение по ГОСТ, напр. «ИП 212-34А»." },
+          "manufacturer": { "type": "string", "minLength": 1 },
+          "loopCurrent": { "type": "number", "minimum": 0, "description": "Ток от адресной линии, А (паспорт: «не более»)." },
+          "addresses": { "type": "integer", "minimum": 1, "description": "Адресов на линии занимает." },
+          "isolator": { "type": "boolean", "description": "Встроенный изолятор короткого замыкания линии." },
+          "heatClass": { "type": "string", "description": "Класс теплового ИП по ГОСТ (A1R и т. п.)." },
+          "responseTemperature": { "type": "number", "description": "Температура срабатывания теплового ИП, °С." },
+          "certificate": { "type": "string", "minLength": 1, "description": "Сертификат соответствия, действующий на объекте: тип, номер, орган, срок (А-12)." },
+          "source": { "type": "string", "minLength": 1, "description": "Документ, редакция, пункт и страница." },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -369,4 +369,7 @@ public sealed class ProjectAlarmZone
 
     /// <summary>Высота до перекрытия, м; null — design.roomHeight.</summary>
     public double? CeilingHeight { get; init; }
+
+    /// <summary>ID модели извещателя из data/catalog/alarm_detectors.json; null — первая модель нужного типа (с замечанием).</summary>
+    public string? Model { get; init; }
 }
