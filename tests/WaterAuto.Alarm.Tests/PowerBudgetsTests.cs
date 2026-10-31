@@ -84,6 +84,21 @@ public class PowerBudgetsTests
     }
 
     [Fact]
+    public void Alarm_current_above_supply_rating_asks_for_more_supplies()
+    {
+        // 9 контроллеров по 0,4 А = 3,6 А > 3 А → 2 источника. 9 КДЛ получаем из 9·120 извещателей (адреса).
+        var set = WithDetectors with { Supply = Set.Supply with { MaxOutput = new Current(3) } };
+
+        var result = PowerBudgets.Build(8, set, Norms, new Dictionary<string, int> { ["smoke"] = 9 * 120 });
+
+        result.Budget.Lines.Single(l => l.Name == "С2000-КДЛ").Count.ShouldBeGreaterThanOrEqualTo(9);
+        var warn = result.Issues.Single(i => i.Code == "aps.power.supplyOverload");
+        warn.Level.ShouldBe(IssueLevel.Warning);
+        warn.Message.ShouldContain("не менее 2 источников");
+        PowerBudgets.Build(8, set, Norms).Issues.ShouldNotContain(i => i.Code == "aps.power.supplyOverload");
+    }
+
+    [Fact]
     public void Few_detectors_stay_on_one_controller_and_unknown_kind_is_an_error()
     {
         var ok = PowerBudgets.Build(8, WithDetectors, Norms, new Dictionary<string, int> { ["smoke"] = 12, ["heat"] = 0 });

@@ -96,14 +96,28 @@ public class DetectorLayouterTests
     }
 
     [Fact]
-    public void Non_rectangular_room_is_reported_and_skipped()
+    public void L_shaped_room_is_covered_with_detectors_inside_the_contour()
     {
         var l = new Polygon([new(0, 0), new(20000, 0), new(20000, 5000), new(10000, 5000), new(10000, 10000), new(0, 10000)]);
+        var zone = Zone(l, alg: DetectionAlgorithm.C);
 
-        var layout = DetectorLayouter.Layout([Zone(l)], Norms);
+        var layout = DetectorLayouter.Layout([zone], Norms);
+
+        layout.Detectors.ShouldNotBeEmpty();
+        layout.Detectors.ShouldAllBe(d => l.Contains(d.Location) && l.DistanceTo(d.Location) >= 500 - 1);
+        MinCoverage(l, layout.Detectors, 6400).ShouldBeGreaterThanOrEqualTo(2);
+        layout.Issues.ShouldNotContain(i => i.Level == IssueLevel.Error);
+    }
+
+    [Fact]
+    public void Room_with_a_diagonal_wall_is_reported_and_skipped()
+    {
+        var trapezoid = new Polygon([new(0, 0), new(20000, 0), new(15000, 10000), new(0, 10000)]);
+
+        var layout = DetectorLayouter.Layout([Zone(trapezoid)], Norms);
 
         layout.Detectors.ShouldBeEmpty();
-        layout.Issues.ShouldContain(i => i.Code == "aps.layout.nonRectangular" && i.Level == IssueLevel.Error);
+        layout.Issues.ShouldContain(i => i.Code == "aps.layout.nonOrthogonal" && i.Level == IssueLevel.Error);
     }
 
     [Fact]

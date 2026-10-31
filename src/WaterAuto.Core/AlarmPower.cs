@@ -39,6 +39,9 @@ public sealed record LoopDevice(string Name, Current LoopCurrent, string Source)
 public sealed record PowerSupply(string Name, Current OwnCurrent, string Source) : ICertified
 {
     public string? Certificate { get; init; }
+
+    /// <summary>Номинальный ток нагрузки по паспорту; null — не задан (проверка не выполняется).</summary>
+    public Current? MaxOutput { get; init; }
 }
 
 /// <summary>

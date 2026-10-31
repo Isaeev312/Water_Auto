@@ -100,6 +100,14 @@ public static class PowerBudgets
             new(set.Supply.Name, 1, set.Supply.OwnCurrent, set.Supply.OwnCurrent, "собственный ток от АКБ (Iибэ)", set.Supply.Source),
         ];
 
+        if (set.Supply.MaxOutput is { } maxOut && alarm.Amperes > maxOut.Amperes + 1e-12)
+        {
+            // Один РИП на все приборы не тянет: расчёт АКБ ниже — на суммарную нагрузку, деление по источникам — проектировщик.
+            var supplies = (int)Math.Ceiling(alarm.Amperes / maxOut.Amperes);
+            issues.Add(new Issue("aps.power.supplyOverload", IssueLevel.Warning,
+                string.Create(ru, $"Ток в режиме «Пожар» {alarm.Amperes:0.##} А больше номинального тока нагрузки {set.Supply.Name} ({maxOut.Amperes:0.##} А по паспорту): нужно не менее {supplies} источников; расчёт АКБ дан на суммарную нагрузку, распределение приборов по источникам — проектировщик.")));
+        }
+
         var own = set.Supply.OwnCurrent;
         var hourIssues = new List<Issue>();
         var td = BatteryCapacity.Hours(norms, BatteryCapacity.StandbyTimeId, hourIssues);

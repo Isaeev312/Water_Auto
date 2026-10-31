@@ -50,15 +50,26 @@ public static class DetectorLayouter
             return [];
         }
 
-        if (Box.Of(zone.Outline) is not { } box)
+        var rectangular = Box.Of(zone.Outline) is not null;
+        if (!rectangular && !IsOrthogonal(zone.Outline))
         {
-            issues.Add(new Issue("aps.layout.nonRectangular", IssueLevel.Error,
-                $"Помещение «{zone.RoomName}»: контур не прямоугольный — раскладка ИП выполняется только для прямоугольных помещений (остальные — позже).",
+            issues.Add(new Issue("aps.layout.nonOrthogonal", IssueLevel.Error,
+                $"Помещение «{zone.RoomName}»: стена не параллельна и не перпендикулярна остальным — раскладка ИП выполняется только для прямоугольных и Г-, П-образных контуров (стены под углом — позже).",
                 zone.RoomId, Location: zone.Outline.Centroid));
             return [];
         }
 
-        var fields = Fields(zone, box, norms, issues);
+        var box = Box.Of(zone.Outline) ?? Box.Bounding(zone.Outline);
+        if (!rectangular && zone.Beams.Count > 0)
+        {
+            issues.Add(new Issue("aps.layout.beamsIrregular", IssueLevel.Warning,
+                $"Помещение «{zone.RoomName}»: контур не прямоугольный — балки при раскладке ИП не учтены (табл. 6.2 применяется только к прямоугольным помещениям); проверить вручную.",
+                zone.RoomId, "СП 484.1311500.2020, табл. 6.2", zone.Outline.Centroid));
+        }
+
+        // Непрямоугольный контур: сетка по габаритам, точки вне контура и ближе отступа к стенам отбрасываются,
+        // покрытие проверяется по самому контуру — сетка уплотняется, пока каждая его точка не контролируется.
+        var fields = rectangular ? Fields(zone, box, norms, issues) : [new Field(box, false, null, null, zone.Outline)];
         var points = new List<PlanPoint>();
         foreach (var field in fields)
         {
@@ -75,7 +86,7 @@ public static class DetectorLayouter
     }
 
     /// <summary>Поле раскладки: прямоугольник и предел шага и расстояния до грани поперёк балок (null — без балок).</summary>
-    private sealed record Field(Box Box, bool AcrossX, double? MaxAcross, double? MaxToFace);
+    private sealed record Field(Box Box, bool AcrossX, double? MaxAcross, double? MaxToFace, Polygon? Outline = null);
 
     /// <summary>
     /// Поля между балками одного направления, пересекающими помещение насквозь. Балки двух направлений — кессоны (табл. 6.3),
@@ -154,7 +165,7 @@ public static class DetectorLayouter
     private static List<PlanPoint>? LayoutField(DetectorZone zone, DetectorRules rules, Field field, List<Issue> issues)
     {
         var box = field.Box;
-        var outline = new Polygon([new(box.X0, box.Y0), new(box.X1, box.Y0), new(box.X1, box.Y1), new(box.X0, box.Y1)]);
+        var outline = field.Outline ?? new Polygon([new(box.X0, box.Y0), new(box.X1, box.Y0), new(box.X1, box.Y1), new(box.X0, box.Y1)]);
         var r = rules.Radius.Millimeters;
         var wall = rules.MinToWall.Millimeters;
         // Начальный шаг: при однократном контроле ячейка сетки — квадрат, вписанный в круг радиуса R (сторона R·√2);
@@ -174,6 +185,11 @@ public static class DetectorLayouter
         for (var i = 0; i < MaxDensify; i++)
         {
             grid = Grid(box, nx, ny, wall, field.AcrossX ? field.MaxToFace : null, field.AcrossX ? null : field.MaxToFace);
+            if (field.Outline is not null)
+            {
+                grid = grid.Where(p => outline.Contains(p) && outline.DistanceTo(p) >= wall - Polygon.ToleranceMm).ToList();
+            }
+
             if (MinCoverage(outline, grid, r) >= rules.Coverage)
             {
                 break;
@@ -253,12 +269,18 @@ public static class DetectorLayouter
 
     private static string KindText(DetectorKind kind) => kind == DetectorKind.Smoke ? "дымовых" : "тепловых";
 
+    /// <summary>Все стороны контура параллельны осям (прямоугольник, Г-, П-образный контур).</summary>
+    private static bool IsOrthogonal(Polygon p) =>
+        p.Edges().All(e => Math.Abs(e.A.XMm - e.B.XMm) <= Polygon.ToleranceMm || Math.Abs(e.A.YMm - e.B.YMm) <= Polygon.ToleranceMm);
+
     /// <summary>Осевой прямоугольник контура; null — контур не прямоугольник (по площади с допуском).</summary>
     private readonly record struct Box(double X0, double Y0, double X1, double Y1)
     {
         public double Width => X1 - X0;
 
         public double Height => Y1 - Y0;
+
+        public static Box Bounding(Polygon p) => new(p.Vertices.Min(v => v.XMm), p.Vertices.Min(v => v.YMm), p.Vertices.Max(v => v.XMm), p.Vertices.Max(v => v.YMm));
 
         public static Box? Of(Polygon p)
         {
