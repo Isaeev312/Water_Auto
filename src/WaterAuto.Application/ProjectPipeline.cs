@@ -413,7 +413,7 @@ public static class ProjectPipeline
                         addressDevices = [.. addressDevices.OrderBy(d => DeviceLevel(d.Designation))];
                     }
 
-                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0, poweredDevices);
+                    var power = PowerBudgets.Build(controlPoints.Count, alarmSet, norms, detectorCounts, zoning?.Isolators ?? 0, poweredDevices); alarmSet = power.Set;
                     powerBudget = power.Budget;
                     alarmSetForDocs = alarmSet;
                     issues.AddRange(power.Issues);
@@ -523,7 +523,7 @@ public static class ProjectPipeline
                             [.. (l.DeviceIds ?? []).Select(id => new SchemeDevice(id, labelOf.GetValueOrDefault(id, ""), SchemeKind(id)))],
                             l.HasPumpModules ? alarmSet.Module.Name : null, i == 0 ? relayCount : 0, relayModel?.Name)).ToList();
                         var speechLines = speechPlan?.Lines.Select(l => new SchemeSpeechLine(l.Number, l.Group, l.Speakers, sounderEntry?.Model.Name ?? "", l.ConsumedW, lineMonitor?.Name)).ToList() ?? [];
-                        var scheme = new AlarmScheme(schemeLoopList, alarmSet.Supply.Name, powerBudget?.Supplies ?? 1, alarmSet.Battery.Name, amplifier?.Name, speechPlan?.Amplifiers ?? 0, speechLines,
+                        var scheme = new AlarmScheme(schemeLoopList, alarmSet.Supply.Name, powerBudget?.Supplies ?? 1, alarmSet.Battery.Label, amplifier?.Name, speechPlan?.Amplifiers ?? 0, speechLines,
                             "Порядок устройств на линии — по обходу кольца из кабельного журнала; изоляторы КЗ (БРИЗ) расставляются по линии проектировщиком (п. 6.3.5 СП 484). Пульт и линия RS-485 — по проекту.");
                         var schemeSheet = alarmSheets.FirstOrDefault(sh => sh.Name.StartsWith("Структурная", StringComparison.OrdinalIgnoreCase));
                         Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = schemeSheet?.Sheet }, project.Font));

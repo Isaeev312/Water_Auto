@@ -61,7 +61,7 @@ public static class PowerBudgetXlsx
             ("Iибэ — собственный ток РИП от АКБ, мА", Milli(budget.SupplyOwn, ru)),
             ("Число источников (по току «Пожар» против паспортного РИП)", budget.Supplies.ToString(ru)),
             ("Iд, Iп на один источник (нагрузка поровну), мА", $"{Milli(budget.StandbyPerSupply, ru)}; {Milli(budget.AlarmPerSupply, ru)}"),
-            ("АКБ (на каждый источник)", $"{b.Name}, C20 = {b.Nominal.AmpereHours.ToString("0.##", ru)} А·ч; {b.Source}"),
+            ("АКБ (на каждый источник)", $"{b.Label}, C20 = {b.Total.AmpereHours.ToString("0.##", ru)} А·ч; {b.Source}"),
             ("Kстр = 100 % / S (Б.2)", budget.AgingFactor?.ToString("0.###", ru) ?? "не определён"),
             ("Kн дежурного режима (паспорт АКБ)", budget.StandbyLoadFactor?.ToString("0.###", ru) ?? "не определён"),
             ("Kн режима «Пожар» (паспорт АКБ)", budget.AlarmLoadFactor?.ToString("0.###", ru) ?? "не определён"),

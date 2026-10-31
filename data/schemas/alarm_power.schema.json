@@ -311,6 +311,154 @@
           "minLength": 1
         }
       }
+    },
+    "batteries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "nominal",
+          "endOfLifePercent",
+          "discharge",
+          "source"
+        ],
+        "certificate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+        },
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "nominal": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Номинальная ёмкость C20, А·ч."
+          },
+          "endOfLifePercent": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "description": "Ёмкость в конце срока службы S, % от начальной."
+          },
+          "discharge": {
+            "type": "object",
+            "description": "Ток разряда, А, по времени разряда, ч (ключ — часы).",
+            "propertyNames": {
+              "pattern": "^[0-9]+(\\.[0-9]+)?$"
+            },
+            "additionalProperties": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "certificate": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
+          }
+        }
+      },
+      "description": "Батареи для подбора (варианты options)."
+    },
+    "supplies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "voltage",
+          "ownCurrent",
+          "source"
+        ],
+        "certificate": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+        },
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "voltage": {
+            "type": "number",
+            "description": "Номинальное напряжение выхода, В."
+          },
+          "ownCurrent": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Собственный ток потребления от АКБ (Iибэ), А."
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "certificate": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Сертификат соответствия, действующий на объекте: тип (ТР ЕАЭС 043/2017 и т. п.), номер, орган, срок; без него расчёт предупреждает (А-12)."
+          },
+          "maxOutput": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Номинальный ток нагрузки по паспорту, А; при превышении расчёт предупреждает о числе источников."
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
+          }
+        }
+      },
+      "description": "РИП для подбора (варианты options)."
+    },
+    "options": {
+      "type": "array",
+      "description": "Варианты питания: РИП + число батарей в параллель (во внутреннем отсеке и боксе по РЭ РИП); подбирается наименьший достаточный.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "supply",
+          "battery",
+          "count"
+        ],
+        "properties": {
+          "supply": {
+            "type": "string"
+          },
+          "battery": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "note": {
+            "type": "string"
+          },
+          "box": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Бокс для дополнительных батарей (позиция спецификации)."
+          }
+        }
+      }
     }
   }
 }

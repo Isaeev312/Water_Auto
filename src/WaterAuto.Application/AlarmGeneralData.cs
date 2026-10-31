@@ -47,7 +47,7 @@ public static class AlarmGeneralData
         {
             indicators.Add(new("Ток потребления в режиме «Пожар»", "мА", (budget.Alarm.Amperes * 1000).ToString("0.#", Ru)));
             indicators.Add(new("Требуемая ёмкость АКБ", "А·ч", budget.Required?.AmpereHours.ToString("0.##", Ru) ?? "не определена"));
-            indicators.Add(new("Принятая АКБ", "", $"{budget.Battery.Name}, {budget.Battery.Nominal.AmpereHours.ToString("0.##", Ru)} А·ч"));
+            indicators.Add(new("Принятая АКБ", "", $"{budget.Battery.Label}, {budget.Battery.Total.AmpereHours.ToString("0.##", Ru)} А·ч"));
         }
 
         var algorithms = string.Join(", ", zones.Select(z => z.Algorithm.ToString()).Distinct());

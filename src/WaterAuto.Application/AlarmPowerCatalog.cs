@@ -53,7 +53,34 @@ public static class AlarmPowerCatalog
             new BatteryModel(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
                 b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
                 Text(b, "source")) { Certificate = Cert(b) })
-        { Detectors = detectors, Isolator = isolator };
+        { Detectors = detectors, Isolator = isolator, Options = Options(root) };
+    }
+
+    private static PowerSupply Supply(JsonElement s) =>
+        new(Text(s, "name"), A(s, "ownCurrent"), Text(s, "source")) { Certificate = Cert(s), MaxOutput = s.TryGetProperty("maxOutput", out var mo) ? new Current(mo.GetDouble()) : null };
+
+    private static BatteryModel Battery(JsonElement b) =>
+        new(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
+            b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
+            Text(b, "source")) { Certificate = Cert(b) };
+
+    /// <summary>Варианты питания: РИП и батареи по ID из разделов supplies и batteries; неизвестный ID — ошибка каталога.</summary>
+    private static IReadOnlyList<PowerOption> Options(JsonElement root)
+    {
+        if (!root.TryGetProperty("options", out var options))
+        {
+            return [];
+        }
+
+        var supplies = root.GetProperty("supplies").EnumerateArray().ToDictionary(x => Text(x, "id"), Supply);
+        var batteries = root.GetProperty("batteries").EnumerateArray().ToDictionary(x => Text(x, "id"), Battery);
+        return [.. options.EnumerateArray().Select(o => new PowerOption(
+            supplies.TryGetValue(Text(o, "supply"), out var su) ? su : throw new InvalidDataException($"Вариант питания: нет РИП «{Text(o, "supply")}» в supplies."),
+            (batteries.TryGetValue(Text(o, "battery"), out var ba) ? ba : throw new InvalidDataException($"Вариант питания: нет АКБ «{Text(o, "battery")}» в batteries.")) with { Count = o.GetProperty("count").GetInt32() })
+        {
+            Note = o.TryGetProperty("note", out var n) ? n.GetString() : null,
+            Box = o.TryGetProperty("box", out var bx) ? bx.GetString() : null,
+        })];
     }
 
     private static Current A(JsonElement e, string name) => new(e.GetProperty(name).GetDouble());

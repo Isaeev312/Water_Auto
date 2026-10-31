@@ -85,8 +85,13 @@ public static class AlarmSpecification
         if (budget is not null && set is not null)
         {
             items.Add(new("Источник питания резервированный", set.Supply.Name, Maker(set.Supply.Source), "шт.", budget.Supplies, set.Supply.Certificate, $"{budget.Voltage}; I категория надёжности (СП 6, п. 5.21){(budget.Supplies > 1 ? "; нагрузка поделена между источниками" : "")}"));
-            items.Add(new("Аккумуляторная батарея", set.Battery.Name, Maker(set.Battery.Source), "шт.", budget.Supplies, set.Battery.Certificate,
-                budget.Required is { } r ? string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"требуется {r.AmpereHours:0.##} А·ч{(budget.Supplies > 1 ? " на источник" : "")}, принята {set.Battery.Nominal.AmpereHours:0.##} А·ч") : "ёмкость не определена"));
+            if (set.Box is { } box)
+            {
+                items.Add(new("Бокс резервного питания для дополнительных АКБ", box, Maker(set.Supply.Source), "шт.", budget.Supplies, set.Supply.Certificate, "по РЭ РИП; сертификат — общий с РИП (прил. № 1)"));
+            }
+
+            items.Add(new("Аккумуляторная батарея", set.Battery.Name, Maker(set.Battery.Source), "шт.", budget.Supplies * set.Battery.Count, set.Battery.Certificate,
+                budget.Required is { } r ? string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"требуется {r.AmpereHours:0.##} А·ч{(budget.Supplies > 1 ? " на источник" : "")}, принята {set.Battery.Label}, {set.Battery.Total.AmpereHours:0.##} А·ч на источник") : "ёмкость не определена"));
         }
 
         return items;
