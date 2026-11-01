@@ -37,7 +37,7 @@ public static class AlarmNote
         sections.Add(new("6", "Электропитание и аккумуляторная батарея", Power(budget)));
         if (soue is not null)
         {
-            sections.Add(new("7", "Система оповещения и управления эвакуацией", Soue(zones, soue, issues, speech, amplifier)));
+            sections.Add(new("7", "Система оповещения и управления эвакуацией", Soue(zones, soue, issues, speech, amplifier, norms)));
         }
 
         if (volumeFiles is { Count: > 0 })
@@ -149,13 +149,17 @@ public static class AlarmNote
         ];
     }
 
-    private static List<NoteBlock> Soue(IReadOnlyList<DetectorZone> zones, SoueLayout soue, IReadOnlyList<Issue> issues, SpeechPlan? speech, SpeechAmplifier? amplifier)
+    private static List<NoteBlock> Soue(IReadOnlyList<DetectorZone> zones, SoueLayout soue, IReadOnlyList<Issue> issues, SpeechPlan? speech, SpeechAmplifier? amplifier, INormsProvider norms)
     {
+        double V(string id, string key) => norms.Find(id)!.Values[key]!.Value;
+        var level = norms.Find("sp3.p6_8_2.soundLevel")!.Values;
+        var speechRule = norms.Find("sp3.p6_11_3.speech")!.Values;
+        var light = norms.Find("sp3.p6_16_2.lightNotifier")!.Values;
         var blocks = new List<NoteBlock>
         {
-            new NoteParagraph("Способ оповещения (звуковой или речевой) принят проектировщиком по табл. Б.1 СП 3.13130.2026: для подземных стоянок до 50 машино-мест — звуковой, от 50 — речевой; в закрытых рампах, венткамерах и насосных речевой заменяется звуковым (прим. 3). Уровень звука на высоте 1,5 м должен превышать фоновый шум помещения не менее чем на 15 дБ и быть не ниже 65 дБА (п. 6.8.2); фон — по табл. В.1 (автостоянки 70 дБА, насосные 80 дБА)."),
+            new NoteParagraph(string.Create(Ru, $"Способ оповещения (звуковой или речевой) принят проектировщиком по табл. Б.1 СП 3.13130.2026: для подземных стоянок до {V("sp3.tB_1m.undergroundParking", "threshold"):0} машино-мест — звуковой, от {V("sp3.tB_1m.undergroundParking", "threshold"):0} — речевой; в закрытых рампах, венткамерах и насосных речевой заменяется звуковым (прим. 3). Уровень звука на высоте {level["height"]:0.0#} м должен превышать фоновый шум помещения не менее чем на {level["aboveBackground"]:0} дБ и быть не ниже {level["min"]:0} дБА (п. 6.8.2); фон — по табл. В.1 (автостоянки {V("sp3.tB_1.parking", "background"):0} дБА, насосные {V("sp3.tB_1.pumpRoom", "background"):0} дБА).")),
             new NoteFormula("*L*_{2} = *L*_{1} + 20·lg(*r*_{1}/*r*_{2}) → *r*_{2} = *r*_{1}·10^{(*L*_{1} − *L*_{треб})/20},", "7.1", ["где *L*_{1} — уровень звука оповещателя на расстоянии *r*_{1} = 1 м по паспорту, дБ; *L*_{треб} — требуемый уровень, дБА; *r*_{2} — расстояние, на котором он ещё обеспечен (формула В.2 прил. В)."]),
-            new NoteParagraph("Оповещатели расставлены сеткой так, чтобы любая точка помещения была в радиусе *r*_{2} ближайшего оповещателя (без суммирования нескольких оповещателей — в запас); для речевых шаг не больше 6 м (п. 6.11.3). Световые оповещатели (табло «Выход») — на стенах так, чтобы до любой точки было не больше 15 м (п. 6.16.2). Высота установки — не ниже 2,3 м (п. 6.18.1). Запуск — автоматически от сигнала «Пожар» не позже 10 с (п. 6.3.2), первой оповещается зона обнаружения (п. 6.6.4)."),
+            new NoteParagraph(string.Create(Ru, $"Оповещатели расставлены сеткой так, чтобы любая точка помещения была в радиусе *r*_{{2}} ближайшего оповещателя (без суммирования нескольких оповещателей — в запас); для речевых шаг не больше {speechRule["spacingOneWay"]:0.#} м (п. 6.11.3). Световые оповещатели (табло «Выход») — на стенах так, чтобы до любой точки было не больше {light["maxDistance"]:0.#} м (п. 6.16.2). Высота установки — не ниже {V("sp3.p6_18_1.mountHeight", "minHeight"):0.0#} м (п. 6.18.1). Запуск — автоматически от сигнала «Пожар» не позже {V("sp3.p6_3_2.startDelay", "maxStart"):0} с (п. 6.3.2), первой оповещается зона обнаружения (п. 6.6.4).")),
             new NoteTable("Результат", ["Помещение", "Фон, дБА", "Требуется, дБА", "Радиус r₂, м", "Звуковых/речевых, шт.", "Световых, шт."],
                 [.. soue.Zones.Select(z => (IReadOnlyList<string>)[zones.FirstOrDefault(x => x.RoomId == z.RoomId)?.RoomName ?? z.RoomId, "—", z.RequiredLevel.ToString("0", Ru), z.SoundRadius.Meters.ToString("0.#", Ru), z.Sounders.ToString(Ru), z.Lights.ToString(Ru)])]),
         };
@@ -163,7 +167,7 @@ public static class AlarmNote
         {
             // Речевое оповещение: уровень громкоговорителя по В.1, линии 100 В и усилители по паспорту блока.
             blocks.Add(new NoteParagraph(string.Create(Ru, $"Речевое оповещение выполняется громкоговорителями линии 100 В от блока речевого оповещения {amplifier.Name}. Уровень громкоговорителя на 1 м — по формуле В.1 прил. В от чувствительности *S* (дБ при 1 Вт на 1 м, паспорт) и мощности отвода *P* = {speech.Tap.AcousticW:0.#} Вт:")));
-            blocks.Add(new NoteFormula(string.Create(Ru, $"*L*_{{1}} = *S* + 10·lg *P* = {speech.LevelAt1m - (10 * Math.Log10(speech.Tap.AcousticW)):0.#} + 10·lg {speech.Tap.AcousticW:0.#} = {speech.LevelAt1m:0.#} дБ,"), "7.2", ["далее радиус *r*_{2} — по формуле 7.1; шаг громкоговорителей не больше 6 м при одностороннем расположении (п. 6.11.3), фон помещения для речевого оповещения — не выше 65 дБА, уровень речи — не менее чем на 10 дБ выше фона."]));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*L*_{{1}} = *S* + 10·lg *P* = {speech.LevelAt1m - (10 * Math.Log10(speech.Tap.AcousticW)):0.#} + 10·lg {speech.Tap.AcousticW:0.#} = {speech.LevelAt1m:0.#} дБ,"), "7.2", [string.Create(Ru, $"далее радиус *r*_{{2}} — по формуле 7.1; шаг громкоговорителей не больше {speechRule["spacingOneWay"]:0.#} м при одностороннем расположении (п. 6.11.3), фон помещения для речевого оповещения — не выше {speechRule["maxBackground"]:0} дБА, уровень речи — не менее чем на {speechRule["aboveBackground"]:0} дБ выше фона.")]));
             blocks.Add(new NoteTable("Линии речевого оповещения", ["Линия", "Группа (уровень)", "Громкоговорителей", "От линии, Вт", "Акустич., Вт", "Длина, м", "Сечение, мм²"],
                 [.. speech.Lines.Select(l => (IReadOnlyList<string>)[$"ЛО{l.Number}", l.Group, l.Speakers.ToString(Ru), l.ConsumedW.ToString("0.#", Ru), l.AcousticW.ToString("0.#", Ru), l.LengthM > 0 ? l.LengthM.ToString("0", Ru) : "не определена", l.SectionMm2?.ToString("0.##", Ru) ?? "—"])]));
             blocks.Add(new NoteParagraph(string.Create(Ru, $"Суммарная мощность от линий {speech.TotalConsumedW:0.#} Вт при паспортных {amplifier.MaxConsumedW:0} Вт на блок (акустическая — не более {amplifier.MaxAcousticW:0} Вт, ответвлений — до {amplifier.MaxBranches}, сегмент — до {amplifier.MaxSegmentM:0} м) — принято {speech.Amplifiers} шт. {amplifier.Name}. Сечение линии — по формуле РЭ блока *S* = 2·ρ·*I*·*L*/Δ*U* (пополам при равномерном размещении громкоговорителей), *I* = *P*/*U* при *U* = {amplifier.LineVoltage:0} В, Δ*U* — не более 10 % (п. В.3.4). Питание блока — от сети 220 В (I категория) со встроенными АКБ {amplifier.Batteries} × {amplifier.BatteryName}: {amplifier.BackupStandbyH:0} ч в дежурном режиме и {amplifier.BackupAlarmH:0} ч оповещения по паспорту; в расчёт АКБ РИП (разд. 6) блок не входит. Линии оповещения прокладываются отдельно от ДПЛС (РЭ).")));
