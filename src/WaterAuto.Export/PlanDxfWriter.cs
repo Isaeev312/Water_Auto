@@ -161,9 +161,12 @@ public static class PlanDxfWriter
             });
         }
 
+        // Размерные цепочки стоят на отступе от сети — марки осей ещё дальше; сводка расчёта — правее марок осей.
+        var margin = dimensions is { Count: > 0 } ? dimensions.Max(c => Math.Abs(c.Offset)) + (style.TextHeightMm * 2) : 0;
+        var axisBand = axes is { Count: > 0 } ? margin + (style.TextHeightMm * 18) : 0;
         if (summary is not null)
         {
-            AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer);
+            AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer, axisBand);
         }
 
         // Опоры: косой крест на трубе (слой ПТ_КРЕПЛЕНИЯ).
@@ -198,7 +201,9 @@ public static class PlanDxfWriter
 
         if (axes is { Count: > 0 })
         {
-            AddAxes(doc, axes, style, DxfDrawing.AddLayer(doc, AxisLayer, 8));
+            // Марки осей — за пределами сети: рядки оросителей обычно уходят от крайних колонн до стен.
+            var content = layout.Sprinklers.Select(x => x.Location).Concat(routes.SelectMany(r => r.Nodes.Select(n => n.Location))).ToList();
+            AddAxes(doc, axes, style, DxfDrawing.AddLayer(doc, AxisLayer, 8), content, margin);
         }
 
         if (dimensions is { Count: > 0 })
@@ -231,13 +236,17 @@ public static class PlanDxfWriter
     }
 
     // Разбивочные оси (ГОСТ 21.101): тонкая линия за пределы плана, марка в кружке на обоих концах.
-    private static void AddAxes(CadDocument doc, IReadOnlyList<PlanAxis> axes, PlanDxfStyle style, Layer layer)
+    private static void AddAxes(CadDocument doc, IReadOnlyList<PlanAxis> axes, PlanDxfStyle style, Layer layer, List<PlanPoint> content, double margin)
     {
         var bubble = style.TextHeightMm * 2;
         var reach = (style.TextHeightMm * 10) + bubble;
         var vertical = axes.Where(a => a.Vertical).Select(a => a.Position).DefaultIfEmpty(0).ToList();
         var horizontal = axes.Where(a => !a.Vertical).Select(a => a.Position).DefaultIfEmpty(0).ToList();
         var (x0, x1, y0, y1) = (vertical.Min(), vertical.Max(), horizontal.Min(), horizontal.Max());
+        if (content.Count > 0)
+        {
+            (x0, x1, y0, y1) = (Math.Min(x0, content.Min(p => p.XMm) - margin), Math.Max(x1, content.Max(p => p.XMm) + margin), Math.Min(y0, content.Min(p => p.YMm) - margin), Math.Max(y1, content.Max(p => p.YMm) + margin));
+        }
         foreach (var a in axes)
         {
             var (from, to) = a.Vertical
@@ -316,7 +325,7 @@ public static class PlanDxfWriter
 
     // Диктующая зона: контур по крайним оросителям с отступом, кружки у оросителей зоны и подпись;
     // сводка расчёта — многострочный текст справа от плана (приём из зарубежных комплектов, docs/foreign_drawings_ideas.md).
-    private static void AddSummary(CadDocument doc, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, PlanCalcSummary summary, PlanDxfStyle style, Layer zoneLayer, Layer summaryLayer)
+    private static void AddSummary(CadDocument doc, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, PlanCalcSummary summary, PlanDxfStyle style, Layer zoneLayer, Layer summaryLayer, double axisBand)
     {
         var ids = summary.ZoneSprinklerIds.ToHashSet(StringComparer.Ordinal);
         var zone = layout.Sprinklers.Where(s => ids.Contains(s.Id)).Select(s => s.Location).ToList();
@@ -344,7 +353,7 @@ public static class PlanDxfWriter
         doc.Entities.Add(new MText
         {
             Value = $"{summary.Title}\\P" + string.Join("\\P", summary.Rows.Select(r => $"{r.Label} — {r.Value}")),
-            InsertPoint = new XYZ(all.Max(p => p.XMm) + (10 * style.TextHeightMm), all.Max(p => p.YMm), 0),
+            InsertPoint = new XYZ(all.Max(p => p.XMm) + (10 * style.TextHeightMm) + axisBand, all.Max(p => p.YMm), 0),
             Height = style.TextHeightMm,
             RectangleWidth = 60 * style.TextHeightMm,
             Layer = summaryLayer,

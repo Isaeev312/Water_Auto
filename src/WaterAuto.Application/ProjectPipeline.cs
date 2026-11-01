@@ -2308,20 +2308,20 @@ public static class ProjectPipeline
                 ("Интенсивность орошения i", $"{F(p.Intensity, "0.###")} л/(с·м²)"),
                 ("Минимальная площадь S", $"{F(p.MinArea, "0.##")} м²; в зоне N = {d.ZoneSprinklers.Count} оросит."),
                 ("Диктующий ороситель", $"q = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с, p = {F(d.DictatingPressure.Mpa, "0.000")} МПа (Б.1)"),
-                ("Расчётный расход Q_р", $"{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с (Б.23)"),
-                ("Нормативный расход Q_н", $"{F(d.NormativeFlow.LitersPerSecond, "0.##")} л/с"),
-                ("Расход насоса Q_нас", $"{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с, {F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч ({d.PumpFlowClause})"),
+                ("Расчётный расход Qр", $"{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с (Б.23)"),
+                ("Нормативный расход Qн", $"{F(d.NormativeFlow.LitersPerSecond, "0.##")} л/с"),
+                ("Расход насоса Qнас", $"{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с, {F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч ({d.PumpFlowClause})"),
                 .. (d.Hydrants is { } h
                     ? [("ВПВ (СН КР 40-04:2025)", $"{h.Demand.Jets} × {F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с, H_ПК = {F(h.Demand.Head.Meters, "0.#")} м (Ж.2, Ж.3)")]
                     : Array.Empty<(string, string)>()),
                 ("Давление в точке подключения", $"{F(d.InletNodePressure.Mpa, "0.000")} МПа"),
-                ("Давление на входе насоса P_вх", $"{F(d.InletNodePressure.Mpa + ((1 + d.LocalLossFactor) * (d.SupplyLinearLoss.Mpa + d.RiserLinearLoss.Mpa)) + d.Elevation.Mpa - d.PumpPressure.Mpa, "0.000")} МПа (по ТУ)"),
-                ("Требуемое давление насоса P_н", $"{F(d.PumpPressure.Mpa, "0.000")} МПа, H_н = {F(d.PumpHead.Meters, "0.0")} м (Б.30)"),
+                ("Давление на входе насоса Pвх", $"{F(d.InletNodePressure.Mpa + ((1 + d.LocalLossFactor) * (d.SupplyLinearLoss.Mpa + d.RiserLinearLoss.Mpa)) + d.Elevation.Mpa - d.PumpPressure.Mpa, "0.000")} МПа (по ТУ)"),
+                ("Требуемое давление насоса Pн", $"{F(d.PumpPressure.Mpa, "0.000")} МПа, Hн = {F(d.PumpHead.Meters, "0.0")} м (Б.30)"),
                 ("Наибольшая скорость", $"{F(d.Path.Max(x => x.Velocity), "0.00")} м/с (не более {F(d.VelocityLimit, "0.#")} м/с, п. 6.7.1.37)"),
                 ("Запас воды W", $"{F(d.WaterVolume, "0.0")} м³ за {F(d.Duration, "0")} мин"),
             ],
             d.ZoneSprinklers,
-            $"ДИКТУЮЩАЯ ЗОНА: S = {F(p.MinArea, "0.##")} м², N = {d.ZoneSprinklers.Count}, Q_р = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с",
+            $"ДИКТУЮЩАЯ ЗОНА: S = {F(p.MinArea, "0.##")} м², N = {d.ZoneSprinklers.Count}, Qр = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с",
             Math.Max(d.RowSpacing.Millimeters, d.LineSpacing.Millimeters) / 2);
     }
 
