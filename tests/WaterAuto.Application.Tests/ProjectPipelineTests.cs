@@ -352,6 +352,12 @@ public sealed class ProjectPipelineTests : IDisposable
         rows.ShouldContain(r => r.Count > 5 && r[5] == "проверить" && r[1].Contains("температур", StringComparison.Ordinal));
         rows.ShouldNotContain(r => r.Any(c => c.Contains("(design.", StringComparison.Ordinal)));
 
+        // Все предупреждения и ошибки АУПТ всего выпуска (не только до записки) — в таблице: по строке на замечание.
+        string[] other = ["aps.", "soue.", "gas.", "powder.", "alarm."];
+        var aupt = result.Issues.Where(i => i.Level >= IssueLevel.Warning && !other.Any(p => i.Code.StartsWith(p, StringComparison.Ordinal)))
+            .Select(i => (i.Code, i.Message)).Distinct().Count();
+        rows.Count(r => r.Count > 5 && r[3] == "—" && r[4] == "—").ShouldBe(aupt);
+
         // Та же таблица — разделом 13 записки.
         var note = WaterAuto.Reports.DocxPreview.ReadParagraphs(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)));
         note.ShouldContain(p => p.Contains("Соответствие требованиям норм", StringComparison.Ordinal));

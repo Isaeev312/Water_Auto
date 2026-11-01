@@ -665,7 +665,14 @@ public static class FloorPlanImporter
             if (Distance(chain[0], chain[^1]) <= Polygon.ToleranceMm && ids.Count >= 3)
             {
                 chain.RemoveAt(chain.Count - 1);
-                result.Add((ids[0], new Polygon(chain)));
+                var polygon = new Polygon(chain);
+                if (polygon.IsSelfIntersecting())
+                {
+                    issues.Add(new Issue("import.selfIntersecting", IssueLevel.Error, $"Контур на слое {layer} самопересекается.", ids[0], null, chain[0]));
+                    continue;
+                }
+
+                result.Add((ids[0], polygon));
                 issues.Add(new Issue("import.contourFromLines", IssueLevel.Info,
                     $"Контур собран из {ids.Count} отрезков на слое {layer}; удобнее — одна замкнутая полилиния.", ids[0], null, chain[0]));
             }

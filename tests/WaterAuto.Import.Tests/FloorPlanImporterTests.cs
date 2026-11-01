@@ -174,6 +174,22 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
+    public void Self_intersecting_contour_of_lines_is_an_error_like_a_polyline()
+    {
+        // «Бабочка» из четырёх отрезков: замкнута, но самопересекается — та же ошибка, что для полилинии.
+        var b = DrawingBuilder.ValidFloor();
+        b.Line(FloorPlanImporter.ContourLayer, 31000, 0, 41000, 8000);
+        b.Line(FloorPlanImporter.ContourLayer, 41000, 8000, 41000, 0);
+        b.Line(FloorPlanImporter.ContourLayer, 41000, 0, 31000, 8000);
+        b.Line(FloorPlanImporter.ContourLayer, 31000, 8000, 31000, 0);
+
+        var r = ImportDxf(b);
+
+        Single(r, "import.selfIntersecting").Level.ShouldBe(IssueLevel.Error);
+        r.Issues.ShouldNotContain(i => i.Code == "import.contourFromLines");
+    }
+
+    [Fact]
     public void Lines_that_do_not_close_are_an_error_at_the_open_end()
     {
         var b = DrawingBuilder.ValidFloor();
