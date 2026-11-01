@@ -1442,7 +1442,7 @@ public static class ProjectPipeline
             hydrantReach = new Length(hp.Reach ?? (hp.HoseLength + hydrants.Demand.TableJetHeight.Meters));
             foreach (var room in plan.Rooms)
             {
-                var placed = HydrantPlacement.Place(plan, room, hydrantReach.Value, hydrants.Demand.Jets);
+                var placed = HydrantPlacement.Place(plan, room, hydrantReach.Value, hydrants.Demand.Jets, VpvNorms.For(hydrants.Settings.Region).PlacementClause);
                 hydrantPoints.AddRange(placed.Points);
                 issues.AddRange(placed.Issues);
             }
@@ -2318,7 +2318,7 @@ public static class ProjectPipeline
                 ("Нормативный расход Qн", $"{F(d.NormativeFlow.LitersPerSecond, "0.##")} л/с"),
                 ("Расход насоса Qнас", $"{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с, {F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч ({d.PumpFlowClause})"),
                 .. (d.Hydrants is { } h
-                    ? [("ВПВ (СН КР 40-04:2025)", $"{h.Demand.Jets} × {F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с, H_ПК = {F(h.Demand.Head.Meters, "0.#")} м (Ж.2, Ж.3)")]
+                    ? [($"ВПВ ({VpvNorms.For(h.Settings.Region).Doc})", $"{h.Demand.Jets} × {F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с, H_ПК = {F(h.Demand.Head.Meters, "0.#")} м (Ж.2, Ж.3)")]
                     : Array.Empty<(string, string)>()),
                 ("Давление в точке подключения", $"{F(d.InletNodePressure.Mpa, "0.000")} МПа"),
                 ("Давление на входе насоса Pвх", $"{F(d.InletNodePressure.Mpa + ((1 + d.LocalLossFactor) * (d.SupplyLinearLoss.Mpa + d.RiserLinearLoss.Mpa)) + d.Elevation.Mpa - d.PumpPressure.Mpa, "0.000")} МПа (по ТУ)"),

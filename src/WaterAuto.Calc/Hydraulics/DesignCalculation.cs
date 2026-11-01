@@ -301,10 +301,11 @@ public static class DesignCalculation
         if (hydrants is { } hi)
         {
             (solution, hydrant) = WithHydrants(hi, solution, p => Solve(current, p), p1, k, settings, series, issues);
-            var limit = norms.Find("snkr4004.p7_10_11.pressure")!.Values["diaphragmAbove"]!.Value;
+            var vpv = VpvNorms.For(hi.Settings.Region);
+            var limit = norms.Find(vpv.DiaphragmId)!.Values["diaphragmAbove"]!.Value;
             if (hydrant is { } hr && hr.ValvePressure.Mpa > limit + 1e-9)
             {
-                issues.Add(new Issue("vpv.diaphragm", IssueLevel.Warning, $"Давление у пожарного крана {hr.ValvePressure.Mpa:0.000} МПа больше {limit} МПа — между краном и соединительной головкой предусмотреть диафрагму или регулятор давления; расход ПК в расчёте принят без диафрагмы (в запас).", Clause: "7.11"));
+                issues.Add(new Issue("vpv.diaphragm", IssueLevel.Warning, $"Давление у пожарного крана {hr.ValvePressure.Mpa:0.000} МПа больше {limit} МПа — между краном и соединительной головкой предусмотреть диафрагму или регулятор давления; расход ПК в расчёте принят без диафрагмы (в запас).", Clause: $"{vpv.DiaphragmClause} {vpv.Doc}"));
             }
         }
 

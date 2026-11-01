@@ -11,7 +11,7 @@ public class ExplanatoryNoteComposerTests
 {
     private static readonly JsonNormsProvider Norms = JsonNormsProvider.Load(RepoPaths.Norms);
 
-    private static NoteDocument Compose(bool hydrants = false, UserTank? tank = null)
+    private static NoteDocument Compose(bool hydrants = false, UserTank? tank = null, NormsRegion region = NormsRegion.Kg)
     {
         var rules = LayoutRules.Resolve(Norms, "2", ConstructionClass.K0).Rules!;
         var contour = new Polygon([new(0, 0), new(30000, 0), new(30000, 20000), new(0, 20000)]);
@@ -19,7 +19,7 @@ public class ExplanatoryNoteComposerTests
         var layout = SprinklerLayouter.Layout(plan, rules);
         var routing = PipeRouter.Route(plan, layout, Norms, rules, new Pressure(0.3));
         var settings = new DesignSettings("ГОСТ 3262", new KFactor(0.47), new Length(4), new Length(25), 100, new Pressure(0.1), DesignVelocity: 5);
-        var hs = new HydrantSettings("II", "В", "С0", 40, new Length(12), new Length(3.3), 50, 16, 20, new Length(1.35), new Length(15), 65);
+        var hs = new HydrantSettings("II", "В", "С0", 40, new Length(12), new Length(3.3), 50, 16, 20, new Length(1.35), new Length(15), 65, Region: region);
         var design = DesignCalculation.Run(routing.Routes[0], Norms, rules, settings, hydrants: hydrants ? new HydrantInput(hs, HydrantDemand.Resolve(Norms, hs).Demand!) : null);
         var takeoff = MaterialTakeoffBuilder.Build([design.Route], layout.Sprinklers.Count, Norms, "ГОСТ 3262", new SprinklerSpec("Ороситель спринклерный водяной", "по каталогу"));
         using var registry = new StreamReader(RepoPaths.Registry);
@@ -61,6 +61,17 @@ public class ExplanatoryNoteComposerTests
         text.ShouldContain("(Б.29)");
         text.ShouldContain("Б.1.3.16");
         AllText(Compose().Sections.Single(s => s.Number == "5")).ShouldNotContain("Ж.2");
+    }
+
+    [Fact]
+    public void Hydrant_section_for_Russia_cites_SP10_and_not_Kyrgyz_norms()
+    {
+        // ADR 0014: объект в РФ — табл. 7.1–7.3 и п. 7.15 СП 10.13130.2020, без ссылок на СН КР.
+        var text = AllText(Compose(hydrants: true, region: NormsRegion.Ru).Sections.Single(s => s.Number == "5"));
+        text.ShouldContain("СП 10.13130.2020");
+        text.ShouldContain("табл. 7.3");
+        text.ShouldNotContain("СН КР");
+        text.ShouldNotContain("Ж.3");
     }
 
     [Fact]

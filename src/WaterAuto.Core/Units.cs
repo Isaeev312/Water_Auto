@@ -16,6 +16,9 @@ public readonly record struct Pressure(double Mpa)
     /// <summary>Геодезическое давление столба высотой h: Z = H/100 (Б.30).</summary>
     public static Pressure FromHeight(Length height) => new(height.Meters / 100.0);
 
+    /// <summary>Напор, соответствующий давлению, в той же записи H = 100·P (обратное <see cref="FromHeight"/>).</summary>
+    public Length ToHeight() => new(Mpa * 100.0);
+
     public static Pressure operator +(Pressure a, Pressure b) => new(a.Mpa + b.Mpa);
     public static Pressure operator -(Pressure a, Pressure b) => new(a.Mpa - b.Mpa);
 

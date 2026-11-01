@@ -24,12 +24,42 @@ public class HydrantDemandTests
         PipeDn: 65);
 
     [Fact]
-    public void Russian_norms_without_data_stop_with_an_issue_instead_of_using_Kyrgyz_tables()
+    public void Russian_norms_use_tables_7_2_and_7_3_of_SP10_with_pressure_in_MPa()
     {
-        // ADR 0014: числа СН КР для объекта в РФ не подставляются; пока нет данных СП 10 — замечание-ошибка.
-        var r = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru });
+        // ADR 0014: II, В, С0, 40 тыс. м³ → табл. 7.2: 2 × 2,5 л/с; струя 6 м (п. 7.15); табл. 7.3 DN50, ствол 16, рукав 20 м: 2,6 л/с, 0,100 МПа = 10 м.
+        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru }).Demand!;
+        d.Jets.ShouldBe(2);
+        d.MinJetFlow.LitersPerSecond.ShouldBe(2.5);
+        d.RequiredJetHeight.Meters.ShouldBe(6);
+        d.JetFlow.LitersPerSecond.ShouldBe(2.6);
+        d.Head.Meters.ShouldBe(10.0, 1e-9);
+        d.Source.ShouldContain("СП 10.13130.2020");
+        d.NormIds.ShouldAllBe(id => id.StartsWith("sp10."));
+    }
+
+    [Fact]
+    public void Russian_tall_production_building_takes_four_jets_of_5_lps_by_7_13()
+    {
+        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, BuildingHeight = new Length(55), VolumeThousandM3 = 200, ValveDn = 65, NozzleMm = 19 }).Demand!;
+        d.Jets.ShouldBe(4);
+        d.MinJetFlow.LitersPerSecond.ShouldBe(5);
+        d.NormIds.ShouldContain("sp10.p7_13.highRise");
+    }
+
+    [Fact]
+    public void Russian_public_building_takes_row_of_table_7_1()
+    {
+        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, Zh1Row = "g4.seats_over300" }).Demand!;
+        d.Jets.ShouldBe(2);
+        d.NormIds.ShouldContain("sp10.t7_1.g4.seats_over300");
+    }
+
+    [Fact]
+    public void Russian_parking_stops_with_an_issue_instead_of_using_SNiP_21_02()
+    {
+        var r = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, IsParking = true });
         r.Demand.ShouldBeNull();
-        r.Issues.ShouldContain(i => i.Code == "vpv.noNormsRu" && i.Level == IssueLevel.Error && i.Clause!.Contains("СП 10.13130.2020"));
+        r.Issues.ShouldContain(i => i.Code == "vpv.noNormsRu" && i.Level == IssueLevel.Error);
     }
 
     [Fact]

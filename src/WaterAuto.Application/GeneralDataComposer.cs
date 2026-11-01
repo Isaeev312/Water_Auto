@@ -47,7 +47,7 @@ public static class GeneralDataComposer
         var designations = new List<string> { "СП 485.1311500.2020" };
         if (d.Hydrants is { } h)
         {
-            designations.Add("СН КР 40-04:2025");
+            designations.Add(VpvNorms.For(h.Settings.Region).Doc);
             if (h.Settings.IsParking)
             {
                 designations.Add("СНиП 21-02-99*");
@@ -98,7 +98,7 @@ public static class GeneralDataComposer
         var instructions = new List<string>
         {
             $"Рабочие чертежи автоматической установки водяного пожаротушения объекта «{i.ObjectName}» выполнены в соответствии с СП 485.1311500.2020"
-                + (d.Hydrants is null ? "" : d.Hydrants.Settings.IsParking ? ", внутренний противопожарный водопровод — СН КР 40-04:2025 и СНиП 21-02-99*" : ", внутренний противопожарный водопровод — СН КР 40-04:2025")
+                + (d.Hydrants is null ? "" : $", внутренний противопожарный водопровод — {VpvNorms.For(d.Hydrants.Settings.Region).Doc}{(d.Hydrants.Settings.IsParking ? " и СНиП 21-02-99*" : "")}")
                 + ".",
             $"Установка — спринклерная {(i.AirFilled ? "воздухозаполненная" : "водозаполненная")}. Параметры приняты для группы помещений {p.Group} по {p.Source} СП 485.",
             $"Трубопроводы — стальные по {i.PipeStandard}; соединения — на сварке по {i.WeldStandard}; фасонные части — {string.Join(", ", i.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}.",

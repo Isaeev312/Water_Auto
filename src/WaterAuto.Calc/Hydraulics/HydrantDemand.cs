@@ -75,11 +75,13 @@ public static class HydrantDemand
             return new HydrantDemandResult(null, issues);
         }
 
-        if (s.Region == NormsRegion.Ru)
+        var set = VpvNorms.For(s.Region);
+        IEnumerable<NormRecord> Table(string clause) => norms.ByClause(clause).Where(r => r.Id.StartsWith(set.Prefix, StringComparison.Ordinal));
+        if (s.IsParking && !set.ParkingSupported)
         {
             return Stop("vpv.noNormsRu", IssueLevel.Error,
-                "ВПВ для объекта в РФ считается по СП 10.13130.2020, его данных ещё нет в программе; таблицы СН КР 40-04:2025 для РФ не применяются. Расчёт ВПВ не выполнен.",
-                "СП 10.13130.2020, разд. 7");
+                $"Струи ВПВ для автостоянки в РФ — по СП 113.13330, его данных нет в программе; п. 6.4 СНиП 21-02-99* применён только для КР (ADR 0010). Расчёт ВПВ не выполнен — задайте здание по {set.Table2}.",
+                "СП 113.13330");
         }
 
         int n;
@@ -87,15 +89,15 @@ public static class HydrantDemand
         string rowId, source;
         if (s.Zh1Row is { } zh1 && !s.IsParking)
         {
-            var row = norms.Find($"snkr4004.tZh_1.{zh1}");
+            var row = Table(set.Table1).FirstOrDefault(r => r.Id.EndsWith($".{zh1}", StringComparison.Ordinal));
             if (row is null)
             {
-                return Stop("vpv.noRow", IssueLevel.Error, $"В табл. Ж.1 нет строки «{zh1}».", "табл. Ж.1");
+                return Stop("vpv.noRow", IssueLevel.Error, $"В {set.Table1} {set.Doc} нет строки «{zh1}».", set.Table1);
             }
 
             n = (int)row.Values["jets"]!.Value;
             qMin = row.Values["jetFlow"]!.Value;
-            (rowId, source) = (row.Id, $"табл. Ж.1 СН КР 40-04:2025 ({row.Attributes["description"]})");
+            (rowId, source) = (row.Id, $"{set.Table1} {set.Doc} ({row.Attributes["description"]})");
         }
         else if (s.IsParking)
         {
@@ -112,23 +114,23 @@ public static class HydrantDemand
         else
         {
             static IEnumerable<string> Split(string v) => v.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries).Where(x => x != "и");
-            var row = norms.ByClause("табл. Ж.2").FirstOrDefault(r =>
+            var row = Table(set.Table2).FirstOrDefault(r =>
                 Split(r.Attributes["fireResistance"]).Contains(s.FireResistance)
                 && Split(r.Attributes["category"]).Contains(s.Category)
                 && (r.Attributes["constructionClass"] == "не нормируется" || Split(r.Attributes["constructionClass"]).Contains(s.HazardClass)));
             if (row is null)
             {
-                return Stop("vpv.noRow", IssueLevel.Error, $"В табл. Ж.2 нет строки для степени {s.FireResistance}, категории {s.Category}, класса {s.HazardClass}. Допустимо: степень I–V, категория А, Б, В, Г, Д, класс С0–С3.", "табл. Ж.2");
+                return Stop("vpv.noRow", IssueLevel.Error, $"В {set.Table2} нет строки для степени {s.FireResistance}, категории {s.Category}, класса {s.HazardClass}. Допустимо: степень I–V, категория А, Б, В, Г, Д, класс С0–С3.", set.Table2);
             }
 
-            if (s.BuildingHeight.Meters > row.Values["heightMax"]!.Value + 1e-9)
+            if (row.Values.GetValueOrDefault("heightMax") is { } heightMax && s.BuildingHeight.Meters > heightMax + 1e-9)
             {
-                return Stop("vpv.outOfTable", IssueLevel.Error, $"Высота здания {s.BuildingHeight} больше {row.Values["heightMax"]} м — вне табл. Ж.2.", "табл. Ж.2");
+                return Stop("vpv.outOfTable", IssueLevel.Error, $"Высота здания {s.BuildingHeight} больше {heightMax} м — вне {set.Table2}.", set.Table2);
             }
 
             if (s.VolumeThousandM3 < row.Values["volumeMin"]!.Value)
             {
-                return Stop("vpv.notRequired", IssueLevel.Info, $"Объём здания меньше {row.Values["volumeMin"]} тыс. м³ — ВПВ по табл. Ж.2 не требуется.", "табл. Ж.2");
+                return Stop("vpv.notRequired", IssueLevel.Info, $"Объём здания меньше {row.Values["volumeMin"]} тыс. м³ — ВПВ по {set.Table2} не требуется.", set.Table2);
             }
 
             var small = s.VolumeThousandM3 <= row.Values["volumeSplit"]!.Value;
@@ -136,70 +138,82 @@ public static class HydrantDemand
             var minFlow = row.Values[small ? "jetFlowUpTo150" : "jetFlowOver150"];
             if (jets is not { } jetsValue || minFlow is not { } flowMin)
             {
-                return Stop("vpv.notRequired", IssueLevel.Info, "ВПВ по табл. Ж.2 не требуется.", "табл. Ж.2");
+                return Stop("vpv.notRequired", IssueLevel.Info, $"ВПВ по {set.Table2} не требуется.", set.Table2);
             }
 
             n = (int)jetsValue;
             qMin = flowMin;
-            (rowId, source) = (row.Id, "табл. Ж.2 СН КР 40-04:2025");
+            (rowId, source) = (row.Id, $"{set.Table2} {set.Doc}");
+            if (set.HighRiseId is { } highId && norms.Find(highId) is { } high
+                && s.BuildingHeight.Meters > high.Values["heightOver"]!.Value + 1e-9 && s.VolumeThousandM3 > high.Values["volumeOver"]!.Value + 1e-9)
+            {
+                // Высокое производственное здание большого объёма — особое правило вместо строки таблицы.
+                n = (int)high.Values["jets"]!.Value;
+                qMin = high.Values["jetFlow"]!.Value;
+                (rowId, source) = (high.Id, $"п. {high.Clause} {set.Doc}");
+            }
         }
 
         string? extraId = null;
         if (s.ExtraJet)
         {
-            if (s.Zh1Row is null || s.IsParking)
+            if (set.ExtraJetId is null)
+            {
+                issues.Add(new Issue("vpv.extraJet", IssueLevel.Warning, $"В {set.Doc} нет правила о дополнительной струе для залов — признак не учтён.", Clause: set.Table1));
+            }
+            else if (s.Zh1Row is null || s.IsParking)
             {
                 issues.Add(new Issue("vpv.extraJet", IssueLevel.Warning, "Дополнительная струя по п. 7.7 относится к табл. Ж.1 — признак не учтён.", Clause: "7.7"));
             }
             else
             {
-                var extra = norms.Find("snkr4004.p7_7.extraJet")!;
+                var extra = norms.Find(set.ExtraJetId)!;
                 n += (int)extra.Values["jets"]!.Value;
                 extraId = extra.Id;
                 source += ", п. 7.7";
             }
         }
 
-        var heightRecord = norms.Find("snkr4004.p7_9.jetHeight")!;
+        var heightRecord = norms.Find(set.JetHeightId)!;
         var minHeight = s.BuildingHeight.Meters <= heightRecord.Values["buildingHeightLimit"]!.Value
             ? heightRecord.Values["minUpTo50"]!.Value
             : heightRecord.Values["otherOver50"]!.Value;
         var required = Math.Max(s.RoomHeight.Meters, minHeight);
         var dn = s.ValveDn.ToString(CultureInfo.InvariantCulture);
         var qKey = string.Create(CultureInfo.InvariantCulture, $"q_{s.NozzleMm}");
-        var hKey = string.Create(CultureInfo.InvariantCulture, $"H_{s.NozzleMm}_{s.HoseLength}");
-        var rows = norms.ByClause("табл. Ж.3")
+        var hKey = string.Create(CultureInfo.InvariantCulture, $"{(set.HeadInMpa ? "P" : "H")}_{s.NozzleMm}_{s.HoseLength}");
+        var rows = Table(set.Table3)
             .Where(r => r.Attributes["valveDn"] == dn && r.Values["jetHeight"]!.Value >= required - 1e-9)
             .OrderBy(r => r.Values["jetHeight"]!.Value)
             .ToList();
         if (rows.Count == 0)
         {
-            return Stop("vpv.outOfTable", IssueLevel.Error, $"В табл. Ж.3 для клапана DN{s.ValveDn} нет высоты струи {required:0.##} м.", "табл. Ж.3");
+            return Stop("vpv.outOfTable", IssueLevel.Error, $"В {set.Table3} для клапана DN{s.ValveDn} нет высоты струи {required:0.##} м.", set.Table3);
         }
 
         if (rows[0].Values.GetValueOrDefault(qKey) is null || rows[0].Values.GetValueOrDefault(hKey) is null)
         {
-            return Stop("vpv.noTableValue", IssueLevel.Error, $"Табл. Ж.3: для DN{s.ValveDn}, спрыска {s.NozzleMm} мм, рукава {s.HoseLength} м при струе {rows[0].Values["jetHeight"]} м значения нет.", "табл. Ж.3");
+            return Stop("vpv.noTableValue", IssueLevel.Error, $"{set.Table3}: для DN{s.ValveDn}, спрыска {s.NozzleMm} мм, рукава {s.HoseLength} м при струе {rows[0].Values["jetHeight"]} м значения нет.", set.Table3);
         }
 
         // Расход меньше минимального — берётся более длинная компактная струя той же колонки (больший напор).
         var t3 = rows.FirstOrDefault(r => r.Values.GetValueOrDefault(qKey) is { } rq && rq >= qMin - 1e-9 && r.Values.GetValueOrDefault(hKey) is not null);
         if (t3 is null)
         {
-            return Stop("vpv.jetFlowLow", IssueLevel.Error, $"Ствол {s.NozzleMm} мм при клапане DN{s.ValveDn} не даёт {qMin} л/с ({source}) ни при какой высоте струи табл. Ж.3 — взять больший спрыск или клапан.", "табл. Ж.3");
+            return Stop("vpv.jetFlowLow", IssueLevel.Error, $"Ствол {s.NozzleMm} мм при клапане DN{s.ValveDn} не даёт {qMin} л/с ({source}) ни при какой высоте струи {set.Table3} — взять больший спрыск или клапан.", set.Table3);
         }
 
         var q = t3.Values[qKey];
-        var h = t3.Values[hKey];
+        var h = set.HeadInMpa ? new Pressure(t3.Values[hKey]!.Value).ToHeight().Meters : t3.Values[hKey];
 
-        var valve = norms.Find("snkr4004.p7_9.valveDn")!;
-        if (q!.Value > valve.Values["dn50MaxFlow"]!.Value + 1e-9 && s.ValveDn == (int)valve.Values["dnSmall"]!.Value)
+        var valve = set.ValveDnId is { } valveId ? norms.Find(valveId)! : null;
+        if (valve is not null && q!.Value > valve.Values["dn50MaxFlow"]!.Value + 1e-9 && s.ValveDn == (int)valve.Values["dnSmall"]!.Value)
         {
             issues.Add(new Issue("vpv.valveDn", IssueLevel.Warning, $"Расход струи {q} л/с больше {valve.Values["dn50MaxFlow"]} л/с: по примечанию к 7.9 нужен клапан DN{valve.Values["dnLarge"]} (DN50 — при ТЭО).", Clause: "7.9"));
         }
 
         return new HydrantDemandResult(
-            new HydrantDemandValue(n, new Flow(qMin), new Length(required), new Length(t3.Values["jetHeight"]!.Value), new Flow(q!.Value), new Length(h!.Value), [rowId, .. extraId is null ? Array.Empty<string>() : [extraId], heightRecord.Id, t3.Id, valve.Id], source),
+            new HydrantDemandValue(n, new Flow(qMin), new Length(required), new Length(t3.Values["jetHeight"]!.Value), new Flow(q!.Value), new Length(h!.Value), [rowId, .. extraId is null ? Array.Empty<string>() : [extraId], heightRecord.Id, t3.Id, .. valve is null ? Array.Empty<string>() : [valve.Id]], source),
             issues);
     }
 }

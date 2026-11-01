@@ -432,7 +432,8 @@ public static class ExplanatoryNoteComposer
             blocks.AddRange(HydrantBlocks(d, h, qAup, norms));
             if (i.HydrantCount > 0 && i.HydrantReach is { } reach)
             {
-                blocks.Add(new NoteParagraph($"**Размещение пожарных кранов.** Краны размещены у стен так, чтобы каждая точка помещения орошалась {h.Demand.Jets} струями (п. 7.14 СН КР 40-04:2025); струя достаёт точку в пределах радиуса действия {F(reach.Meters, "0.#")} м по прямой внутри помещения — длина рукава {h.Settings.HoseLength} м плюс радиус компактной части струи {F(h.Demand.TableJetHeight.Meters, "0")} м (п. 7.9). Принято **{i.HydrantCount}** пожарных кранов; места кранов — на плане (слой ПТ_ПК); краны ближе {F(HydrantPlacement.RiserSeparationMm / 1000, "0")} м друг к другу считаются одним стояком (две струи — из двух разных стояков). Трубопроводы к кранам на плане не трассируются: в гидравлическом расчёте краны диктующей секции приняты присоединёнными в точке подключения (см. выше, с запасом). Клапаны — на высоте {F(norms.Find("snkr4004.p7_16.valveHeight")?.Values["height"] ?? 0, "0.00")} м от пола (п. 7.16)."));
+                var vpv = VpvNorms.For(h.Settings.Region);
+                blocks.Add(new NoteParagraph($"**Размещение пожарных кранов.** Краны размещены у стен так, чтобы каждая точка помещения орошалась {h.Demand.Jets} струями (п. {vpv.PlacementClause} {vpv.Doc}); струя достаёт точку в пределах радиуса действия {F(reach.Meters, "0.#")} м по прямой внутри помещения — длина рукава {h.Settings.HoseLength} м плюс радиус компактной части струи {F(h.Demand.TableJetHeight.Meters, "0")} м (п. {vpv.JetHeightClause}). Принято **{i.HydrantCount}** пожарных кранов; места кранов — на плане (слой ПТ_ПК); краны ближе {F(HydrantPlacement.RiserSeparationMm / 1000, "0")} м друг к другу считаются одним стояком (две струи — из двух разных стояков). Трубопроводы к кранам на плане не трассируются: в гидравлическом расчёте краны диктующей секции приняты присоединёнными в точке подключения (см. выше, с запасом). Клапаны — на высоте {F(norms.Find(vpv.ValveHeightId)?.Values["height"] ?? 0, "0.00")} м от пола (п. {vpv.ValveHeightClause})."));
             }
         }
 
@@ -449,15 +450,18 @@ public static class ExplanatoryNoteComposer
         var s = h.Settings;
         var v = h.Demand;
         var n = v.Jets;
+        var vpv = VpvNorms.For(s.Region);
         return
         [
-            new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."),
+            new NoteParagraph(vpv.Region == NormsRegion.Kg
+                ? "**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."
+                : "**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Число струй и минимальный расход крана — по табл. 7.1, 7.2 СП 10.13130.2020, расход ствола и давление у крана — по табл. 7.3."),
             new NoteParagraph(s.IsParking || s.Zh1Row is not null
                 ? s.Zh1Row is not null && !s.IsParking
                     ? $"По {NoteDocx.Escape(v.Source)} принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
                     : $"Для отапливаемой автостоянки закрытого типа по {NoteDocx.Escape(v.Source)} (объём пожарного отсека {F(s.VolumeThousandM3, "0.#")} тыс. м³) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
                 : $"По {NoteDocx.Escape(v.Source)} (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
-            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м) принята первая строка с высотой струи не меньше требуемой и расходом ствола не меньше *q*_{{min}} — {F(v.TableJetHeight.Meters, "0")} м, без интерполяции: *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
+            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. {vpv.JetHeightClause} {vpv.Doc}: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По {vpv.Table3} (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м) принята первая строка с высотой струи не меньше требуемой и расходом ствола не меньше *q*_{{min}} — {F(v.TableJetHeight.Meters, "0")} м, без интерполяции: *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
             new NoteParagraph("Пожарные краны включены в расчётную сеть АУП как потребители с характеристикой:"),
             new NoteFormula($"*K*_{{ПК}} = *q*_{{ПК}} / √(*H*_{{ПК}}/100) = {F(v.JetFlow.LitersPerSecond)} / √{F(v.Head.Meters / 100, "0.000")} = {F(h.K, "0.000")} л/(с·МПа^{{0,5}}).", "5.9", []),
             new NoteParagraph($"*Принято:* {n} крана диктующей секции присоединены в точке подключения трубопроводом DN{h.Pipe.Dn} длиной {F(s.PipeLength.Meters, "0.0")} м (*K*_{{т}} = {F(h.Pipe.Kt.Kt, "0.##")}), по которому идёт весь расход кранов; местные потери — {F(d.LocalLossFactor * 100, "0")} % (п. Б.1.3.13). Клапан диктующего ПК — на {F(s.AboveAxis.Meters, "0.00")} м над осью насоса."),
@@ -470,9 +474,9 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Расход насосов совмещённого водопровода (Б.29):"),
             new NoteFormula($"*Q*_{{нас}} = *Q*_{{АУП}} + *n*·*q*_{{ПК}} = {F(qAup, "0.00")} + {n}·{F(h.JetFlowActual.LitersPerSecond, "0.00")} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**.", "5.11", []),
             .. (d.Issues.Any(x => x.Code == "vpv.diaphragm")
-                ? [new NoteParagraph($"Давление у пожарного крана *P*_{{ПК}} = (*q*_{{ПК}} / *K*_{{ПК}})^{{2}} = {F(h.ValvePressure.Mpa, "0.000")} МПа больше {F(norms.Find("snkr4004.p7_10_11.pressure")!.Values["diaphragmAbove"]!.Value)} МПа, поэтому между краном и соединительной головкой предусматриваются диафрагмы или регуляторы давления (примечание к п. 7.11 СН КР 40-04:2025). Расход кранов в расчёте принят без учёта диафрагм — с запасом.")]
+                ? [new NoteParagraph($"Давление у пожарного крана *P*_{{ПК}} = (*q*_{{ПК}} / *K*_{{ПК}})^{{2}} = {F(h.ValvePressure.Mpa, "0.000")} МПа больше {F(norms.Find(vpv.DiaphragmId)!.Values["diaphragmAbove"]!.Value)} МПа, поэтому между краном и соединительной головкой предусматриваются диафрагмы или регуляторы давления ({vpv.DiaphragmClause} {vpv.Doc}). Расход кранов в расчёте принят без учёта диафрагм — с запасом.")]
                 : Array.Empty<NoteBlock>()),
-            new NoteParagraph("Продолжительность работы ВПВ, совмещённого с АУП, равна времени работы АУП (п. Б.1.3.15 СП 485; п. 7.13 СН КР 40-04:2025)."),
+            new NoteParagraph($"Продолжительность работы ВПВ, совмещённого с АУП, равна времени работы АУП (п. Б.1.3.15 СП 485; п. {vpv.DurationClause} {vpv.Doc})."),
         ];
     }
 
