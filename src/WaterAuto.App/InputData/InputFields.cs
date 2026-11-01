@@ -18,7 +18,20 @@ internal enum FieldKind
     PumpSet,
     HydrantRow,
     DrawingPath,
+    Table,
 }
+
+/// <summary>Тип столбца таблицы-списка: текст, число, целое или флажок.</summary>
+internal enum ColumnKind
+{
+    Text,
+    Number,
+    Int,
+    Bool,
+}
+
+/// <summary>Столбец таблицы-списка: ключ в объекте элемента JSON, заголовок, тип; Required — строка без значения не сохраняется.</summary>
+internal sealed record TableColumn(string Key, string Header, ColumnKind Kind = ColumnKind.Text, bool Required = false);
 
 /// <summary>Вариант выпадающего списка: что записать в JSON проекта и что показать пользователю.</summary>
 internal sealed record ChoiceOption(string Value, string Label);
@@ -37,7 +50,8 @@ internal sealed record FieldSpec(
     ChoiceOption[]? Options = null,
     string? Hint = null,
     bool Required = false,
-    bool Advanced = false)
+    bool Advanced = false,
+    TableColumn[]? Columns = null)
 {
     /// <summary>Уникальный идентификатор поля в окне: «путь|ключ».</summary>
     public string Id => Path + "|" + Key;
@@ -353,6 +367,58 @@ internal static class InputFields
             OptionalPath: "design.foam",
             OptionalLabel: "Пенная установка (раствор пенообразователя)",
             OptionalHint: "Если выключено, установка водяная."),
+        new("Помещения и этажи",
+            "Помещения разных групп на плане и дополнительные этажи. Пустые таблицы — весь план одной группы, один этаж.",
+            [
+                new CardSpec("Группы помещений",
+                    [
+                        new FieldSpec("design", "rooms", "Помещения со своей группой", FieldKind.Table,
+                            Hint: "Имя — текст внутри контура ПТ_КОНТУР. Пустая высота — из раздела «Установка». " +
+                                "Насос и запас воды — по самой тяжёлой группе (огибающая).",
+                            Columns:
+                            [
+                                new TableColumn("room", "Помещение", Required: true),
+                                new TableColumn("group", "Группа", Required: true),
+                                new TableColumn("roomHeight", "Высота, м", ColumnKind.Number),
+                                new TableColumn("storageHeight", "Складирование, м", ColumnKind.Number),
+                            ]),
+                    ]),
+                new CardSpec("Этажи",
+                    [
+                        new FieldSpec("design", "levels", "Дополнительные этажи", FieldKind.Table,
+                            Hint: "Чертёж — путь от папки проекта; отметка пола — относительно основного этажа. " +
+                                "Без DN стояка вся высота считается по подводящему трубопроводу.",
+                            Columns:
+                            [
+                                new TableColumn("name", "Этаж", Required: true),
+                                new TableColumn("drawing", "Чертёж", Required: true),
+                                new TableColumn("elevation", "Отметка, м", ColumnKind.Number),
+                                new TableColumn("riserDn", "DN стояка", ColumnKind.Int),
+                                new TableColumn("riserRun", "До стояка, м", ColumnKind.Number),
+                            ]),
+                    ]),
+            ]),
+        new("Водяные завесы",
+            "Дренчерные завесы проёмов (пп. 6.3.6–6.3.14): число ниток, шаг оросителей и расход программа считает сама.",
+            [
+                new CardSpec("Завесы",
+                    [
+                        new FieldSpec("design", "curtains", "Проёмы с завесами", FieldKind.Table,
+                            Hint: "K и давление у диктующего оросителя — по ТД оросителя. Пустая группа — группа установки. " +
+                                "Совмещённая с АУП-С — её расход прибавляется к насосу (Б.28).",
+                            Columns:
+                            [
+                                new TableColumn("name", "Проём"),
+                                new TableColumn("width", "Ширина, м", ColumnKind.Number, Required: true),
+                                new TableColumn("k", "K", ColumnKind.Number, Required: true),
+                                new TableColumn("pressure", "p, МПа", ColumnKind.Number, Required: true),
+                                new TableColumn("dn", "DN нитки", ColumnKind.Int),
+                                new TableColumn("group", "Группа"),
+                                new TableColumn("combined", "С АУП-С", ColumnKind.Bool),
+                                new TableColumn("model", "Модель"),
+                            ]),
+                    ]),
+            ]),
         new("Резервуар",
             "Резервуар пожарного запаса воды: габариты и мёртвый слой для сравнения с требуемым объёмом.",
             [

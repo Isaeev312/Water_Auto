@@ -1,9 +1,11 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using Microsoft.Win32;
 using WaterAuto.Application;
 
@@ -52,6 +54,7 @@ internal sealed class InputFieldController
     private Control? _control;
     private TextBlock? _caption;
     private TextBox? _customStandardBox;
+    private ObservableCollection<TableRow>? _table;
     private string? _hintOverride;
     private string? _error;
     private string? _profileValue;
@@ -81,6 +84,7 @@ internal sealed class InputFieldController
     {
         FieldKind.Bool => _control is CheckBox { IsChecked: true },
         FieldKind.Sprinkler => _control is ComboBox { SelectedItem: ComboItem { Tag: not null } },
+        FieldKind.Table => _table is { Count: > 0 },
         _ => CurrentText().Length > 0,
     };
 
@@ -105,6 +109,9 @@ internal sealed class InputFieldController
             case FieldKind.Bool:
                 SetValue(target, JsonValue.Create(_control is CheckBox { IsChecked: true }));
                 return true;
+
+            case FieldKind.Table:
+                return WriteTable(target, errors, reportErrors);
 
             case FieldKind.Sprinkler:
                 // Поле-помощник: в JSON пишутся модель, K и положение розетки, которые оно заполняет.
@@ -223,6 +230,7 @@ internal sealed class InputFieldController
             FieldKind.PumpSet => BuildPumpSet(),
             FieldKind.HydrantRow => BuildHydrantRow(),
             FieldKind.DrawingPath => BuildDrawing(),
+            FieldKind.Table => BuildTable(),
             _ => BuildText(),
         };
         panel.Children.Add(content);
@@ -230,6 +238,124 @@ internal sealed class InputFieldController
         InputTheme.ApplyStyle(_caption, "Text.Caption");
         panel.Children.Add(_caption);
         _view = panel;
+    }
+
+    // Таблица-список: строки — элементы массива JSON, столбцы — ключи элемента. Значения хранятся текстом и
+    // разбираются при записи, чтобы ошибку ввода показать подписью поля, а не исключением DataGrid.
+    private DataGrid BuildTable()
+    {
+        var columns = _field.Columns ?? [];
+        _table = [];
+        if (ReadNode() is JsonArray items)
+        {
+            foreach (var item in items.OfType<JsonObject>())
+            {
+                var row = new TableRow();
+                foreach (var column in columns)
+                {
+                    row[column.Key] = column.Kind == ColumnKind.Bool
+                        ? item[column.Key]?.GetValueKind() != JsonValueKind.False
+                        : InputJson.Text(item[column.Key]);
+                }
+
+                _table.Add(row);
+            }
+        }
+
+        _table.CollectionChanged += (_, e) =>
+        {
+            foreach (var row in e.NewItems?.OfType<TableRow>() ?? [])
+            {
+                foreach (var column in columns.Where(c => c.Kind == ColumnKind.Bool))
+                {
+                    row[column.Key] = true;
+                }
+            }
+
+            OnControlChanged();
+        };
+        var grid = new DataGrid
+        {
+            AutoGenerateColumns = false,
+            CanUserAddRows = true,
+            CanUserDeleteRows = true,
+            HeadersVisibility = DataGridHeadersVisibility.Column,
+            MinHeight = 90,
+            MaxWidth = FieldWidth,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            ItemsSource = _table,
+        };
+        grid.CellEditEnding += (_, _) => OnControlChanged();
+        foreach (var column in columns)
+        {
+            var binding = new Binding("[" + column.Key + "]") { UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged };
+            grid.Columns.Add(column.Kind == ColumnKind.Bool
+                ? new DataGridCheckBoxColumn { Header = column.Header, Binding = binding }
+                : new DataGridTextColumn { Header = column.Header, Binding = binding, MinWidth = 60 });
+        }
+
+        AttachToolTip(grid);
+        _control = grid;
+        return grid;
+    }
+
+    private bool WriteTable(JsonObject target, List<string>? errors, bool reportErrors)
+    {
+        var array = new JsonArray();
+        var n = 0;
+        foreach (var row in _table!)
+        {
+            n++;
+            var item = new JsonObject();
+            foreach (var column in _field.Columns ?? [])
+            {
+                row.TryGetValue(column.Key, out var cell);
+                if (column.Kind == ColumnKind.Bool)
+                {
+                    item[column.Key] = cell is true;
+                    continue;
+                }
+
+                var text = (cell as string ?? "").Trim();
+                if (text.Length == 0)
+                {
+                    if (column.Required)
+                    {
+                        return !reportErrors || Fail(errors!, $"строка {n}: не заполнен столбец «{column.Header}».");
+                    }
+
+                    continue;
+                }
+
+                switch (column.Kind)
+                {
+                    case ColumnKind.Number when TryParseDouble(text, out var number):
+                        item[column.Key] = number;
+                        break;
+                    case ColumnKind.Int when TryParseInt(text, out var integer):
+                        item[column.Key] = integer;
+                        break;
+                    case ColumnKind.Number or ColumnKind.Int:
+                        return reportErrors && Fail(errors!, $"строка {n}, «{column.Header}»: ожидается число, введено «{text}».");
+                    default:
+                        item[column.Key] = text;
+                        break;
+                }
+            }
+
+            array.Add(item);
+        }
+
+        if (array.Count == 0)
+        {
+            RemoveValue(target);
+        }
+        else
+        {
+            SetValue(target, array);
+        }
+
+        return true;
     }
 
     private CheckBox BuildCheckBox()
@@ -665,6 +791,7 @@ internal sealed class InputFieldController
             CheckBox box => box.IsChecked == true ? "true" : "false",
             TextBox text => text.Text.Trim(),
             ComboBox combo => (combo.SelectedItem as ComboItem)?.Value ?? "",
+            DataGrid => _table!.Count.ToString(Ru),
             _ => "",
         };
     }
@@ -948,4 +1075,9 @@ internal sealed class InputFieldController
 internal sealed record ComboItem(string Value, string Label, object? Tag = null)
 {
     public override string ToString() => Label;
+}
+
+/// <summary>Строка таблицы-списка: значения по ключам столбцов (привязка DataGrid через индексатор «[ключ]»).</summary>
+internal sealed class TableRow : Dictionary<string, object?>
+{
 }
