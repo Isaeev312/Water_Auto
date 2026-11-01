@@ -40,7 +40,8 @@ public sealed record NoteInputs(
     AirFilledResult? Air = null,
     IReadOnlyList<CurtainResult>? Curtains = null,
     FoamConcentrateResult? Foam = null,
-    string? FoamName = null);
+    string? FoamName = null,
+    IReadOnlyList<ComplianceRow>? Compliance = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -74,10 +75,18 @@ public static class ExplanatoryNoteComposer
                 ControlValve(norms, i.Air is not null),
                 Installation(i, norms),
                 Maintenance(norms),
+                .. i.Compliance is { Count: > 0 } rows ? new[] { ComplianceSection(rows) } : [],
                 Conclusion(i),
             ],
             references);
     }
+
+    // Соответствие требованиям норм — та же таблица, что compliance.xlsx, для экспертизы прямо в записке.
+    private static NoteSection ComplianceSection(IReadOnlyList<ComplianceRow> rows) => new("13", "Соответствие требованиям норм", [
+        new NoteParagraph("Основные параметры установки сопоставлены с требованиями СП 485: «принято по норме» — значение взято из таблицы или формулы нормы, «соответствует» — принятое в проекте значение проверено по требованию, «проверить» — вопрос, требующий решения проектировщика или подтверждения по технической документации изделий."),
+        new NoteTable("Соответствие требованиям норм", ["№", "Требование", "Документ, пункт", "Требуется", "Принято", "Вывод"],
+            [.. rows.Select((r, k) => (IReadOnlyList<string>)[(k + 1).ToString(Ru), r.Requirement, r.Clause, r.Required, r.Adopted, ComplianceXlsx.VerdictText(r.Verdict)])]),
+    ]);
 
     // Пенообразователь (пп. 6.9.16–6.9.24).
     private static NoteSection FoamSection(NoteInputs i, FoamConcentrateResult f, INormsProvider norms)

@@ -350,6 +350,11 @@ public sealed class ProjectPipelineTests : IDisposable
         Row("Напор насосной установки")[5].ShouldBe("соответствует");
         // Замечания расчёта уровня «предупреждение» тоже попадают в таблицу — с пунктом и выводом «проверить».
         rows.ShouldContain(r => r.Count > 5 && r[5] == "проверить" && r[1].Contains("температур", StringComparison.Ordinal));
+
+        // Та же таблица — разделом 13 записки.
+        var note = WaterAuto.Reports.DocxPreview.ReadParagraphs(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)));
+        note.ShouldContain(p => p.Contains("Соответствие требованиям норм", StringComparison.Ordinal));
+        note.ShouldContain(p => p.Contains("принято по норме", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -1882,6 +1882,8 @@ public static class ProjectPipeline
             ? project.Literature
             : literature.Where(e => e.Status.StartsWith("действует", StringComparison.Ordinal)).Select(e => e.Id).ToList();
         var t = project.Title;
+        // Таблица соответствия нормам — в записку (раздел 13) и отдельным compliance.xlsx.
+        var compliance = ComplianceComposer.Compose(designs, worst, setChoice?.Chosen is not null ? setChoice.HeadAtDuty : null, issues);
         var note = ExplanatoryNoteComposer.Compose(
             new NoteInputs(
                 new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
@@ -1916,7 +1918,8 @@ public static class ProjectPipeline
                 air,
                 curtains,
                 foamResult,
-                design.Foam?.Name),
+                design.Foam?.Name,
+                Compliance: compliance),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
@@ -1970,7 +1973,6 @@ public static class ProjectPipeline
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
-        var compliance = ComplianceComposer.Compose(designs, worst, setChoice?.Chosen is not null ? setChoice.HeadAtDuty : null, issues);
         Write(auptDir, ComplianceFile, files, p => ComplianceXlsx.Write(p, compliance, $"{project.Name}. Соответствие требованиям норм (АУПТ)", project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet
