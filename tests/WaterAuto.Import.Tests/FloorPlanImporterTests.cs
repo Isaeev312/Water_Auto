@@ -159,6 +159,21 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
+    public void No_sprinkler_zone_drawn_with_lines_is_assembled_too()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Line(FloorPlanImporter.NoSprinklerLayer, 2000, 2000, 5000, 2000);
+        b.Line(FloorPlanImporter.NoSprinklerLayer, 5000, 2000, 5000, 4000);
+        b.Line(FloorPlanImporter.NoSprinklerLayer, 5000, 4000, 2000, 4000);
+        b.Line(FloorPlanImporter.NoSprinklerLayer, 2000, 4000, 2000, 2000);
+
+        var r = ImportDxf(b);
+
+        r.Plan!.NoSprinklerZones.Count.ShouldBe(2);
+        r.Plan.NoSprinklerZones.ShouldContain(z => Math.Abs((z.Outline.AreaMm2 / 1e6) - 6) < 1e-6);
+    }
+
+    [Fact]
     public void Lines_that_do_not_close_are_an_error_at_the_open_end()
     {
         var b = DrawingBuilder.ValidFloor();

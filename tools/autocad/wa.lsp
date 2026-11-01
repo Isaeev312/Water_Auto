@@ -101,7 +101,7 @@
 
   (wa:check-closed "ПТ_КОЛОННЫ" '("CIRCLE" "INSERT") "Колонна")
   (wa:check-closed "ПТ_КОРОБА" '() "Короб")
-  (wa:check-closed "ПТ_ЗАПРЕТ" '() "Зона без оросителей")
+  (wa:check-closed "ПТ_ЗАПРЕТ" '("LINE") "Зона без оросителей")
 
   ;; Балка: «Толщина» полилинии — высота балки (README §7).
   (if (setq ss (wa:on-layer "ПТ_БАЛКИ"))

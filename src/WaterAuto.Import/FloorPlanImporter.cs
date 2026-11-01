@@ -93,7 +93,8 @@ public static class FloorPlanImporter
         WarnAboutLookalikeLayers(doc, issues);
 
         var contours = new List<(string Id, Polygon Polygon)>();
-        var contourLines = new List<(string Id, PlanPoint A, PlanPoint B)>();
+        // Отрезки (LINE) на слоях контуров — помещения, зоны без оросителей, насосная; собираются после обхода чертежа.
+        var layerLines = new Dictionary<string, List<(string Id, PlanPoint A, PlanPoint B)>>(StringComparer.Ordinal);
         var texts = new List<(PlanPoint Point, string Text)>();
         var columns = new List<Column>();
         var beams = new List<Beam>();
@@ -187,8 +188,14 @@ public static class FloorPlanImporter
                 case (_, TextEntity or MText or Dimension):
                     issues.Add(new Issue("import.annotationSkipped", IssueLevel.Warning, $"Надпись или размер на слое {layer} пропущены: имя помещения пишется на слое {ContourLayer}.", id, null, Anchor(entity)));
                     break;
-                case (ContourLayer, Line l):
-                    contourLines.Add((id, W(P(l.StartPoint), mirror), W(P(l.EndPoint), mirror)));
+                case (ContourLayer or NoSprinklerLayer or PumpRoomLayer, Line l):
+                    if (!layerLines.TryGetValue(layer, out var lines))
+                    {
+                        lines = [];
+                        layerLines[layer] = lines;
+                    }
+
+                    lines.Add((id, W(P(l.StartPoint), mirror), W(P(l.EndPoint), mirror)));
                     break;
                 case (ContourLayer, LwPolyline pl):
                     if (Closed(pl, id, layer, mirror, issues) is { } contour)
@@ -259,9 +266,23 @@ public static class FloorPlanImporter
         }
 
         // Контур, обведённый отдельными отрезками (LINE), собирается в замкнутый многоугольник по совпадающим концам.
-        foreach (var (loopId, loop) in AssembleLoops(contourLines, issues))
+        foreach (var (lineLayer, lines) in layerLines)
         {
-            contours.Add((loopId, loop));
+            foreach (var (loopId, loop) in AssembleLoops(lineLayer, lines, issues))
+            {
+                switch (lineLayer)
+                {
+                    case ContourLayer:
+                        contours.Add((loopId, loop));
+                        break;
+                    case NoSprinklerLayer:
+                        zones.Add(new NoSprinklerZone(loopId, loop));
+                        break;
+                    default:
+                        pumpRooms.Add((loopId, loop));
+                        break;
+                }
+            }
         }
 
         if (contours.Count == 0)
@@ -616,7 +637,7 @@ public static class FloorPlanImporter
 
     // Отрезки собираются в замкнутые цепочки: конец одного совпадает (в пределах допуска) с началом или концом другого.
     // Замкнутая цепочка из трёх и более отрезков — контур (Info); незамкнутая — ошибка с координатой свободного конца.
-    private static List<(string Id, Polygon Loop)> AssembleLoops(List<(string Id, PlanPoint A, PlanPoint B)> lines, List<Issue> issues)
+    private static List<(string Id, Polygon Loop)> AssembleLoops(string layer, List<(string Id, PlanPoint A, PlanPoint B)> lines, List<Issue> issues)
     {
         var result = new List<(string Id, Polygon Loop)>();
         var left = new List<(string Id, PlanPoint A, PlanPoint B)>(lines);
@@ -646,12 +667,12 @@ public static class FloorPlanImporter
                 chain.RemoveAt(chain.Count - 1);
                 result.Add((ids[0], new Polygon(chain)));
                 issues.Add(new Issue("import.contourFromLines", IssueLevel.Info,
-                    $"Контур помещения собран из {ids.Count} отрезков на слое {ContourLayer}; удобнее — одна замкнутая полилиния.", ids[0], null, chain[0]));
+                    $"Контур собран из {ids.Count} отрезков на слое {layer}; удобнее — одна замкнутая полилиния.", ids[0], null, chain[0]));
             }
             else
             {
                 issues.Add(new Issue("import.contourLinesOpen", IssueLevel.Error,
-                    $"Отрезки на слое {ContourLayer} ({ids.Count} шт.) не замыкаются: свободный конец здесь. Замкните контур или обведите помещение полилинией.", ids[0], null, chain[^1]));
+                    $"Отрезки на слое {layer} ({ids.Count} шт.) не замыкаются: свободный конец здесь. Замкните контур или обведите его полилинией.", ids[0], null, chain[^1]));
             }
         }
 
