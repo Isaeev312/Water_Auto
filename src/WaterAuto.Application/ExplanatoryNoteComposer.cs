@@ -304,6 +304,7 @@ public static class ExplanatoryNoteComposer
         var s = i.DesignSettings;
         var intensity = d.Parameters.Intensity;
         var minArea = d.Parameters.MinArea;
+        var circle = norms.Find("sp485.b1_1_10.dictatingArea")!.Values["s"]!.Value;
         var blocks = new List<NoteBlock>
         {
             new NoteParagraph("Гидравлический расчёт выполнен по приложению Б СП 485.1311500.2020 (п. Б.1.1.12) последовательно от диктующего оросителя к узлу подключения."),
@@ -322,9 +323,9 @@ public static class ExplanatoryNoteComposer
             ]),
             new NoteParagraph("**5.1 Расход и давление у диктующего оросителя**"),
             new NoteParagraph("Расход диктующего оросителя определяется по формуле (Б.1):"),
-            new NoteFormula($"*q*_{{1}} = {F(d.DictatingFactor)}·*i*·*s* = {F(d.DictatingFactor)}·{F(intensity, "0.##")}·12 = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с,", "5.1", [
+            new NoteFormula($"*q*_{{1}} = {F(d.DictatingFactor)}·*i*·*s* = {F(d.DictatingFactor)}·{F(intensity, "0.##")}·{F(circle)} = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с,", "5.1", [
                 $"где *i* — нормативная интенсивность орошения ({d.Parameters.Source}), л/(с·м^{{2}});",
-                "*s* — круговая площадь, защищаемая диктующим оросителем, *s* = 12 м^{2} (п. Б.1.1.10).",
+                $"*s* — круговая площадь, защищаемая диктующим оросителем, *s* = {F(circle)} м^{{2}} (п. Б.1.1.10).",
             ]),
             new NoteParagraph("Давление у диктующего оросителя:"),
             new NoteFormula($"*p*_{{1}} = (*q*_{{1}} / 10*K*)^{{2}} = ({F(d.DictatingFlow.LitersPerSecond, "0.00")} / (10·{F(s.SprinklerK.Value)}))^{{2}} = {F(d.DictatingPressure.Mpa, "0.000")} МПа,", "5.2", [
@@ -344,10 +345,11 @@ public static class ExplanatoryNoteComposer
 
         if (s.DesignVelocity is { } velocity)
         {
+            var mu = norms.Find("sp485.b1_2_6.diameter")!.Values;
             blocks.Add(new NoteParagraph("**5.3 Диаметры трубопроводов**"));
             blocks.Add(new NoteParagraph("Диаметр участка определяется по формуле (Б.5); для участка 1–2:"));
             blocks.Add(new NoteFormula($"*d* = 1000·√(4·*q*_{{1}} / (π·μ·*V*)) = 1000·√(4·{F(d.DictatingFlow.LitersPerSecond / 1000, "0.00000")} / (3,14·{F(d.DischargeCoefficient, "0.00")}·{F(velocity)})) = {F(d.FirstSegmentDiameterMm, "0.0")} мм,", "5.5", [
-                "где μ — коэффициент расхода (0,90–0,95 при отсутствии данных, п. Б.1.2.6);",
+                $"где μ — коэффициент расхода ({F(mu["muMin"]!.Value, "0.00")}–{F(mu["muMax"]!.Value, "0.00")} при отсутствии данных, п. Б.1.2.6);",
                 $"*V* — скорость движения воды, м/с (не более {F(d.VelocityLimit)} м/с, п. Б.1.2.6, п. 6.7.1.37).",
             ]));
             blocks.Add(new NoteParagraph($"Принимается ближайшая большая труба сортамента; остальные участки подобраны так же по фактическому расходу, расчёт повторён до установления диаметров. Диаметры участков ближе к источнику не меньше, чем на участках за ними."));
