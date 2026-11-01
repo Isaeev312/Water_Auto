@@ -22,12 +22,12 @@ public static partial class DxfPdf
     private const double DefaultWeightMm = 0.25;
 
     /// <summary>Печатает DXF в PDF; сообщения (пропущенные примитивы, замена шрифта) — в <paramref name="log"/>. false — в чертеже нет рамки листа.</summary>
-    public static bool Render(string dxfPath, string pdfPath, string font, Action<string> log)
+    public static bool Render(string dxfPath, string pdfPath, string font, Action<string> log, bool color = true)
     {
         ArgumentNullException.ThrowIfNull(log);
         var doc = DxfDrawing.Read(dxfPath);
         using var stream = File.Create(pdfPath);
-        var ok = Render(doc, stream, font, log, Path.GetFileNameWithoutExtension(dxfPath));
+        var ok = Render(doc, stream, font, log, Path.GetFileNameWithoutExtension(dxfPath), color);
         if (!ok)
         {
             stream.Close();
@@ -37,7 +37,7 @@ public static partial class DxfPdf
         return ok;
     }
 
-    public static bool Render(CadDocument doc, Stream output, string font, Action<string> log, string title = "")
+    public static bool Render(CadDocument doc, Stream output, string font, Action<string> log, string title = "", bool color = true)
     {
         ArgumentNullException.ThrowIfNull(doc);
         ArgumentNullException.ThrowIfNull(log);
@@ -69,7 +69,7 @@ public static partial class DxfPdf
         page.Height = XUnit.FromMillimeter(format.HeightMm);
         using (var g = XGraphics.FromPdfPage(page))
         {
-            var painter = new Painter(g, box.MinX, box.MinY, scale, format.HeightMm, family);
+            var painter = new Painter(g, box.MinX, box.MinY, scale, format.HeightMm, family, color);
             foreach (var e in doc.Entities)
             {
                 painter.Draw(e, Affine.Identity);
@@ -182,8 +182,40 @@ public static partial class DxfPdf
         public double Angle => Math.Atan2(B, A);
     }
 
-    private sealed class Painter(XGraphics g, double minX, double minY, double scale, double pageHeightMm, string family)
+    private sealed class Painter(XGraphics g, double minX, double minY, double scale, double pageHeightMm, string family, bool color)
     {
+        // Цвет текущего примитива: свой, слоя или вставки блока (ПоБлоку); белый (7) — чёрным, светлые — темнее для печати на белом.
+        private XColor ink = XColors.Black;
+
+        private XColor Ink(Entity e, XColor parent)
+        {
+            if (!color)
+            {
+                return XColors.Black;
+            }
+
+            var c = e.Color;
+            if (c.IsByBlock)
+            {
+                return parent;
+            }
+
+            if (c.IsByLayer)
+            {
+                c = e.Layer?.Color ?? new Color(7);
+            }
+
+            var (r, gg, b) = ((double)c.R, (double)c.G, (double)c.B);
+            if (r > 250 && gg > 250 && b > 250)
+            {
+                return XColors.Black;
+            }
+
+            var luma = (0.299 * r) + (0.587 * gg) + (0.114 * b);
+            var k = luma > 140 ? 140 / luma : 1;
+            return XColor.FromArgb((int)(r * k), (int)(gg * k), (int)(b * k));
+        }
+
         public HashSet<string> Skipped { get; } = [];
 
         private XPoint P(Affine t, double x, double y)
@@ -203,14 +235,18 @@ public static partial class DxfPdf
             return (int)w > 0 ? (int)w / 100.0 : DefaultWeightMm;
         }
 
-        private static XPen Pen(Entity e) => new(XColors.Black, Math.Max(WeightMm(e, e.Layer), 0.13) * PtPerMm) { LineCap = XLineCap.Round, LineJoin = XLineJoin.Round };
+        private XPen Pen(Entity e) => new(ink, Math.Max(WeightMm(e, e.Layer), 0.13) * PtPerMm) { LineCap = XLineCap.Round, LineJoin = XLineJoin.Round };
 
-        public void Draw(Entity e, Affine t)
+        public void Draw(Entity e, Affine t) => Draw(e, t, XColors.Black);
+
+        private void Draw(Entity e, Affine t, XColor parent)
         {
             if (e.Layer is { IsOn: false } || e.IsInvisible)
             {
                 return;
             }
+
+            ink = Ink(e, parent);
 
             switch (e)
             {
@@ -322,7 +358,7 @@ public static partial class DxfPdf
             g.ScaleTransform(widthFactor > 0 ? widthFactor : 1, 1);
 
             // ax: 0 — слева, 0,5 — по центру, 1 — справа; ay: 0 — по базовой линии, 0,5 — по середине прописных, 1 — по верху.
-            g.DrawString(value, font, XBrushes.Black, new XPoint(-size.Width * ax, capPt * ay), XStringFormats.BaseLineLeft);
+            g.DrawString(value, font, new XSolidBrush(ink), new XPoint(-size.Width * ax, capPt * ay), XStringFormats.BaseLineLeft);
             g.Restore(state);
         }
 
@@ -420,9 +456,10 @@ public static partial class DxfPdf
                 ins.InsertPoint.X - ((local.A * bp.X) + (local.C * bp.Y)),
                 ins.InsertPoint.Y - ((local.B * bp.X) + (local.D * bp.Y)));
             var inner = local.Then(t);
+            var insertInk = ink;
             foreach (var e in block.Entities)
             {
-                Draw(e, inner);
+                Draw(e, inner, insertInk);
             }
         }
     }
