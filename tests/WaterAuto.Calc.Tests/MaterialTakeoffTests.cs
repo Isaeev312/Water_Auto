@@ -288,4 +288,31 @@ public class MaterialTakeoffTests
         t.Items.ShouldContain(i => i.Name == "Тройник DN80×25 (концы: DN80 — под муфту, DN25 — резьба)" && i.Designation == null);
         t.Items.ShouldContain(i => i.Name == "Переход DN50×25 (концы: DN50 — под муфту, DN25 — резьба)");
     }
+    [Fact]
+    public void Bend_with_a_DN_change_is_an_elbow_of_the_larger_DN_and_a_reducer_either_way()
+    {
+        RouteNode N(string id, double x, double y, RouteNodeKind k = RouteNodeKind.Bend) => new(id, k, new(x, y));
+        foreach (var (a, b) in new[] { (65, 50), (50, 65) })
+        {
+            var r = new PipeRoute("R", "I", [N("I", 0, 0, RouteNodeKind.Inlet), N("B", 3000, 0), N("E", 3000, 3000)],
+                [new RouteSegment("1", "I", "B", RouteSegmentRole.Main, new Length(3), 1, a), new RouteSegment("2", "B", "E", RouteSegmentRole.Main, new Length(3), 1, b)]);
+            var t = MaterialTakeoffBuilder.Build([r], 0, Norms, "ГОСТ 3262", Sprinkler);
+            t.Items.ShouldContain(i => i.Name == "Отвод 90° DN65");
+            t.Items.ShouldContain(i => i.Name == "Переход DN65×50");
+        }
+    }
+
+    [Fact]
+    public void Coupling_catalog_note_only_for_parts_with_a_grooved_end()
+    {
+        // Сварка × резьба (DN200 приварной, ответвление DN25 на резьбе) — без «по каталогу изготовителя муфт».
+        RouteNode N(string id, double x, double y, RouteNodeKind k = RouteNodeKind.Tee) => new(id, k, new(x, y));
+        var r = new PipeRoute("R", "I", [N("I", 0, 0, RouteNodeKind.Inlet), N("T", 3000, 0), N("E", 6000, 0, RouteNodeKind.Bend), N("S", 3000, 3000, RouteNodeKind.Sprinkler)],
+            [new RouteSegment("1", "I", "T", RouteSegmentRole.Main, new Length(3), 1, 200), new RouteSegment("2", "T", "E", RouteSegmentRole.Main, new Length(3), 1, 200), new RouteSegment("3", "T", "S", RouteSegmentRole.Row, new Length(3), 1, 25)]);
+        var spec = Grooved with { ByDn = new Dictionary<int, JointKind> { [200] = JointKind.Welded, [25] = JointKind.Threaded } };
+        var t = MaterialTakeoffBuilder.Build([r], 1, Norms, "ГОСТ 10704", Sprinkler, joints: spec);
+        var tee = t.Items.Single(i => i.Name.StartsWith("Тройник DN200×25", StringComparison.Ordinal));
+        tee.Name.ShouldContain("концы");
+        (tee.Note ?? "").ShouldNotContain("муфт");
+    }
 }

@@ -195,7 +195,8 @@ public sealed record ProjectDesign
 
     /// <summary>
     /// Сортамент для расчёта и спецификации. Граница стандартов — <see cref="PipeStandardLargeFromDn"/>; не задана — на сварке с DN50
-    /// (принято в проекте), на муфтах — сверх наибольшего DN муфт <paramref name="couplingMaxDn"/> (п. 6.7.2.6, из данных норм).
+    /// (принято в проекте), на муфтах — с наибольшего DN муфт <paramref name="couplingMaxDn"/> (п. 6.7.2.6, из данных норм):
+    /// первый стандарт проекта (ГОСТ 3262) этого DN не имеет, сварка на нём — единственный вариант (сведение joints.welded).
     /// </summary>
     public string SeriesStandard(int couplingMaxDn) => PipeStandardLarge.Length > 0
         ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? (Joints == Core.JointKind.Grooved ? couplingMaxDn : 50))

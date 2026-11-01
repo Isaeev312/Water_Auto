@@ -137,11 +137,12 @@ public static class MaterialTakeoffBuilder
                 }
                 else if (outs.Count == 1 && straight is null)
                 {
-                    // Поворот со сменой DN — отвод большего DN и переход.
-                    Fitting($"Отвод 90° DN{inDn}", inDn);
-                    if (Dn(outs[0]) < inDn)
+                    // Поворот со сменой DN (в любую сторону) — отвод большего DN и переход между DN.
+                    var (big, small) = (Math.Max(inDn, Dn(outs[0])), Math.Min(inDn, Dn(outs[0])));
+                    Fitting($"Отвод 90° DN{big}", big);
+                    if (small < big)
                     {
-                        Fitting($"Переход DN{inDn}×{Dn(outs[0])}", inDn, Dn(outs[0]));
+                        Fitting($"Переход DN{big}×{small}", big, small);
                     }
                 }
                 else if (outs.Count == 2)
