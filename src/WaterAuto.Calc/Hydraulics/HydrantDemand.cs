@@ -127,7 +127,7 @@ public static class HydrantDemand
             if (high is not null && s.BuildingHeight.Meters > high.Values["heightOver"]!.Value + 1e-9)
             {
                 // Производственное или складское здание выше предела таблицы — число струй по отдельному пункту
-                // (принято для любой строки таблицы, в запас; В-29).
+                // (для любой строки таблицы, в том числе с «-» — решение владельца, В-29).
                 var bigVolume = s.VolumeThousandM3 > high.Values["volumeSplit"]!.Value + 1e-9;
                 n = (int)high.Values[bigVolume ? "jetsOver150" : "jetsUpTo150"]!.Value;
                 qMin = high.Values["jetFlow"]!.Value;
