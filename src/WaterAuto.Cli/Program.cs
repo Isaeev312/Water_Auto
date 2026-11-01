@@ -131,7 +131,7 @@ switch (args[0])
                 return 2;
             }
 
-            return WordPdf.Export(folder);
+            return WordPdf.Export(folder, line => Console.WriteLine($"  {line}")) is null ? 2 : 0;
         }
 
     case "template":

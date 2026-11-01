@@ -1,28 +1,33 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
+namespace WaterAuto.Application;
+
 /// <summary>
 /// Выгрузка docx выпуска в PDF через установленный Microsoft Word (COM, только Windows): перед сохранением обновляются
 /// оглавление и поля — в PDF для экспертизы содержание заполнено. Word не установлен — сообщение, без исключения.
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal static class WordPdf
+public static class WordPdf
 {
     private const int PdfFormat = 17; // wdExportFormatPDF
 
-    public static int Export(string folder)
+    /// <summary>Выгружает все docx папки (с подпапками) в PDF рядом с ними. Сообщения — в <paramref name="log"/>; результат — список PDF или null, если выгрузить нельзя.</summary>
+    public static IReadOnlyList<string>? Export(string folder, Action<string> log)
     {
+        ArgumentNullException.ThrowIfNull(log);
+        var done = new List<string>();
         var files = Directory.GetFiles(folder, "*.docx", SearchOption.AllDirectories).Where(f => !Path.GetFileName(f).StartsWith("~$", StringComparison.Ordinal)).ToList();
         if (files.Count == 0)
         {
-            Console.Error.WriteLine($"В папке {folder} нет файлов docx.");
-            return 2;
+            log($"В папке {folder} нет файлов docx.");
+            return null;
         }
 
         if (Type.GetTypeFromProgID("Word.Application") is not { } type)
         {
-            Console.Error.WriteLine("Microsoft Word не установлен: откройте docx в Word или LibreOffice, обновите поля (F9) и сохраните в PDF вручную.");
-            return 2;
+            log("Microsoft Word не установлен: откройте docx в Word или LibreOffice, обновите поля (F9) и сохраните в PDF вручную.");
+            return null;
         }
 
         dynamic word = Activator.CreateInstance(type)!;
@@ -43,7 +48,8 @@ internal static class WordPdf
                     doc.Fields.Update();
                     var pdf = Path.ChangeExtension(file, ".pdf");
                     doc.ExportAsFixedFormat(pdf, PdfFormat);
-                    Console.WriteLine($"  {pdf}");
+                    done.Add(pdf);
+                    log(pdf);
                 }
                 finally
                 {
@@ -58,6 +64,6 @@ internal static class WordPdf
             Marshal.FinalReleaseComObject(word);
         }
 
-        return 0;
+        return done;
     }
 }

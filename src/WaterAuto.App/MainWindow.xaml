@@ -305,6 +305,9 @@
                                                    Text="Двойной щелчок открывает файл. " />
                                         <Button Content="Открыть папку выпуска" Style="{StaticResource Button.Ghost}"
                                                 Click="OnOpenOutFolder" Padding="8,2" />
+                                        <Button x:Name="PdfButton" Content="PDF для экспертизы" Style="{StaticResource Button.Ghost}"
+                                                Click="OnExportPdf" Padding="8,2" Margin="8,0,0,0"
+                                                ToolTip="Записки, спецификации и общие данные — в PDF рядом с docx, с обновлённым оглавлением (нужен Microsoft Word)" />
                                         <Button x:Name="PreviewButton" Content="Предпросмотр…"
                                                 Style="{StaticResource Button.Ghost}" Padding="8,2" Margin="8,0,0,0"
                                                 IsEnabled="False" Click="OnPreviewFile"

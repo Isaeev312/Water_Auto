@@ -481,6 +481,36 @@ public partial class MainWindow : Window
 
     private static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
+    // docx выпуска → PDF через Word (оглавление и поля обновляются перед сохранением); Word работает в фоне, окно не блокируется.
+    private async void OnExportPdf(object sender, RoutedEventArgs e)
+    {
+        var dir = OutBox.Text.Trim();
+        if (!Directory.Exists(dir))
+        {
+            Summary.Text = "Папка выпуска ещё не создана — выполните расчёт.";
+            return;
+        }
+
+        PdfButton.IsEnabled = false;
+        Summary.Text = "Выгрузка в PDF через Word…";
+        try
+        {
+            var messages = new List<string>();
+            var pdfs = await Task.Run(() => WordPdf.Export(dir, messages.Add));
+            Summary.Text = pdfs is { Count: > 0 }
+                ? $"PDF готовы ({pdfs.Count} шт.) — рядом с docx в папке выпуска."
+                : string.Join(Environment.NewLine, messages);
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or IOException or UnauthorizedAccessException)
+        {
+            Summary.Text = "Выгрузка в PDF не удалась: " + ex.Message;
+        }
+        finally
+        {
+            PdfButton.IsEnabled = true;
+        }
+    }
+
     // ---------- Расчёт ----------
 
     private async void OnRun(object sender, RoutedEventArgs e) => await RunCalculationAsync();

@@ -54,7 +54,7 @@ dotnet run --project src/WaterAuto.Cli -- new objects/parking.waproj --drawing o
 dotnet run --project src/WaterAuto.Cli -- calc objects/parking.waproj --out objects/out
 ```
 
-Записки, спецификации и общие данные в PDF с заполненным оглавлением (нужен установленный Microsoft Word, Windows) — PDF кладутся рядом с docx:
+Записки, спецификации и общие данные в PDF с заполненным оглавлением (нужен установленный Microsoft Word, Windows) — PDF кладутся рядом с docx; в окне — кнопка «PDF для экспертизы» на вкладке файлов выпуска:
 
 ```bash
 dotnet run --project src/WaterAuto.Cli -- pdf objects/out
