@@ -6,6 +6,8 @@
 ;;;   WA-SETUP  — создать слои соглашения и выхода программы, единицы — мм.
 ;;;   WA-CHECK  — проверить чертёж перед расчётом: замкнутость контуров, высоту балок, наличие ввода, единицы.
 ;;;   WA-INSERT — вставить DWG, выданный программой, в 0,0 (с удалением прежней вставки по желанию).
+;;;   WA-ROOM   — обвести помещение щелчком внутри (BOUNDARY -> ПТ_КОНТУР) и подписать имя.
+;;;   WA-INLET  — точки ввода на ПТ_ВВОД; WA-BEAM — балка по оси с шириной и высотой; WA-ZONE — зона без оросителей.
 
 (vl-load-com)
 
@@ -136,5 +138,77 @@
     (princ "\nФайл не выбран."))
   (princ))
 
-(princ "\nWater_Auto: команды WA-SETUP, WA-CHECK, WA-INSERT загружены.")
+;; ---------- Помощники отрисовки: обвести помещение, поставить ввод, начертить балку, зону запрета ----------
+
+;; Последний созданный объект после команды (или nil, если команда ничего не создала).
+(defun wa:last-after (before / e)
+  (setq e (entlast))
+  (if (and e (not (equal e before))) e))
+
+;; Перенести объект на слой.
+(defun wa:to-layer (e layer / d)
+  (setq d (entget e))
+  (entmod (subst (cons 8 layer) (assoc 8 d) d)))
+
+;; Высота текста подписи: 2,5 мм листа в масштабе DIMSCALE (в модели 1:100 — 250 мм).
+(defun wa:text-height () (* 2.5 (max 1.0 (getvar "DIMSCALE"))))
+
+(defun c:WA-ROOM (/ pt before e name n)
+  ;; Щелчок внутри помещения архитектурного плана: BOUNDARY строит замкнутую полилинию по стенам,
+  ;; она уходит на ПТ_КОНТУР, имя помещения — текстом в точке щелчка (по нему программа находит группу, подвод и т. п.).
+  (wa:layer "ПТ_КОНТУР" 3)
+  (setq n 0)
+  (while (setq pt (getpoint "\nТочка внутри помещения <выход>: "))
+    (setq before (entlast))
+    (command "_.-BOUNDARY" "_non" pt "")
+    (if (setq e (wa:last-after before))
+      (progn
+        (wa:to-layer e "ПТ_КОНТУР")
+        (setq name (getstring T "\nИмя помещения (как в экспликации): "))
+        (if (/= name "")
+          (entmake (list '(0 . "TEXT") '(8 . "ПТ_КОНТУР") (cons 10 (wa:3d pt)) (cons 11 (wa:3d pt))
+                         (cons 40 (wa:text-height)) (cons 1 name) '(72 . 1) '(73 . 2))))
+        (setq n (1+ n)))
+      (princ "\n  Контур не найден: помещение не замкнуто стенами — обведите полилинией на слое ПТ_КОНТУР вручную.")))
+  (princ (strcat "\nWater_Auto: обведено помещений — " (itoa n) "."))
+  (princ))
+
+(defun c:WA-INLET (/ pt n)
+  ;; Точка ввода (стояк, узел управления): своя в каждом защищаемом помещении (README §7).
+  (wa:layer "ПТ_ВВОД" 5)
+  (setq n 0)
+  (while (setq pt (getpoint "\nТочка ввода питающего трубопровода в помещение <выход>: "))
+    (entmake (list '(0 . "POINT") '(8 . "ПТ_ВВОД") (cons 10 (wa:3d pt))))
+    (setq n (1+ n)))
+  (princ (strcat "\nWater_Auto: точек ввода — " (itoa n) ". Видны при PDMODE = 34."))
+  (princ))
+
+(defun c:WA-BEAM (/ h p1 p2 w a v n)
+  ;; Балка по оси: две точки, ширина и высота, мм. Толщина полилинии = высота балки (README §7).
+  (wa:layer "ПТ_БАЛКИ" 30)
+  (setq n 0)
+  (if (and (setq w (getdist "\nШирина балки, мм: ")) (setq h (getdist "\nВысота балки (от низа перекрытия), мм: ")))
+    (while (and (setq p1 (getpoint "\nНачало оси балки <выход>: ")) (setq p2 (getpoint p1 "\nКонец оси балки: ")))
+      (setq a (+ (angle p1 p2) (/ pi 2))
+            v (list (polar p1 a (/ w 2)) (polar p2 a (/ w 2)) (polar p2 a (/ w -2)) (polar p1 a (/ w -2))))
+      (if (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") '(8 . "ПТ_БАЛКИ") '(100 . "AcDbPolyline")
+                                 '(90 . 4) '(70 . 1) (cons 39 h))
+                           (mapcar '(lambda (p) (cons 10 (list (car p) (cadr p)))) v)))
+        (setq n (1+ n)))))
+  (princ (strcat "\nWater_Auto: балок — " (itoa n) "."))
+  (princ))
+
+(defun c:WA-ZONE (/ before e)
+  ;; Зона без оросителей (электрощитовая и т. п.): замкнутая полилиния на ПТ_ЗАПРЕТ; подпись «ПНС» — помещение насосной.
+  (wa:layer "ПТ_ЗАПРЕТ" 210)
+  (setq before (entlast))
+  (princ "\nПостройте замкнутую полилинию зоны (последний сегмент — «Замкнуть»).")
+  (command "_.PLINE")
+  (while (> (getvar "CMDACTIVE") 0) (command pause))
+  (if (setq e (wa:last-after before))
+    (progn (wa:to-layer e "ПТ_ЗАПРЕТ") (princ "\nWater_Auto: зона без оросителей добавлена."))
+    (princ "\nПолилиния не построена."))
+  (princ))
+
+(princ "\nWater_Auto: команды WA-SETUP, WA-CHECK, WA-INSERT, WA-ROOM, WA-INLET, WA-BEAM, WA-ZONE загружены.")
 (princ)
