@@ -109,6 +109,29 @@ public static class GostSheet
                 return;
             }
 
+            // Перенос в несколько строк не должен выходить за графу: высота шрифта уменьшается до 2,5 мм, пока строки
+            // (перенос по словам, ширина знака ≈ 0,8 высоты, интервал 1,6 высоты) не поместятся по высоте графы.
+            if (wrap && !vertical)
+            {
+                static int Lines(string v, double hh, double width)
+                {
+                    var perLine = Math.Max(1, (int)(width / (0.8 * hh)));
+                    var (lines, used) = (1, 0);
+                    foreach (var word in v.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var need = used == 0 ? word.Length : used + 1 + word.Length;
+                        (lines, used) = need <= perLine || used == 0 ? (lines, need) : (lines + 1, word.Length);
+                    }
+
+                    return lines;
+                }
+
+                while (height > 2.5 && Lines(value, height, x1 - x0 - 1) * 1.6 * height > (y1 - y0) - 0.5)
+                {
+                    height -= 0.25;
+                }
+            }
+
             doc.Entities.Add(new MText
             {
                 Value = value,

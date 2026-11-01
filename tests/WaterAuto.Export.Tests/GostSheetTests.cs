@@ -37,6 +37,17 @@ public class GostSheetTests
     }
 
     [Fact]
+    public void Long_sheet_name_gets_a_smaller_font_so_it_stays_inside_graph_1()
+    {
+        // Графа 1 (наименование листа) — 70 × 15 мм: три строки по 3,5 мм с интервалом не входят, шрифт уменьшается.
+        var doc = new CadDocument();
+        GostSheet.Draw(doc, GostSheet.Fit(0, 0, 30000, 15000), Stamp with { Name = "Принципиальная схема насосной станции пожаротушения" });
+        var name = doc.Entities.OfType<MText>().Single(t => t.Value.StartsWith("Принципиальная", StringComparison.Ordinal));
+        var short_ = doc.Entities.OfType<MText>().Single(t => t.Value == "123-ПТ");
+        (name.Height / short_.Height).ShouldBeLessThan(3.5 / 5);
+    }
+
+    [Fact]
     public void Axonometry_with_a_stamp_has_frame_and_form_3()
     {
         var route = new PipeRoute(
