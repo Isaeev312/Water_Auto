@@ -2184,7 +2184,9 @@ public static class ProjectPipeline
         IReadOnlyList<TitleSignature> signatures = t.Signatures.Count > 0
             ? [.. t.Signatures.Select(s => new TitleSignature(s.Role, s.Name))]
             : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
-        return new TitleBlock($"{t.Code}-{DesignMark(project, mark)}", project.Name, t.Building, name, t.Stage, t.Organization, signatures);
+        // Графа 27 — только если заказчик задан (не заглушка «[…]»).
+        var customer = t.Customer.Trim() is { Length: > 0 } c && !c.StartsWith('[') ? c : null;
+        return new TitleBlock($"{t.Code}-{DesignMark(project, mark)}", project.Name, t.Building, name, t.Stage, t.Organization, signatures, Customer: customer);
     }
 
     /// <summary>

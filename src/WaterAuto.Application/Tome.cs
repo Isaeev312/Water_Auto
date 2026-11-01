@@ -134,7 +134,7 @@ public static class Tome
             page += n;
         }
 
-        TomePagesPdf.WriteContents(contents, tome.Designation, tome.Stage, tome.Organization, manifest.Signatures, rows, manifest.Font);
+        TomePagesPdf.WriteContents(contents, tome.Designation, tome.Stage, tome.Organization, manifest.Signatures, rows, manifest.Font, tome.Cover?.Customer);
         return [cover, title, contents];
     }
 }

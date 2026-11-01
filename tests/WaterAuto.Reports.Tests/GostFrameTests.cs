@@ -115,4 +115,17 @@ public class GostFrameTests
                 .ToList());
         fonts.ShouldBe(["ISOCPEUR"]);
     }
+    [Fact]
+    public void Customer_goes_to_graph_27_above_the_first_sheet_stamp_only_when_given()
+    {
+        // ГОСТ Р 21.101-2026: графа 27 — краткое наименование заказчика, строка 10 мм над основной надписью; вводится при необходимости.
+        string FirstFooter(TitleBlock stamp) => Open(p => SpecificationDocx.Write(p, Takeoff, stamp), d =>
+        {
+            var section = d.MainDocumentPart!.Document.Body!.GetFirstChild<SectionProperties>()!;
+            var id = section.Elements<FooterReference>().Single(f => f.Type! == HeaderFooterValues.First).Id!.Value!;
+            return ((FooterPart)d.MainDocumentPart.GetPartById(id)).Footer.InnerText;
+        });
+        FirstFooter(Stamp with { Customer = "ООО «Заказчик»" }).ShouldContain("ООО «Заказчик»");
+        FirstFooter(Stamp).ShouldNotContain("Заказчик");
+    }
 }

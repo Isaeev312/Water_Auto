@@ -84,4 +84,18 @@ public class GostSheetTests
         // 31 м с запасами на А3 — 1:100; подписи схемы — 2,5 мм на листе.
         doc.Entities.OfType<TextEntity>().Where(t => t.Layer.Name == AxonometryDxfWriter.LabelLayer).ShouldAllBe(t => Math.Abs(t.Height - 250) < 1e-6);
     }
+    [Fact]
+    public void Customer_graph_27_sits_above_the_stamp_below_the_drawing_field()
+    {
+        var doc = new CadDocument();
+        var sheet = new SheetPlacement(SheetFormat.A3, 1, new CSMath.XY(0, 0));
+        GostSheet.Draw(doc, sheet, Stamp with { Customer = "ООО «Заказчик»" });
+        var text = doc.Entities.OfType<MText>().Single(t => t.Value == "ООО «Заказчик»");
+        text.InsertPoint.Y.ShouldBeInRange(60, 70); // над надписью (5 + 55 мм), ниже поля изображения (70 мм)
+        text.InsertPoint.X.ShouldBeGreaterThan(420 - 5 - 120);
+
+        var plain = new CadDocument();
+        GostSheet.Draw(plain, sheet, Stamp);
+        plain.Entities.OfType<MText>().ShouldNotContain(t => t.Value.Contains("Заказчик"));
+    }
 }

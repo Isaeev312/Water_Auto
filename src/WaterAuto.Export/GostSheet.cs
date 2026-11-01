@@ -219,6 +219,16 @@ public static class GostSheet
         Text(block.Name, x + 65, y, x + 135, Row(8));
         Text(block.Organization, x + 135, y, x + 185, Row(8));
 
+        // Графа 27 — краткое наименование заказчика (ГОСТ Р 21.101-2026): строка 10 мм над правой частью надписи;
+        // поле изображения начинается выше (Field), поэтому графа ничего не перекрывает.
+        if (!string.IsNullOrWhiteSpace(block.Customer))
+        {
+            Seg(x + 65, Row(0) + 10, x + 185, Row(0) + 10, false);
+            Seg(x + 65, Row(0), x + 65, Row(0) + 10, false);
+            Seg(x + 185, Row(0), x + 185, Row(0) + 10, false);
+            Text(block.Customer, x + 65, Row(0), x + 185, Row(0) + 10);
+        }
+
         // Дополнительные графы 20–22 на поле для подшивки: снизу вверх 25, 35, 25 мм.
         Rect(8, 5, 20, 90);
         Seg(13, 5, 13, 90);

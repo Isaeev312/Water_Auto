@@ -124,7 +124,7 @@ public static class TomePagesPdf
     }
 
     /// <summary>Содержание тома по форме ГОСТ Р 21.101 (обозначение, наименование, примечание — страницы) с основной надписью для текстовых документов.</summary>
-    public static void WriteContents(string path, string designation, string stage, string organization, IReadOnlyList<IulSignature> signatures, IReadOnlyList<TomeContentRow> rows, string font)
+    public static void WriteContents(string path, string designation, string stage, string organization, IReadOnlyList<IulSignature> signatures, IReadOnlyList<TomeContentRow> rows, string font, string? customer = null)
     {
         ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(signatures);
@@ -170,7 +170,7 @@ public static class TomePagesPdf
                     Row([r.Designation, r.Name, r.Pages], text, Math.Max(8, (n * 4.3) + 2));
                 }
 
-                Form5(g, family, designation + ".С", "Содержание тома", stage, "1", "1", organization, signatures);
+                Form5(g, family, designation + ".С", "Содержание тома", stage, "1", "1", organization, signatures, customer);
             }
 
             pdf.Save(path);
@@ -181,7 +181,7 @@ public static class TomePagesPdf
     /// Основная надпись для текстовых документов, форма 5 ГОСТ Р 21.101-2026 (185 × 40 мм), и дополнительные графы 20–22 на поле
     /// для подшивки — те же графы, что в docx выпуска (GostFrame).
     /// </summary>
-    public static void Form5(XGraphics g, string family, string designation, string name, string stage, string sheet, string sheets, string organization, IReadOnlyList<IulSignature> signatures)
+    public static void Form5(XGraphics g, string family, string designation, string name, string stage, string sheet, string sheets, string organization, IReadOnlyList<IulSignature> signatures, string? customer = null)
     {
         ArgumentNullException.ThrowIfNull(g);
         ArgumentNullException.ThrowIfNull(signatures);
@@ -253,6 +253,14 @@ public static class TomePagesPdf
         Box(4, 8, 1, 1, sheet, f10);
         Box(4, 9, 1, 1, sheets, f10);
         Box(5, 7, 3, 3, organization, f10);
+
+        // Графа 27 (ГОСТ Р 21.101-2026) — заказчик, строка 10 мм над правой частью надписи.
+        if (!string.IsNullOrWhiteSpace(customer) && !customer.TrimStart().StartsWith('['))
+        {
+            var rect = R(cx[6], y0 - 10, 120, 10);
+            g.DrawRectangle(thin, rect);
+            g.DrawString(customer, f10, XBrushes.Black, rect, XStringFormats.Center);
+        }
 
         // Контур надписи и шапка — основными линиями.
         g.DrawRectangle(thick, R(20, y0, 185, 40));
