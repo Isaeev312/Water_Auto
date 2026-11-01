@@ -58,9 +58,27 @@ public static class MaterialTakeoffBuilder
         var straightCouplings = new SortedDictionary<int, int>();
         JointKind Kind(int dn) => joints?.ByDn.GetValueOrDefault(dn, JointKind.Welded) ?? JointKind.Welded;
 
-        // Наименование фасонной части по виду соединения DN узла: приварная — как есть; под муфту — с пометкой;
-        // на резьбе — соединительная часть из ковкого чугуна (угольник, тройник, крестовина, муфта переходная).
-        string Named(string name, int dn) => Kind(dn) switch
+        // Наименование фасонной части по виду соединения её концов: один вид — приварная как есть, под муфту — с пометкой,
+        // на резьбе — соединительная часть из ковкого чугуна; концы разного вида (граница муфт и резьбы, сварки и муфт) —
+        // с перечнем концов, чтобы деталь заказывалась переходной.
+        static string KindText(JointKind k) => k switch
+        {
+            JointKind.Grooved => "под муфту",
+            JointKind.Threaded => "резьба",
+            _ => "под приварку",
+        };
+        string Named(string name, IReadOnlyList<int> dns)
+        {
+            var ends = dns.Distinct().OrderByDescending(d => d).ToList();
+            if (ends.Select(Kind).Distinct().Count() > 1)
+            {
+                return $"{name} (концы: {string.Join(", ", ends.Select(d => $"DN{d} — {KindText(Kind(d))}"))})";
+            }
+
+            return Single(name, ends[0]);
+        }
+
+        string Single(string name, int dn) => Kind(dn) switch
         {
             JointKind.Grooved => name + " (под разъёмную муфту)",
             JointKind.Threaded => name.StartsWith("Отвод 90° ", StringComparison.Ordinal) ? "Угольник 90° " + name["Отвод 90° ".Length..]
@@ -69,9 +87,9 @@ public static class MaterialTakeoffBuilder
                 : name,
             _ => name,
         };
-        void Fitting(string name, int dn)
+        void Fitting(string name, params int[] dns)
         {
-            var n = Named(name, dn);
+            var n = Named(name, dns);
             fittings[n] = fittings.GetValueOrDefault(n) + 1;
         }
 
@@ -89,7 +107,8 @@ public static class MaterialTakeoffBuilder
                 {
                     pipes[pipe.Dn] = (pipe, pipes.GetValueOrDefault(pipe.Dn).Meters + s.Length.Meters);
 
-                    // Стыки труб по мерной длине; на муфтах — ещё по муфте на каждом конце участка (у фасонной части или ввода).
+                    // Стыки труб по мерной длине; на муфтах — ещё по муфте на каждом конце участка (у фасонной части или ввода);
+                    // в узле прямого прохода без фасонной части два конца соединяет одна муфта — учтено в цикле по узлам.
                     var pieces = joints is { StockLengthM: > 0 } j ? Math.Max(1, (int)Math.Ceiling((s.Length.Meters / j.StockLengthM) - 1e-9)) : 1;
                     if (Kind(pipe.Dn) == JointKind.Grooved)
                     {
@@ -110,27 +129,41 @@ public static class MaterialTakeoffBuilder
                 var outs = outgoing[node.Id].Concat(closureAt[node.Id]).ToList();
                 var straight = outgoing[node.Id].FirstOrDefault(o => Collinear(nodes, inSeg, o));
 
+                // Концы фасонной части: приходящий DN (он же проход — переход на меньший DN ставится отдельно) и DN ответвлений.
+                var branchDns = outs.Where(o => o != straight).Select(Dn).ToArray();
                 if (node.Kind == RouteNodeKind.Sprinkler)
                 {
-                    Fitting(outs.Count == 0 ? $"Отвод под ороситель DN{inDn}" : $"Тройник под ороситель DN{inDn}", inDn);
+                    Fitting(outs.Count == 0 ? $"Отвод под ороситель DN{inDn}" : $"Тройник под ороситель DN{inDn}", [inDn, .. branchDns]);
                 }
                 else if (outs.Count == 1 && straight is null)
                 {
-                    Fitting($"Отвод 90° DN{inDn}", inDn);
+                    Fitting($"Отвод 90° DN{inDn}", [inDn, Dn(outs[0])]);
                 }
                 else if (outs.Count == 2)
                 {
                     // Равнопроходный тройник обозначается одним DN.
-                    Fitting(outs.Min(Dn) == inDn ? $"Тройник DN{inDn}" : $"Тройник DN{inDn}×{outs.Min(Dn)}", inDn);
+                    Fitting(outs.Min(Dn) == inDn ? $"Тройник DN{inDn}" : $"Тройник DN{inDn}×{outs.Min(Dn)}", [inDn, .. branchDns]);
                 }
                 else if (outs.Count >= 3)
                 {
-                    Fitting($"Крестовина DN{inDn}×{outs.Min(Dn)}", inDn);
+                    Fitting($"Крестовина DN{inDn}×{outs.Min(Dn)}", [inDn, .. branchDns]);
+                }
+                else if (outs.Count == 1 && straight is not null && Dn(straight) == inDn && series.Pick(inSeg.Dn) is not null)
+                {
+                    // Прямой проход без фасонной части: на муфтах — одна муфта на стык вместо двух концевых, на резьбе — прямая муфта.
+                    if (Kind(inDn) == JointKind.Grooved)
+                    {
+                        couplings[inDn] = couplings.GetValueOrDefault(inDn) - 1;
+                    }
+                    else if (Kind(inDn) == JointKind.Threaded)
+                    {
+                        straightCouplings[inDn] = straightCouplings.GetValueOrDefault(inDn) + 1;
+                    }
                 }
 
                 if (straight is not null && Dn(straight) < inDn)
                 {
-                    Fitting($"Переход DN{inDn}×{Dn(straight)}", inDn);
+                    Fitting($"Переход DN{inDn}×{Dn(straight)}", inDn, Dn(straight));
                 }
             }
         }
@@ -170,7 +203,7 @@ public static class MaterialTakeoffBuilder
                 return new TakeoffItem(TakeoffGroup.Fittings, name, joints.CouplingStandard, count, "шт.");
             }
 
-            if (joints is not null && name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal))
+            if (joints is not null && (name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal) || name.Contains(" (концы: ", StringComparison.Ordinal)))
             {
                 return new TakeoffItem(TakeoffGroup.Fittings, name, null, count, "шт.", "по каталогу изготовителя муфт");
             }

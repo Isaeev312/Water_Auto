@@ -17,7 +17,7 @@ public class PipeJointsTests
         r.ByDn[25].ShouldBe(JointKind.Threaded);
         r.ByDn[50].ShouldBe(JointKind.Grooved);
         r.ByDn[150].ShouldBe(JointKind.Grooved);
-        r.Issues.ShouldBeEmpty();
+        r.Issues.ShouldNotContain(i => i.Level >= IssueLevel.Warning);
     }
 
     [Fact]
@@ -25,7 +25,7 @@ public class PipeJointsTests
     {
         var r = PipeJoints.Resolve(new Dictionary<int, string> { [80] = "ГОСТ 10704-91" }, JointKind.Grooved, 50, Norms);
         r.ByDn[80].ShouldBe(JointKind.Welded);
-        r.Issues.ShouldContain(i => i.Code == "joints.standard" && i.Level == IssueLevel.Error && i.Clause!.Contains("6.7.2.1"));
+        r.Issues.ShouldContain(i => i.Code == "joints.standard" && i.Level == IssueLevel.Warning && i.Clause!.Contains("6.7.2.1"));
     }
 
     [Fact]
@@ -42,6 +42,23 @@ public class PipeJointsTests
     {
         var r = PipeJoints.Resolve(new Dictionary<int, string> { [25] = "ГОСТ 3262-75", [100] = "ГОСТ 10704-91" }, JointKind.Welded, 50, Norms);
         r.ByDn.Values.ShouldAllBe(k => k == JointKind.Welded);
-        r.Issues.ShouldBeEmpty();
+        r.Issues.ShouldNotContain(i => i.Level >= IssueLevel.Warning);
+    }
+    [Fact]
+    public void Threaded_joints_need_a_pipe_standard_that_allows_them()
+    {
+        // п. 6.7.2.1: трубы ГОСТ 10704 — только сварка и фланцы, резьба на них тоже недопустима.
+        var r = PipeJoints.Resolve(new Dictionary<int, string> { [32] = "ГОСТ 10704-91" }, JointKind.Grooved, 50, Norms);
+        r.ByDn[32].ShouldBe(JointKind.Welded);
+        r.Issues.ShouldContain(i => i.Code == "joints.standard");
+    }
+
+    [Fact]
+    public void Detachable_joints_remind_of_rooms_A_B_and_concealed_runs()
+    {
+        // Категорию помещений и скрытую прокладку программа не знает: замечание-напоминание со ссылками на пп. 6.7.2.5 и 6.7.1.8.
+        var r = PipeJoints.Resolve(new Dictionary<int, string> { [50] = "ГОСТ 3262-75" }, JointKind.Grooved, 50, Norms);
+        r.Issues.ShouldContain(i => i.Code == "joints.check" && i.Level == IssueLevel.Info && i.Message.Contains("6.7.2.5") && i.Message.Contains("6.7.1.8"));
+        r.NormIds.ShouldContain("sp485.p6_7_2_5.categoryAB");
     }
 }

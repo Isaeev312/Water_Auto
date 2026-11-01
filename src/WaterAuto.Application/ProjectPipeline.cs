@@ -932,8 +932,10 @@ public static class ProjectPipeline
         }
 
         var pipeSizes = PipeSizes(normsDir);
+        // Сортамент сети: при муфтах граница стандартов — по наибольшему DN муфт (п. 6.7.2.6).
+        var seriesStandard = design.SeriesStandard((int)norms.Find("sp485.p6_7_2_6.couplings")!.Values["maxDn"]!.Value);
         var settings = new DesignSettings(
-            design.PipeSeriesStandard,
+            seriesStandard,
             new KFactor(design.SprinklerK),
             new Length(design.DictatingAboveAxis),
             new Length(design.SupplyLength),
@@ -946,7 +948,7 @@ public static class ProjectPipeline
             // иначе на реальном проекте напор доходил до 193 м и насос не подбирался.
             ResizeOverLimit: true);
         // Водяные завесы (пп. 6.3.6–6.3.14): расчёт ниток до гидравлики АУП — совмещённые с АУП-С входят в расход насоса (Б.28).
-        var curtainSeries = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+        var curtainSeries = new PipeSeries(norms, seriesStandard, pipeSizes);
         var curtains = design.Curtains.Select((c, n) => DrencherCurtain.Calculate(
             new CurtainInput(string.Create(CultureInfo.InvariantCulture, $"CUR{n + 1}"), c.Name.Length > 0 ? c.Name : $"завеса {n + 1}", c.Width, c.K, c.Pressure, c.Dn, c.Group ?? design.RoomGroup, c.Combined),
             curtainSeries, norms)).ToList();
@@ -1048,14 +1050,14 @@ public static class ProjectPipeline
         var materials = Materials(normsDir);
 
         // Соединения по DN (п. 6.7.2.1, 6.7.2.6): муфты — только для допустимого сортамента и DN; меньшие DN — на резьбе.
-        var jointSeries = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+        var jointSeries = new PipeSeries(norms, seriesStandard, pipeSizes);
         var standardByDn = routes.SelectMany(r => r.Segments.Concat(r.Loops))
             .Select(s => jointSeries.Pick(s.Dn)).OfType<SeriesPipe>()
             .GroupBy(x => x.Dn).ToDictionary(g => g.Key, g => g.First().Standard);
         var jointPlan = PipeJoints.Resolve(standardByDn, design.Joints, design.GroovedMinDn, norms);
         issues.AddRange(jointPlan.Issues);
         var jointsText = JointsText(design, jointPlan);
-        var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
+        var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, seriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
             sprinklerSupplier,
@@ -1067,7 +1069,7 @@ public static class ProjectPipeline
             new JointSpec(jointPlan.ByDn, design.PipeStockLength, design.ThreadedFittingStandards, design.CouplingStandard));
 
         // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
-        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
+        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
 
@@ -1230,7 +1232,7 @@ public static class ProjectPipeline
         PipingResult? piping = null;
         if (roomPlan is { Items.Count: > 0 } && plan.PumpRooms[0] is { Inlet: { } stationInlet } pumpRoom && PumpCatalog.Piping(normsDir) is { } pr && setChoice?.Chosen is { } pipedSet)
         {
-            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
+            var series = new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var set = roomPlan.Items.First(i => i.Kind == StationItemKind.PumpSet);
             var units = roomPlan.Items.Where(i => i.Kind == StationItemKind.ControlUnit).ToList();
 
@@ -1392,7 +1394,7 @@ public static class ProjectPipeline
 
             if (inletRoutes.Count > 0)
             {
-                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
+                var seriesI = new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true);
 
                 // Отметка трассы ввода без коллизий с сетью АУП: задана в проекте — проверяется; не задана — ниже сети на
                 // наибольшее нужное расхождение на пересечениях (полусумма наружных диаметров + 20 мм), с округлением вниз до 50 мм.
@@ -1504,7 +1506,7 @@ public static class ProjectPipeline
         if (design.Foam is { } foamInput)
         {
             var pipeIssues = new List<Issue>();
-            var pipesM3 = AirFilled.InnerVolume(routes, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), pipeIssues);
+            var pipesM3 = AirFilled.InnerVolume(routes, new PipeSeries(norms, seriesStandard, pipeSizes), pipeIssues);
             issues.AddRange(pipeIssues.Where(x => !issues.Contains(x)));
             var solutionFlow = new Flow(governing.PumpFlow.LitersPerSecond - (governing.Hydrants?.TotalFlow.LitersPerSecond ?? 0));
             foamResult = FoamConcentrate.Calculate(solutionFlow, governing.Duration, pipesM3, foamInput.Concentration, governing.DictatingFlow, norms);
@@ -1528,7 +1530,7 @@ public static class ProjectPipeline
         var coldRule = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
         if (design.AirFilled)
         {
-            air = AirFilled.Check(routes, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), design.SprinklerDeflector, design.MinAmbientTemperature, norms);
+            air = AirFilled.Check(routes, new PipeSeries(norms, seriesStandard, pipeSizes), design.SprinklerDeflector, design.MinAmbientTemperature, norms);
             issues.AddRange(air.Issues);
             static TakeoffItem Air(TakeoffItem x) => x with { Name = x.Name.Replace("водозаполненный", "воздухозаполненный", StringComparison.Ordinal) };
             takeoff = takeoff with
@@ -1545,7 +1547,7 @@ public static class ProjectPipeline
         }
 
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
-        var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard, pipeSizes);
+        var supports = PipeSupports.Build(routes, norms, seriesStandard, pipeSizes);
         issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
         var supportSet = SupportEquipment.PathFor(normsDir);
         if (File.Exists(supportSet))
@@ -1676,7 +1678,7 @@ public static class ProjectPipeline
             var pr1 = design.PumpRoom;
             var features = PumpRoomFeatures.Build(roomPlan.Room.Outline, roomPlan.Items, roomPlan.Room.Door, pr1.PitSize * 1000, PumpCatalog.PipingExtras(normsDir).FoundationMargin);
             var sleeveExtraD = PumpCatalog.PipingExtras(normsDir).SleeveExtra;
-            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
+            var seriesD = new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var sleeves = (piping?.Runs ?? [])
                 .SelectMany(r => new[] { r.Path[0], r.Path[^1] }.Where(pt => IsWall(roomPlan.Room.Outline, pt)).Select(pt => (pt, (seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD, $"гильза Ø{(seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD:0}")))
                 .ToList();
@@ -1995,7 +1997,7 @@ public static class ProjectPipeline
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
-            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, jointsText, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled, design.WeldStandard),
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, seriesStandard, jointsText, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled, design.WeldStandard),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));

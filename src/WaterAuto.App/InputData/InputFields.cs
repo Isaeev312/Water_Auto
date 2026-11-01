@@ -91,6 +91,12 @@ internal static class InputFields
         new("Unrated", "Unrated — класс не определён"),
     ];
 
+    private static readonly ChoiceOption[] Joints =
+    [
+        new("Grooved", "Разъёмные (грувлочные) муфты, малые DN — на резьбе"),
+        new("Welded", "Сварка"),
+    ];
+
     private static readonly ChoiceOption[] Deflectors =
     [
         new("up", "Розетка вверх"),
@@ -228,7 +234,14 @@ internal static class InputFields
                             Hint: "Пусто — все трубы по первому стандарту."),
                         new FieldSpec("design", "pipeStandardLargeFromDn", "DN, с которого действует второй стандарт", FieldKind.Dn,
                             Advanced: true,
-                            Hint: "Граница двух стандартов в сортаменте."),
+                            Hint: "Пусто — по виду соединений: сварка — с DN50, муфты — сверх наибольшего DN муфт (DN200, п. 6.7.2.6)."),
+                        new FieldSpec("design", "joints", "Соединения трубопроводов", FieldKind.Choice,
+                            Options: Joints,
+                            Hint: "Муфты — по ГОСТ Р 51737, только для труб ГОСТ 3262, 8732, 8734 и до DN200 (пп. 6.7.2.1, 6.7.2.6); насосная — на сварке (п. 6.7.2.4)."),
+                        new FieldSpec("design", "groovedMinDn", "Муфты — начиная с DN", FieldKind.Dn, Advanced: true,
+                            Hint: "Меньшие DN — на резьбе (решение проектировщика, не норма)."),
+                        new FieldSpec("design", "pipeStockLength", "Мерная длина труб, м", FieldKind.Number, Advanced: true,
+                            Hint: "Для счёта стыков (муфт) в спецификации."),
                         new FieldSpec("design", "designVelocity", "Скорость подбора диаметров по Б.5, м/с",
                             FieldKind.NullableNumber, Advanced: true,
                             Hint: "Пусто — значение defaultDesignVelocity из data/catalog/pipe_sizes.json."),

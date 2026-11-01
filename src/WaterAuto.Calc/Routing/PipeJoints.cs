@@ -40,7 +40,13 @@ public static class PipeJoints
         var tooLarge = new SortedSet<int>();
         foreach (var (dn, standard) in standardByDn.OrderBy(x => x.Key))
         {
-            if (dn < groovedMinDn)
+            // Резьба и муфты (п. 6.7.2.1) — только для труб допустимых стандартов; остальные — на сварке.
+            if (!allowed.Any(a => standard.StartsWith(a, StringComparison.Ordinal)))
+            {
+                map[dn] = JointKind.Welded;
+                badStandard.Add(dn);
+            }
+            else if (dn < groovedMinDn)
             {
                 map[dn] = JointKind.Threaded;
             }
@@ -48,11 +54,6 @@ public static class PipeJoints
             {
                 map[dn] = JointKind.Welded;
                 tooLarge.Add(dn);
-            }
-            else if (!allowed.Any(a => standard.StartsWith(a, StringComparison.Ordinal)))
-            {
-                map[dn] = JointKind.Welded;
-                badStandard.Add(dn);
             }
             else
             {
@@ -62,8 +63,8 @@ public static class PipeJoints
 
         if (badStandard.Count > 0)
         {
-            issues.Add(new Issue("joints.standard", IssueLevel.Error,
-                string.Create(Ru, $"Трубы DN{string.Join(", DN", badStandard)} по {string.Join(", ", badStandard.Select(d => standardByDn[d]).Distinct())} соединяются только сваркой и на фланцах — разъёмные муфты допускаются для труб по {string.Join(", ", allowed)}; приняты сварные соединения, сменить сортамент или вид соединения."),
+            issues.Add(new Issue("joints.standard", IssueLevel.Warning,
+                string.Create(Ru, $"Трубы DN{string.Join(", DN", badStandard)} по {string.Join(", ", badStandard.Select(d => standardByDn[d]).Distinct())} соединяются только сваркой и на фланцах — резьба и разъёмные муфты допускаются для труб по {string.Join(", ", allowed)}; приняты сварные соединения, сменить сортамент или вид соединения."),
                 Clause: "6.7.2.1"));
         }
 
@@ -74,6 +75,17 @@ public static class PipeJoints
                 Clause: "6.7.2.6"));
         }
 
-        return new PipeJointsResult(map, [kinds.Id, limit.Id], issues);
+        // Категорию помещений и скрытую прокладку программа не знает — напоминание проектировщику со ссылками на пункты.
+        var ab = norms.Find("sp485.p6_7_2_5.categoryAB");
+        var concealed = norms.Find("sp485.p6_7_1_8.concealed");
+        var ids = new List<string> { kinds.Id, limit.Id };
+        if (ab is not null && concealed is not null && map.Values.Any(k => k != JointKind.Welded))
+        {
+            issues.Add(new Issue("joints.check", IssueLevel.Info,
+                $"Разъёмные соединения приняты для всей сети — проверить: в помещениях категорий {ab.Attributes["categories"]} допускаются только резьбовые и фланцевые соединения (п. {ab.Clause}); за несъёмными подвесными потолками и в закрытых штробах — как правило, сварка, разъёмные — при обосновании и с ревизионными люками (п. {concealed.Clause})."));
+            ids.AddRange([ab.Id, concealed.Id]);
+        }
+
+        return new PipeJointsResult(map, ids, issues);
     }
 }

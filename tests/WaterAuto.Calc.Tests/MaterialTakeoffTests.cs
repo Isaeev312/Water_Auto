@@ -263,4 +263,29 @@ public class MaterialTakeoffTests
         var t = MaterialTakeoffBuilder.Build([route], 1, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
         t.Items.Single(i => i.Name == "Муфта прямая DN25").Quantity.ShouldBe(2);
     }
+    [Fact]
+    public void Straight_pass_through_joins_pipes_with_one_coupling_not_two()
+    {
+        // DN65 на муфтах: три участка по 4 м по прямой — два узла прохода без фасонной части: 3·2 − 2 = 4 муфты.
+        // DN25 на резьбе: два участка по 4 м по прямой — одна прямая муфта в узле прохода.
+        RouteNode N(string id, double x, RouteNodeKind k = RouteNodeKind.Tee) => new(id, k, new(x, 0));
+        var g = new PipeRoute("G", "I", [N("I", 0, RouteNodeKind.Inlet), N("A", 4000), N("B", 8000), N("C", 12000, RouteNodeKind.Bend)],
+            [new RouteSegment("1", "I", "A", RouteSegmentRole.Main, new Length(4), 1, 65), new RouteSegment("2", "A", "B", RouteSegmentRole.Main, new Length(4), 1, 65), new RouteSegment("3", "B", "C", RouteSegmentRole.Main, new Length(4), 1, 65)]);
+        var t = MaterialTakeoffBuilder.Build([g], 0, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved with { ByDn = new Dictionary<int, JointKind> { [65] = JointKind.Grooved } });
+        t.Items.Single(i => i.Name == "Муфта трубопроводная разъёмная DN65").Quantity.ShouldBe(4);
+
+        var r = new PipeRoute("R", "I", [N("I", 0, RouteNodeKind.Inlet), N("A", 4000), N("B", 8000, RouteNodeKind.Bend)],
+            [new RouteSegment("1", "I", "A", RouteSegmentRole.Row, new Length(4), 1, 25), new RouteSegment("2", "A", "B", RouteSegmentRole.Row, new Length(4), 1, 25)]);
+        var tr = MaterialTakeoffBuilder.Build([r], 0, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
+        tr.Items.Single(i => i.Name == "Муфта прямая DN25").Quantity.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Fitting_with_ends_of_different_kinds_lists_its_ends()
+    {
+        // Тройник DN80 на муфтах с ответвлением DN25 на резьбе — переходный, концы перечислены; не «под муфту» целиком.
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
+        t.Items.ShouldContain(i => i.Name == "Тройник DN80×25 (концы: DN80 — под муфту, DN25 — резьба)" && i.Designation == null);
+        t.Items.ShouldContain(i => i.Name == "Переход DN50×25 (концы: DN50 — под муфту, DN25 — резьба)");
+    }
 }

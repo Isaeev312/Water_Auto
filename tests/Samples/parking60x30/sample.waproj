@@ -3,6 +3,7 @@
   "name": "Подземная автостоянка (пример)",
   "drawing": "floor.dxf",
   "design": {
+    "joints": "Grooved",
     "roomGroup": "2",
     "sprinklerK": 0.47,
     "sprinklerModel": "по каталогу",

@@ -68,4 +68,12 @@ public sealed class ProjectJsonTests : IDisposable
         File.WriteAllText(path, json);
         return path;
     }
+    [Fact]
+    public void Project_written_before_joint_choice_stays_welded_and_new_projects_default_to_grooved()
+    {
+        // Файл без design.joints считался на сварке (сортамент ГОСТ 10704 с DN50) — при загрузке он не переходит на муфты молча.
+        ProjectFile.FromJson("""{ "drawing": "a.dxf", "design": { "pipeStandardLargeFromDn": 50 } }""").Design.Joints.ShouldBe(Core.JointKind.Welded);
+        ProjectFile.FromJson("""{ "drawing": "a.dxf", "design": { "joints": "Grooved" } }""").Design.Joints.ShouldBe(Core.JointKind.Grooved);
+        ProjectFile.FromJson(ProjectFile.ToJson(new ProjectFile { Drawing = "a.dxf" })).Design.Joints.ShouldBe(Core.JointKind.Grooved);
+    }
 }

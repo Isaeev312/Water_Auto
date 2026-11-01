@@ -71,8 +71,7 @@ public sealed record ProjectFile
 
     public static ProjectFile Load(string path)
     {
-        var project = JsonSerializer.Deserialize<ProjectFile>(File.ReadAllText(path), Options)
-            ?? throw new InvalidDataException($"Пустой файл проекта: {path}");
+        var project = Parse(File.ReadAllText(path)) ?? throw new InvalidDataException($"Пустой файл проекта: {path}");
         if (project.Drawing.Length == 0)
         {
             throw new InvalidDataException("В проекте не задан чертёж (поле drawing).");
@@ -85,7 +84,21 @@ public sealed record ProjectFile
 
     /// <summary>Проект из строки JSON (тем же форматом, что и файл проекта) — для проверок без записи на диск.</summary>
     public static ProjectFile FromJson(string json) =>
-        JsonSerializer.Deserialize<ProjectFile>(json, Options) ?? throw new InvalidDataException("Пустой JSON проекта.");
+        Parse(json) ?? throw new InvalidDataException("Пустой JSON проекта.");
+
+    // Проект без поля design.joints записан до выбора соединений — он считался на сварке и остаётся на сварке.
+    private static ProjectFile? Parse(string json)
+    {
+        var project = JsonSerializer.Deserialize<ProjectFile>(json, Options);
+        if (project is null)
+        {
+            return null;
+        }
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        var hasJoints = node?["design"] is System.Text.Json.Nodes.JsonObject d && d.ContainsKey("joints");
+        return hasJoints ? project : project with { Design = project.Design with { Joints = Core.JointKind.Welded } };
+    }
 }
 
 /// <summary>Исходные данные расчёта.</summary>
@@ -175,10 +188,18 @@ public sealed record ProjectDesign
     /// <summary>Ссылка в выноске у точки ввода на лист насосной станции.</summary>
     public string InletReference { get; init; } = "см. раздел НС";
 
-    /// <summary>Сортамент для расчёта и спецификации.</summary>
+    /// <summary>
+    /// Сортамент для расчёта и спецификации. Граница стандартов — <see cref="PipeStandardLargeFromDn"/>; не задана — на сварке с DN50
+    /// (принято в проекте), на муфтах — сверх наибольшего DN муфт <paramref name="couplingMaxDn"/> (п. 6.7.2.6, из данных норм).
+    /// </summary>
+    public string SeriesStandard(int couplingMaxDn) => PipeStandardLarge.Length > 0
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? (Joints == Core.JointKind.Grooved ? couplingMaxDn : 50))
+        : PipeStandard;
+
+    /// <summary>Сортамент насосной станции и вводов: на сварке с фланцами к арматуре (п. 6.7.2.4) — граница как у сварной сети.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public string PipeSeriesStandard => PipeStandardLarge.Length > 0
-        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? (Joints == Core.JointKind.Grooved ? 200 : 50))
+    public string StationSeriesStandard => PipeStandardLarge.Length > 0
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? 50)
         : PipeStandard;
 
     /// <summary>Высота помещения, м — для табл. 6.3 и примечания 3 к табл. 6.2; null — до 10 м.</summary>
