@@ -140,10 +140,42 @@ public class FloorPlanImporterTests
     }
 
     [Fact]
+    public void Room_drawn_with_separate_lines_is_assembled_into_a_contour()
+    {
+        // Помещение рядом с основным обведено четырьмя отрезками в разном направлении (как чертят по подложке) — контур собирается.
+        var b = DrawingBuilder.ValidFloor();
+        b.Line(FloorPlanImporter.ContourLayer, 31000, 0, 41000, 0);
+        b.Line(FloorPlanImporter.ContourLayer, 41000, 8000, 41000, 0);
+        b.Line(FloorPlanImporter.ContourLayer, 41000, 8000, 31000, 8000);
+        b.Line(FloorPlanImporter.ContourLayer, 31000, 0, 31000, 8000);
+        b.Text(FloorPlanImporter.ContourLayer, 36000, 4000, "Склад");
+
+        var r = ImportDxf(b);
+
+        r.Plan.ShouldNotBeNull();
+        var store = r.Plan.Rooms.Single(x => x.Name == "Склад");
+        (store.Contour.AreaMm2 / 1e6).ShouldBe(80, 1e-6);
+        Single(r, "import.contourFromLines").Level.ShouldBe(IssueLevel.Info);
+    }
+
+    [Fact]
+    public void Lines_that_do_not_close_are_an_error_at_the_open_end()
+    {
+        var b = DrawingBuilder.ValidFloor();
+        b.Line(FloorPlanImporter.ContourLayer, 31000, 0, 41000, 0);
+        b.Line(FloorPlanImporter.ContourLayer, 41000, 0, 41000, 8000);
+
+        var e = Single(ImportDxf(b), "import.contourLinesOpen");
+
+        e.Level.ShouldBe(IssueLevel.Error);
+        e.Location.ShouldNotBeNull();
+    }
+
+    [Fact]
     public void Unsupported_entity_on_a_known_layer_is_not_dropped_silently()
     {
         var b = DrawingBuilder.ValidFloor();
-        b.Line(FloorPlanImporter.ContourLayer, 0, 0, 5000, 5000);
+        b.Circle(FloorPlanImporter.ContourLayer, 0, 0, 500);
 
         var e = Single(ImportDxf(b), "import.unsupportedEntity");
 

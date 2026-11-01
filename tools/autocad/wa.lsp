@@ -94,7 +94,7 @@
     (progn (setq wa:*marks* (1+ wa:*marks*))
            (princ "\n  Единицы чертежа не мм (INSUNITS ≠ 4) — выполните WA-SETUP или задайте единицы.")))
 
-  (setq contours (wa:check-closed "ПТ_КОНТУР" '("TEXT" "MTEXT") "Контур"))
+  (setq contours (wa:check-closed "ПТ_КОНТУР" '("TEXT" "MTEXT" "LINE") "Контур"))
   (if (null contours)
     (progn (setq wa:*marks* (1+ wa:*marks*))
            (princ "\n  На слое ПТ_КОНТУР нет объектов.")))
