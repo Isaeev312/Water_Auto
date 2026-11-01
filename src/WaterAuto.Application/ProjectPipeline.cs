@@ -882,6 +882,7 @@ public static class ProjectPipeline
             WriteAlarmPlans([.. issues]);
             WriteAlarmDocs();
             files.Add(WriteIssues(outDir, issues));
+            WriteTomes(project, auptDir, alarmDir, files);
             return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal) || i.Code.StartsWith("gas.", StringComparison.Ordinal))), files, issues, null);
         }
 
@@ -1557,7 +1558,7 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font), stamp: SheetStamp(project, "План этажа", "План этажа. Расстановка оросителей, трубопроводы")));
         WriteAlarmPlans(outIssues);
 
         Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
@@ -1993,6 +1994,7 @@ public static class ProjectPipeline
                 [.. summarySet.PumpCurve.Select(p => new PumpCurvePoint(p.QM3h, p.HM))])
             : null;
         var pumpRoomSummary = PumpRoomSummary(plan, setChoice?.Chosen);
+        WriteTomes(project, auptDir, alarmDir, files);
         return new PipelineResult(true, files, issues, worst, pumpSummary, pumpRoomSummary);
     }
 
@@ -2329,6 +2331,33 @@ public static class ProjectPipeline
             d.ZoneSprinklers,
             $"ДИКТУЮЩАЯ ЗОНА: S = {F(p.MinArea, "0.##")} м², N = {d.ZoneSprinklers.Count}, Qр = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с",
             Math.Max(d.RowSpacing.Millimeters, d.LineSpacing.Millimeters) / 2);
+    }
+
+    // Описи томов (tome.json) для сборки PDF тома с ИУЛ командой pdf (ADR 0015).
+    private static void WriteTomes(ProjectFile project, string auptDir, string alarmDir, List<string> files)
+    {
+        var t = project.Title;
+        IReadOnlyList<Export.IulSignature> signatures = t.Signatures.Count > 0
+            ? [.. t.Signatures.Select(s => new Export.IulSignature(s.Role, s.Name))]
+            : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
+        IEnumerable<string> In(string dir) => files.Where(f => string.Equals(Path.GetDirectoryName(Path.GetFullPath(f)), Path.GetFullPath(dir), StringComparison.OrdinalIgnoreCase));
+        void Manifest(string dir, params TomeEntry[] tomes)
+        {
+            var list = tomes.Where(x => x.Documents.Count > 0).ToList();
+            if (list.Count > 0 && Directory.Exists(dir))
+            {
+                Tome.WriteManifest(dir, new TomeManifest(list, signatures, project.Font));
+            }
+        }
+
+        Manifest(
+            auptDir,
+            new TomeEntry($"{t.Code}-ПТ", "Автоматическая установка водяного пожаротушения. Основной комплект рабочих чертежей", Tome.Ordered(In(auptDir), Tome.AuptOrder)),
+            new TomeEntry($"{t.Code}-ПЗ", "Автоматическая установка водяного пожаротушения. Пояснительная записка", Tome.Ordered(In(auptDir), [NoteFile])));
+        Manifest(
+            alarmDir,
+            new TomeEntry($"{t.Code}-АПС", "Автоматическая пожарная сигнализация. Основной комплект рабочих чертежей", Tome.Ordered(In(alarmDir), Tome.AlarmOrder)),
+            new TomeEntry($"{t.Code}-АПС.ПЗ", "Автоматическая пожарная сигнализация. Пояснительная записка", Tome.Ordered(In(alarmDir), [AlarmNoteFile])));
     }
 
     private static void Write(string dir, string name, List<string> files, Action<string> write)

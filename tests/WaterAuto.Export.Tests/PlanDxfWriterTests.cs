@@ -254,4 +254,18 @@ public class PlanDxfWriterTests
             File.Delete(path);
         }
     }
+    [Fact]
+    public void Plan_with_a_stamp_gets_a_sheet_frame_around_everything_the_program_drew()
+    {
+        // Лист для тома (ADR 0015): рамка охватывает изображение программы, сводка — под планом.
+        var stamp = new TitleBlock("1-ПТ", "Объект", "Здание", "План этажа", "Р", "Орг.", [new("Разраб.", "Иванов")], Sheet: "4");
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), summary: Summary, stamp: stamp);
+        var frame = On(doc, GostSheet.Layer).Select(e => e.GetBoundingBox()).ToList();
+        frame.ShouldNotBeEmpty();
+        var (fx0, fy0) = (frame.Min(b => b.Min.X), frame.Min(b => b.Min.Y));
+        var summary = On(doc, PlanDxfWriter.SummaryLayer).OfType<MText>().Single(m => m.Value.StartsWith(Summary.Title, StringComparison.Ordinal));
+        summary.InsertPoint.Y.ShouldBeLessThan(Layout.Sprinklers.Min(x => x.Location.YMm));
+        summary.InsertPoint.X.ShouldBeGreaterThan(fx0);
+        summary.InsertPoint.Y.ShouldBeGreaterThan(fy0);
+    }
 }

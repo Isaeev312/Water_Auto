@@ -10,7 +10,12 @@ public static class DrawingPdf
     {
         ArgumentNullException.ThrowIfNull(log);
         var done = new List<string>();
-        foreach (var dxf in Directory.GetFiles(folder, "*.dxf", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+        // DWG — лист поверх подложки (plan.dwg); DXF без рамки (план для проверки) пропускается с сообщением.
+        var drawings = Directory.GetFiles(folder, "*.dwg", SearchOption.AllDirectories)
+            .Concat(Directory.GetFiles(folder, "*.dxf", SearchOption.AllDirectories)
+                .Where(f => !File.Exists(Path.ChangeExtension(f, ".dwg"))))
+            .Order(StringComparer.Ordinal);
+        foreach (var dxf in drawings)
         {
             var pdf = Path.ChangeExtension(dxf, ".pdf");
             if (DxfPdf.Render(dxf, pdf, font, log))

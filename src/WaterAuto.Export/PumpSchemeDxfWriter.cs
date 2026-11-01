@@ -217,7 +217,7 @@ public static class PumpSchemeDxfWriter
             d.Gauge(x, 239, "Р", vacuum: false);
             d.Arrow(x, 250, 0, 1);
             d.Text(x - 3, 253, $"Секция {k + 1}", 2.5);
-            d.Text(x - 3, 257.5, $"→ {outlets[k]}", 2.5);
+            d.Text(x - 3, 257.5, $"в сеть: {outlets[k]}", 2.5);
             d.Text(x + 2, 245, $"DN{data.SupplyDn}", 2);
             if (k == 0)
             {

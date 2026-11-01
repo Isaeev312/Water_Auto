@@ -481,7 +481,8 @@ public partial class MainWindow : Window
 
     private static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
-    // docx выпуска → PDF через Word (оглавление и поля обновляются перед сохранением); Word работает в фоне, окно не блокируется.
+    // Выпуск → PDF: чертежи DXF — сами (ADR 0015), docx — через Word (оглавление и поля обновляются), затем тома с ИУЛ по описям;
+    // работа в фоне, окно не блокируется.
     private async void OnExportPdf(object sender, RoutedEventArgs e)
     {
         var dir = OutBox.Text.Trim();
@@ -492,14 +493,20 @@ public partial class MainWindow : Window
         }
 
         PdfButton.IsEnabled = false;
-        Summary.Text = "Выгрузка в PDF через Word…";
+        Summary.Text = "Выгрузка в PDF…";
         try
         {
             var messages = new List<string>();
-            var pdfs = await Task.Run(() => WordPdf.Export(dir, messages.Add));
-            Summary.Text = pdfs is { Count: > 0 }
-                ? $"PDF готовы ({pdfs.Count} шт.) — рядом с docx в папке выпуска."
-                : string.Join(Environment.NewLine, messages);
+            var (drawings, docs, tomes) = await Task.Run(() =>
+            {
+                var d = DrawingPdf.Export(dir, WaterAuto.Core.DocumentStyle.DefaultFont, messages.Add);
+                var w = WordPdf.Export(dir, messages.Add);
+                var t = Tome.Assemble(dir, messages.Add);
+                return (d.Count, w?.Count ?? 0, t.Count / 2);
+            });
+            var problems = messages.Where(m => !m.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && !m.Contains("-УЛ.pdf", StringComparison.Ordinal)).ToList();
+            Summary.Text = $"PDF: чертежей {drawings}, документов {docs}, томов с ИУЛ {tomes} — в папке выпуска."
+                + (problems.Count > 0 ? Environment.NewLine + string.Join(Environment.NewLine, problems) : "");
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or IOException or UnauthorizedAccessException)
         {

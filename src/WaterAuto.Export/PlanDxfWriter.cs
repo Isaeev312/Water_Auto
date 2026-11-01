@@ -56,14 +56,14 @@ public static class PlanDxfWriter
     public const string SprinklerBlock = "WA_ОРОСИТЕЛЬ";
 
     /// <param name="basePath">Исходный чертёж этажа: план труб рисуется поверх него в одном файле; null — только слои программы.</param>
-    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null, IReadOnlyList<PlanAxis>? axes = null)
+    public static void Write(string path, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle? style = null, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, string? basePath = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null, IReadOnlyList<PlanAxis>? axes = null, TitleBlock? stamp = null)
     {
         var source = basePath is null ? null : DxfDrawing.Read(basePath);
         style ??= new PlanDxfStyle();
-        DxfDrawing.Save(path, Build(layout, routes, issues, style, summary, inlets, source, supports, dimensions, hydrants, axes), style.Font);
+        DxfDrawing.Save(path, Build(layout, routes, issues, style, summary, inlets, source, supports, dimensions, hydrants, axes, stamp), style.Font);
     }
 
-    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null, IReadOnlyList<PlanAxis>? axes = null)
+    public static CadDocument Build(SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, IReadOnlyList<Issue> issues, PlanDxfStyle style, PlanCalcSummary? summary = null, IReadOnlyList<PlanInletNote>? inlets = null, CadDocument? source = null, IReadOnlyList<SupportPoint>? supports = null, IReadOnlyList<PlanDimensionChain>? dimensions = null, IReadOnlyList<PlanPoint>? hydrants = null, IReadOnlyList<PlanAxis>? axes = null, TitleBlock? stamp = null)
     {
         ArgumentNullException.ThrowIfNull(layout);
         ArgumentNullException.ThrowIfNull(routes);
@@ -149,7 +149,7 @@ public static class PlanDxfWriter
         var axisBand = axes is { Count: > 0 } ? margin + (style.TextHeightMm * 18) : 0;
         if (summary is not null)
         {
-            AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer, axisBand);
+            AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer, axisBand, below: stamp is not null);
         }
 
         // Замечания без координат — столбцом под сводкой справа от плана, не поверх рядков и размеров.
@@ -232,6 +232,29 @@ public static class PlanDxfWriter
                 RectangleWidth = width,
                 Layer = segments,
             });
+        }
+
+        if (stamp is not null)
+        {
+            // Лист — по изображению программы (слои ПТ_), подложка за его пределами не учитывается; масштаб 1:100, не помещается — мельче.
+            // Габарит текста по точке вставки занижен — правый край оценивается по длине строки (знак ≈ 0,75 высоты).
+            static BoundingBox Box(Entity e) => e switch
+            {
+                MText m => new BoundingBox(
+                    m.InsertPoint - new XYZ(0, DxfLines(m.Value).Length * 1.7 * m.Height, 0),
+                    m.InsertPoint + new XYZ(m.RectangleWidth > 0 ? m.RectangleWidth : DxfLines(m.Value).Max(l => l.Length) * 0.75 * m.Height, 0, 0)),
+                TextEntity t => new BoundingBox(t.InsertPoint, t.InsertPoint + new XYZ(t.Value.Length * 0.75 * t.Height, t.Height, 0)),
+                _ => e.GetBoundingBox(),
+            };
+            static string[] DxfLines(string v) => v.Split(@"\P");
+            var own = doc.Entities.Where(e => e.Layer?.Name.StartsWith("ПТ_", StringComparison.Ordinal) == true).Select(Box).ToList();
+            if (own.Count > 0)
+            {
+                var (x0, y0, x1, y1) = (own.Min(b => b.Min.X), own.Min(b => b.Min.Y), own.Max(b => b.Max.X), own.Max(b => b.Max.Y));
+                var sheet = new[] { 100.0, 200, 500 }.Select(sc => GostSheet.FitAtScale(x0 - 2000, y0 - 2000, x1 + 2000, y1 + 2000, sc)).FirstOrDefault(f => f is not null)
+                    ?? GostSheet.Fit(x0 - 2000, y0 - 2000, x1 + 2000, y1 + 2000);
+                GostSheet.Draw(doc, sheet, stamp);
+            }
         }
 
         return doc;
@@ -330,7 +353,7 @@ public static class PlanDxfWriter
 
     // Диктующая зона: контур по крайним оросителям с отступом, кружки у оросителей зоны и подпись;
     // сводка расчёта — многострочный текст справа от плана (приём из зарубежных комплектов, docs/foreign_drawings_ideas.md).
-    private static void AddSummary(CadDocument doc, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, PlanCalcSummary summary, PlanDxfStyle style, Layer zoneLayer, Layer summaryLayer, double axisBand)
+    private static void AddSummary(CadDocument doc, SprinklerLayout layout, IReadOnlyList<PipeRoute> routes, PlanCalcSummary summary, PlanDxfStyle style, Layer zoneLayer, Layer summaryLayer, double axisBand, bool below = false)
     {
         var ids = summary.ZoneSprinklerIds.ToHashSet(StringComparer.Ordinal);
         var zone = layout.Sprinklers.Where(s => ids.Contains(s.Id)).Select(s => s.Location).ToList();
@@ -358,7 +381,10 @@ public static class PlanDxfWriter
         doc.Entities.Add(new MText
         {
             Value = $"{summary.Title}\\P" + string.Join("\\P", summary.Rows.Select(r => $"{r.Label} — {r.Value}")),
-            InsertPoint = new XYZ(all.Max(p => p.XMm) + (10 * style.TextHeightMm) + axisBand, all.Max(p => p.YMm), 0),
+            // На листе со штампом — под планом (за осями и размерами), иначе справа от плана.
+            InsertPoint = below
+                ? new XYZ(all.Min(p => p.XMm), all.Min(p => p.YMm) - axisBand - (4 * style.TextHeightMm), 0)
+                : new XYZ(all.Max(p => p.XMm) + (10 * style.TextHeightMm) + axisBand, all.Max(p => p.YMm), 0),
             Height = style.TextHeightMm,
             RectangleWidth = 60 * style.TextHeightMm,
             Layer = summaryLayer,

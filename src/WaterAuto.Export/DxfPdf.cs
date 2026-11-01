@@ -54,7 +54,7 @@ public static partial class DxfPdf
             .MinBy(f => Math.Abs((box.Width / f.WidthMm) - Math.Max(1, Math.Round(box.Width / f.WidthMm))))!;
         var scale = box.Width / format.WidthMm;
 
-        UseFonts();
+        EnsureFonts();
         var family = FontAvailable(font) ? font : "Arial";
         if (family != font)
         {
@@ -87,7 +87,7 @@ public static partial class DxfPdf
 
     private static readonly object FontLock = new();
 
-    private static void UseFonts()
+    internal static void EnsureFonts()
     {
         lock (FontLock)
         {
@@ -126,7 +126,7 @@ public static partial class DxfPdf
         public byte[]? GetFont(string faceName) => System.IO.File.Exists(faceName) ? System.IO.File.ReadAllBytes(faceName) : null;
     }
 
-    private static bool FontAvailable(string family)
+    internal static bool FontAvailable(string family)
     {
         try
         {

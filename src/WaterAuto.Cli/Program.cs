@@ -134,7 +134,11 @@ switch (args[0])
                 return 2;
             }
 
-            return WordPdf.Export(folder, line => Console.WriteLine($"  {line}")) is null ? 2 : 0;
+            var word = WordPdf.Export(folder, line => Console.WriteLine($"  {line}"));
+
+            // Тома и ИУЛ — по описям tome.json, когда PDF всех документов тома готовы.
+            Tome.Assemble(folder, line => Console.WriteLine($"  {line}"));
+            return word is null ? 2 : 0;
         }
 
     case "template":
