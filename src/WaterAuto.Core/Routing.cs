@@ -38,3 +38,16 @@ public sealed record RoutingResult(IReadOnlyList<PipeRoute> Routes, IReadOnlyLis
 
 /// <summary>Опора (держатель) трубопровода: место на плане, DN трубы и участок.</summary>
 public sealed record SupportPoint(PlanPoint At, int Dn, string SegmentId);
+
+/// <summary>Вид соединения стальных трубопроводов (п. 6.7.2.1 СП 485).</summary>
+public enum JointKind
+{
+    /// <summary>Сварные (фасонные части — приварные).</summary>
+    Welded,
+
+    /// <summary>Трубопроводные разъёмные (грувлочные) муфты по ГОСТ Р 51737.</summary>
+    Grooved,
+
+    /// <summary>Резьбовые (соединительные части из ковкого чугуна).</summary>
+    Threaded,
+}

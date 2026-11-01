@@ -297,6 +297,8 @@ public sealed class ProjectPipelineTests : IDisposable
             Drawing = "floor.dxf",
             Design = new ProjectDesign
             {
+                // Эталонные числа теста посчитаны на сварной сети (сортамент ГОСТ 10704 с DN50).
+                Joints = Core.JointKind.Welded,
                 RoomGroup = "2",
                 SprinklerK = 0.47,
                 SprinklerModel = "по каталогу",

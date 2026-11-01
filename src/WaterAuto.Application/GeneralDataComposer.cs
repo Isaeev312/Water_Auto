@@ -18,11 +18,12 @@ public sealed record GeneralDataInputs(
     TemperatureChoice? Temperature,
     int HydrantCount,
     string PipeStandard,
-    string WeldStandard,
+    string Joints,
     IReadOnlyDictionary<string, string> FittingStandards,
     string? SpecificationDesignation = null,
     string? StationSpecificationDesignation = null,
-    bool AirFilled = false);
+    bool AirFilled = false,
+    string WeldStandard = "");
 
 /// <summary>
 /// Лист «Общие данные» (ГОСТ Р 21.101): ведомость чертежей — из проекта; ссылочные документы — нормы расчёта и все
@@ -54,7 +55,7 @@ public static class GeneralDataComposer
             }
         }
 
-        designations.AddRange(["СП 7.13130.2013", "СП 75.13330.2011", "ГОСТ Р 50680-94", "ГОСТ Р 51043-2002", "ГОСТ Р 51052-2002", i.WeldStandard]);
+        designations.AddRange(["СП 7.13130.2013", "СП 75.13330.2011", "ГОСТ Р 50680-94", "ГОСТ Р 51043-2002", "ГОСТ Р 51052-2002", .. i.WeldStandard.Length > 0 ? [i.WeldStandard] : Array.Empty<string>()]);
         // Обозначение может перечислять несколько документов через запятую (покрытие: грунтовка и эмаль).
         designations.AddRange(i.Takeoff.Items.Select(t => t.Designation).Where(x => !string.IsNullOrWhiteSpace(x)).SelectMany(x => x!.Split(", ", StringSplitOptions.TrimEntries)));
         designations.AddRange(["ГОСТ 21.110-2013", "ГОСТ Р 21.101-2020"]);
@@ -101,7 +102,7 @@ public static class GeneralDataComposer
                 + (d.Hydrants is null ? "" : $", внутренний противопожарный водопровод — {VpvNorms.For(d.Hydrants.Settings.Region).Doc}{(d.Hydrants.Settings.IsParking ? " и СНиП 21-02-99*" : "")}")
                 + ".",
             $"Установка — спринклерная {(i.AirFilled ? "воздухозаполненная" : "водозаполненная")}. Параметры приняты для группы помещений {p.Group} по {p.Source} СП 485.",
-            $"Трубопроводы — стальные по {i.PipeStandard}; соединения — на сварке по {i.WeldStandard}; фасонные части — {string.Join(", ", i.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}.",
+            $"Трубопроводы — стальные по {i.PipeStandard}; соединения: {i.Joints}.",
             "Монтаж трубопроводов и оборудования, их крепление — по СП 75.13330; приёмо-сдаточные испытания установки — по ГОСТ Р 50680.",
             "Технические средства установки, кроме оросителей, измерительных приборов и трубопроводов, окрасить в красный цвет (п. 6.8.11 СП 485).",
         };

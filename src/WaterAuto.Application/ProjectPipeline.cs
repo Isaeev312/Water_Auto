@@ -1046,6 +1046,15 @@ public static class ProjectPipeline
         var temperatureText = temperature.Choice is { } tc ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $", {tc.Nominal} °С (колба — {Feminine(tc.Color)})") : "";
 
         var materials = Materials(normsDir);
+
+        // Соединения по DN (п. 6.7.2.1, 6.7.2.6): муфты — только для допустимого сортамента и DN; меньшие DN — на резьбе.
+        var jointSeries = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes);
+        var standardByDn = routes.SelectMany(r => r.Segments.Concat(r.Loops))
+            .Select(s => jointSeries.Pick(s.Dn)).OfType<SeriesPipe>()
+            .GroupBy(x => x.Dn).ToDictionary(g => g.Key, g => g.First().Standard);
+        var jointPlan = PipeJoints.Resolve(standardByDn, design.Joints, design.GroovedMinDn, norms);
+        issues.AddRange(jointPlan.Issues);
+        var jointsText = JointsText(design, jointPlan);
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
@@ -1054,7 +1063,8 @@ public static class ProjectPipeline
             design.FittingStandards.Count > 0 ? design.FittingStandards : null,
             materials.SteelDensity,
             pipeSizes,
-            materials.Coating);
+            materials.Coating,
+            new JointSpec(jointPlan.ByDn, design.PipeStockLength, design.ThreadedFittingStandards, design.CouplingStandard));
 
         // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
         var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
@@ -1915,7 +1925,7 @@ public static class ProjectPipeline
                 literature,
                 ids,
                 selection,
-                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части — {string.Join(", ", design.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}.",
+                $"Соединения стальных трубопроводов: {jointsText}.",
                 supports,
                 temperature.Choice,
                 design.MaxAmbientTemperature,
@@ -1985,7 +1995,7 @@ public static class ProjectPipeline
 
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
-            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled),
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, jointsText, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled, design.WeldStandard),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
@@ -2199,6 +2209,41 @@ public static class ProjectPipeline
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Соединения сети словами — для записки и «Общих данных»: по видам с диапазонами DN и стандартами; насосная — п. 6.7.2.4.
+    private static string JointsText(ProjectDesign design, PipeJointsResult plan)
+    {
+        string Range(JointKind kind)
+        {
+            var dns = plan.ByDn.Where(x => x.Value == kind).Select(x => x.Key).Order().ToList();
+            return dns.Count == 0 ? "" : dns.Count == 1 ? $"DN{dns[0]}" : $"DN{dns[0]}–DN{dns[^1]}";
+        }
+
+        var welded = $"на сварке по {design.WeldStandard}; фасонные части — {string.Join(", ", design.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}";
+        if (design.Joints != JointKind.Grooved || plan.ByDn.Count == 0)
+        {
+            return welded;
+        }
+
+        var parts = new List<string>();
+        if (Range(JointKind.Grooved) is { Length: > 0 } g)
+        {
+            parts.Add($"{g} — на трубопроводных разъёмных (грувлочных) муфтах по {design.CouplingStandard} с фасонными частями под муфту (п. 6.7.2.1 СП 485)");
+        }
+
+        if (Range(JointKind.Threaded) is { Length: > 0 } t)
+        {
+            parts.Add($"{t} — на резьбе, соединительные части из ковкого чугуна по {string.Join(", ", design.ThreadedFittingStandards.Values.Distinct())}");
+        }
+
+        if (Range(JointKind.Welded) is { Length: > 0 } w)
+        {
+            parts.Add($"{w} — {welded}");
+        }
+
+        parts.Add("трубопроводы насосной станции — на сварке, к арматуре — на фланцах (п. 6.7.2.4 СП 485)");
+        return string.Join("; ", parts);
+    }
 
     // Условные точки на стенах помещения (вводы/выпуски), когда разметка ПТ_НС_ВВОД/ВЫПУСК не сделана: равномерно по
     // периметру прямоугольника помещения; start — доля периметра от левого нижнего угла.

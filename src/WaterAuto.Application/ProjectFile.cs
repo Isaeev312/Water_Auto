@@ -130,7 +130,33 @@ public sealed record ProjectDesign
     /// <summary>Стандарт труб, начиная с <see cref="PipeStandardLargeFromDn"/>; пусто — все трубы по <see cref="PipeStandard"/>.</summary>
     public string PipeStandardLarge { get; init; } = "ГОСТ 10704-91";
 
-    public int PipeStandardLargeFromDn { get; init; } = 50;
+    /// <summary>
+    /// DN, с которого трубы — по <see cref="PipeStandardLarge"/>; null — по виду соединений: на сварке — с DN50, на муфтах — с DN200
+    /// (электросварные по ГОСТ 10704 муфтами не соединяются, п. 6.7.2.1; ГОСТ 3262 — до DN150).
+    /// </summary>
+    public int? PipeStandardLargeFromDn { get; init; }
+
+    /// <summary>Вид соединений сети (решение проектировщика, п. 6.7.2.1): Grooved — разъёмные (грувлочные) муфты, Welded — сварка.</summary>
+    public Core.JointKind Joints { get; init; } = Core.JointKind.Grooved;
+
+    /// <summary>При муфтах: DN, начиная с которого ставятся муфты; меньшие — на резьбе (решение проектировщика, не норма).</summary>
+    public int GroovedMinDn { get; init; } = 50;
+
+    /// <summary>Мерная длина труб для счёта стыков (муфт), м.</summary>
+    public double PipeStockLength { get; init; } = 6;
+
+    /// <summary>Стандарт трубопроводных разъёмных муфт.</summary>
+    public string CouplingStandard { get; init; } = "ГОСТ Р 51737-2001";
+
+    /// <summary>Резьбовые соединительные части из ковкого чугуна по началу наименования.</summary>
+    public Dictionary<string, string> ThreadedFittingStandards { get; init; } = new()
+    {
+        ["Угольник"] = "ГОСТ 8946-75",
+        ["Тройник"] = "ГОСТ 8948-75",
+        ["Крестовина"] = "ГОСТ 8951-75",
+        ["Муфта переходная"] = "ГОСТ 8957-75",
+        ["Муфта прямая"] = "ГОСТ 8954-75",
+    };
 
     /// <summary>Стандарты приварных деталей трубопроводов по типу: начало наименования → обозначение.</summary>
     public Dictionary<string, string> FittingStandards { get; init; } = new()
@@ -152,7 +178,7 @@ public sealed record ProjectDesign
     /// <summary>Сортамент для расчёта и спецификации.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public string PipeSeriesStandard => PipeStandardLarge.Length > 0
-        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn)
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? (Joints == Core.JointKind.Grooved ? 200 : 50))
         : PipeStandard;
 
     /// <summary>Высота помещения, м — для табл. 6.3 и примечания 3 к табл. 6.2; null — до 10 м.</summary>
