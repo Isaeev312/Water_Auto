@@ -3,6 +3,7 @@
 //   new <проект.waproj> --drawing <чертёж.dwg|dxf>              — заготовка файла проекта с исходными данными
 //   template <файл.dwt|dwg|dxf>                                 — шаблон чертежа: слои ПТ_, мм, блок ввода, памятка
 //   check <проект.waproj> [--data <папка data>]                 — проверка чертежа без расчёта: помещения, вводы, замечания с координатами
+//   pdf <папка выпуска>                                          — docx выпуска в PDF через Word с обновлённым оглавлением (Windows)
 using System.Text;
 using WaterAuto.Application;
 
@@ -13,6 +14,7 @@ const string Usage = """
       WaterAuto.Cli new <проект.waproj> --drawing <чертёж.dwg|dxf>
       WaterAuto.Cli template <файл.dwt|dwg|dxf>
       WaterAuto.Cli check <проект.waproj> [--data <папка data>]
+      WaterAuto.Cli pdf <папка выпуска>
     """;
 
 if (args.Length < 2 || args[0] is "-h" or "--help")
@@ -112,6 +114,24 @@ switch (args[0])
 
             Console.WriteLine(preview.HasErrors ? "Чертёж к расчёту не готов." : "Чертёж готов к расчёту.");
             return preview.HasErrors ? 1 : 0;
+        }
+
+    case "pdf":
+        {
+            var folder = Path.GetFullPath(args[1]);
+            if (!Directory.Exists(folder))
+            {
+                Console.Error.WriteLine($"Папка не найдена: {folder}");
+                return 2;
+            }
+
+            if (!OperatingSystem.IsWindows())
+            {
+                Console.Error.WriteLine("Выгрузка в PDF через Word доступна только в Windows.");
+                return 2;
+            }
+
+            return WordPdf.Export(folder);
         }
 
     case "template":
