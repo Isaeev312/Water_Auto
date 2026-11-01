@@ -13,8 +13,10 @@ public static class AlarmGeneralData
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static GeneralData Build(string objectName, IReadOnlyList<ProjectSheet> sheets, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, AlarmZoningResult? zoning, PowerBudget? budget, AlarmPowerSet? set, IReadOnlyList<ControlPoint> points, string codePrefix)
+    public static GeneralData Build(string objectName, IReadOnlyList<ProjectSheet> sheets, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, AlarmZoningResult? zoning, PowerBudget? budget, AlarmPowerSet? set, IReadOnlyList<ControlPoint> points, string codePrefix, INormsProvider norms)
     {
+        ArgumentNullException.ThrowIfNull(norms);
+        var manual = norms.Find("sp484.p6_6_27.manual")!.Values;
         ArgumentNullException.ThrowIfNull(sheets);
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -55,7 +57,7 @@ public static class AlarmGeneralData
         [
             "Рабочие чертежи системы пожарной сигнализации разработаны по заданию на проектирование и архитектурно-строительным чертежам в соответствии с СП 484.1311500.2020 с Изм. № 1 и СП 6.13130.2025. Объём защиты (помещения, тип извещателей, алгоритм) задан проектировщиком.",
             $"Система адресная; извещатели — {(models.Count > 0 ? string.Join(", ", models) : "по спецификации")}; алгоритм принятия решения о пожаре — {algorithms}; каждая точка защищаемого помещения контролируется {(zones.Any(z => z.Algorithm == DetectionAlgorithm.C || !z.Addressable) ? "не менее чем двумя ИП (п. 6.6.2)" : "одним адресным ИП (п. 6.6.1)")}.",
-            "Ручные извещатели установлены на стенах на высоте 1,5 м от пола; при уточнении путей эвакуации — у выходов, не далее 45 м друг от друга и 30 м от выхода (п. 6.6.27).",
+            string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ручные извещатели установлены на стенах на высоте {manual["mountHeight"]:0.0#} м от пола; при уточнении путей эвакуации — у выходов, не далее {manual["maxBetweenIndoor"]:0} м друг от друга и {manual["maxToRoomExit"]:0} м от выхода (п. 6.6.27)."),
             "Единичная неисправность линии не должна отключать более 24 автоматических ИП и одного ручного (п. 6.3.5): изоляторы короткого замыкания — по спецификации, места установки — по схеме соединений.",
             "Сигналы от установки пожаротушения (положение задвижек и затворов, сигнализаторы давления, шкаф насосов) принимаются адресными модулями в насосной; состав — по перечню сигналов и таблице адресов.",
             "Электропитание — I категория надёжности (СП 6, п. 5.21): от двух вводов с автоматическим переключением и от резервированного источника с АКБ на 24 ч дежурного режима и 1 ч «Пожар» (прил. Б СП 6).",

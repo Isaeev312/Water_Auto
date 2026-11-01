@@ -607,7 +607,7 @@ public static class ProjectPipeline
 
             if (detectorLayout is not null && project.Alarm is not null)
             {
-                var alarmGeneral = AlarmGeneralData.Build(project.Name, alarmSheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code);
+                var alarmGeneral = AlarmGeneralData.Build(project.Name, alarmSheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code, norms);
                 Write(alarmDir, AlarmGeneralDataFile, files, p => GeneralDataDocx.Write(p, alarmGeneral, Stamp(project, "АПС", "Общие данные") with { SheetCount = alarmSheets.Count, Sheet = alarmSheets.Count > 0 ? alarmSheets[0].Sheet : null }, project.Font));
             }
 
