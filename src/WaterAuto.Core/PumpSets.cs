@@ -23,3 +23,6 @@ public sealed record PumpSet(
     /// <summary>Высота оси коллекторов установки от пола, мм.</summary>
     public double CollectorAxisMm { get; init; } = 200;
 }
+
+/// <summary>Мембранный бак (гидроаккумулятор) из каталога: вместимость, л; максимальное давление PN и заводское давление воздуха, бар.</summary>
+public sealed record MembraneTank(string Designation, double VolumeL, double PnBar, double PrechargeBar, string Document);

@@ -1087,6 +1087,7 @@ public static class ProjectPipeline
         // Q/H и спецификацию — только замечания и пояснительная записка; Error jockey.flow выпуск не останавливает.
         issues.AddRange(JockeyIssues(design.Jockey));
         var stationTakeoff = new MaterialTakeoff([], []);
+        JockeyTankResult? jockeyTank = null;
 
         // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
         var sections = routes.Select(r => r.InletId).Distinct()
@@ -1123,8 +1124,17 @@ public static class ProjectPipeline
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
             var ruPs = CultureInfo.GetCultureInfo("ru-RU");
+
+            // Бак жокей-насоса (п. 6.9.4): давление в системе — наибольшее из напора насосов и уставки отключения жокей-насоса.
+            var jStop = design.Jockey?.StopPressureMpa is { } js ? new Pressure(js) : (Pressure?)null;
+            var jStart = design.Jockey?.StartPressureMpa is { } jst ? new Pressure(jst) : (Pressure?)null;
+            jockeyTank = JockeyTank.Select(PumpCatalog.Tanks(normsDir), norms, new Pressure(Math.Max(worst.PumpPressure.Mpa, jStop?.Mpa ?? 0)), jStop, jStart);
+            issues.AddRange(jockeyTank.Issues);
             var stationTokens = new Dictionary<string, string>
             {
+                ["tankName"] = jockeyTank.Tank?.Designation ?? $"Бак мембранный вместимостью не менее {worst.JockeyTankMinLiters.ToString("0", ruPs)} л",
+                ["tankDoc"] = jockeyTank.Tank?.Document ?? "по каталогу",
+                ["tankNote"] = jockeyTank.Precharge is { } pre ? $"давление воздуха {pre.Mpa.ToString("0.00", ruPs)} МПа (п. 6.9.4)" : "давление воздуха — по уставкам жокей-насоса",
                 ["q"] = (worst.PumpFlow.LitersPerSecond * 3.6).ToString("0.0", ruPs),
                 ["h"] = worst.PumpHead.Meters.ToString("0.0", ruPs),
                 ["dnS"] = station.Suction.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
@@ -1924,7 +1934,8 @@ public static class ProjectPipeline
                 curtains,
                 foamResult,
                 design.Foam?.Name,
-                Compliance: compliance),
+                Compliance: compliance,
+                JockeyTank: jockeyTank),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 

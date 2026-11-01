@@ -65,7 +65,8 @@ public static class EquipmentSet
         var items = new List<TakeoffItem>();
         foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
         {
-            var name = tokens.Aggregate(t.GetProperty("name").GetString()!, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+            string Fill(string text) => tokens.Aggregate(text, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+            var name = Fill(t.GetProperty("name").GetString()!);
             var times = t.TryGetProperty("count", out var c) ? counts.GetValueOrDefault(c.GetString()!) : 1;
             if (times == 0)
             {
@@ -81,10 +82,10 @@ public static class EquipmentSet
             items.Add(new TakeoffItem(
                 section,
                 name,
-                t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? designation : null,
+                t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? Fill(designation) : null,
                 t.GetProperty("per").GetDouble() * times,
                 t.GetProperty("unit").GetString()!,
-                t.TryGetProperty("note", out var n) ? n.GetString() : null,
+                t.TryGetProperty("note", out var n) && n.GetString() is { } note ? Fill(note) : null,
                 Role: t.TryGetProperty("role", out var r) ? r.GetString() : null));
         }
 

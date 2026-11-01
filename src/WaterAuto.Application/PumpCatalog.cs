@@ -42,6 +42,27 @@ public static class PumpCatalog
         return sets;
     }
 
+    /// <summary>Мембранные баки для жокей-насоса (data/catalog/membrane_tanks_*.json).</summary>
+    public static IReadOnlyList<MembraneTank> Tanks(string normsDir)
+    {
+        var tanks = new List<MembraneTank>();
+        foreach (var file in Directory.EnumerateFiles(Dir(normsDir), "membrane_tanks_*.json").Order(StringComparer.Ordinal))
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
+            foreach (var t in doc.RootElement.GetProperty("tanks").EnumerateArray())
+            {
+                tanks.Add(new MembraneTank(
+                    t.GetProperty("designation").GetString()!,
+                    t.GetProperty("volumeL").GetDouble(),
+                    t.GetProperty("pnBar").GetDouble(),
+                    t.GetProperty("prechargeBar").GetDouble(),
+                    t.GetProperty("document").GetString()!));
+            }
+        }
+
+        return tanks;
+    }
+
     /// <summary>Правила прокладки обвязки из data/catalog/pump_room.json (рекомендации литературы); null — нет данных.</summary>
     public static (double WallOffset, double BracketHeight, double LevelGap, string Source, int JockeyDn)? Piping(string normsDir)
     {

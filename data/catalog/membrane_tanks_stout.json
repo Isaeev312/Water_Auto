@@ -1,0 +1,16 @@
+{
+  "$schema": "../schemas/membrane_tanks.schema.json",
+  "schemaVersion": 1,
+  "maker": "STOUT",
+  "verified": false,
+  "source": "Паспорт «Баки STOUT» (2023), разд. 4 «Номенклатура», гидроаккумуляторы синего цвета, вертикальные: stout.ru/upload/iblock/abd/…/Паспорт STOUT Баки_2023.pdf",
+  "notes": [
+    "Гидроаккумуляторы для систем водоснабжения: мембрана сменная, рабочая среда — вода; ТУ нет (импортное изделие), документ — паспорт изготовителя.",
+    "Для систем с давлением выше 10 бар бак PN 16 в каталог не занесён — подбирается вручную."
+  ],
+  "tanks": [
+    { "designation": "Гидроаккумулятор STOUT STW-0002-000050, 50 л, PN 10", "volumeL": 50, "pnBar": 10, "prechargeBar": 2.0, "document": "Паспорт STOUT, артикул STW-0002-000050" },
+    { "designation": "Гидроаккумулятор STOUT STW-0002-000080, 80 л, PN 10", "volumeL": 80, "pnBar": 10, "prechargeBar": 2.0, "document": "Паспорт STOUT, артикул STW-0002-000080" },
+    { "designation": "Гидроаккумулятор STOUT STW-0002-000100, 100 л, PN 10", "volumeL": 100, "pnBar": 10, "prechargeBar": 2.0, "document": "Паспорт STOUT, артикул STW-0002-000100" }
+  ]
+}

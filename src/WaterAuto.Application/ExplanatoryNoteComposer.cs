@@ -41,7 +41,8 @@ public sealed record NoteInputs(
     IReadOnlyList<CurtainResult>? Curtains = null,
     FoamConcentrateResult? Foam = null,
     string? FoamName = null,
-    IReadOnlyList<ComplianceRow>? Compliance = null);
+    IReadOnlyList<ComplianceRow>? Compliance = null,
+    JockeyTankResult? JockeyTank = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -501,6 +502,11 @@ public static class ExplanatoryNoteComposer
     // данные, без выдуманных уставок; ёмкость мембранного бака — из данных норм (п. 6.9.4).
     private static IEnumerable<NoteBlock> JockeyBlocks(NoteInputs i, NormRecord jockeyRule)
     {
+        foreach (var b in JockeyTankBlocks(i, jockeyRule))
+        {
+            yield return b;
+        }
+
         if (i.Jockey is not { } jockey
             || (jockey.FlowLitersPerSecond is null && jockey.StartPressureMpa is null && jockey.StopPressureMpa is null))
         {
@@ -524,6 +530,26 @@ public static class ExplanatoryNoteComposer
         }
 
         yield return new NoteParagraph($"**Жокей-насос.** Принято решением проектировщика: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
+    }
+
+    // Мембранный бак (п. 6.9.4): подбор по каталогу и давление воздуха по закону Бойля — Мариотта.
+    private static IEnumerable<NoteBlock> JockeyTankBlocks(NoteInputs i, NormRecord rule)
+    {
+        if (i.JockeyTank is not { } t)
+        {
+            yield break;
+        }
+
+        var min = F(rule.Values["minVolume"]!.Value, "0");
+        var share = $"{F(rule.Values["waterShareMin"]!.Value, "0")}–{F(rule.Values["waterShareMax"]!.Value, "0")} %";
+        yield return new NoteParagraph(t.Tank is { } tank
+            ? $"**Мембранный бак жокей-насоса.** По п. 6.9.4 СП 485 вместимость — не менее {min} л, объём воды — {share} вместимости. Принят {NoteDocx.Escape(char.ToLower(tank.Designation[0], Ru) + tank.Designation[1..])} ({NoteDocx.Escape(tank.Document)}): наименьший бак каталога не менее {min} л с рабочим давлением PN {F(tank.PnBar, "0")} бар не ниже давления в системе."
+            : $"**Мембранный бак жокей-насоса.** По п. 6.9.4 СП 485 вместимость — не менее {min} л, объём воды — {share} вместимости; в каталоге подходящего по давлению бака нет — подбирается по каталогу изготовителя.");
+        if (t.Precharge is { } p0 && t.WaterShare is { } f && i.Jockey?.StopPressureMpa is { } stop)
+        {
+            yield return new NoteParagraph("Давление воздуха в баке принято так, чтобы при отключении жокей-насоса вода занимала середину нормируемой доли (сжатие воздуха изотермическое, давления абсолютные, *p*_{а} = 0,101 МПа):");
+            yield return new NoteFormula($"*p*_{{0}} = (1 − *f*)·(*P*_{{откл}} + *p*_{{а}}) − *p*_{{а}} = (1 − {F(f, "0.00")})·({F(stop, "0.000")} + 0,101) − 0,101 = **{F(p0.Mpa, "0.00")} МПа**.", "6.8", []);
+        }
     }
 
     private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord jockey)
