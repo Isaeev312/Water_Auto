@@ -133,7 +133,7 @@ public static class DetectorLayouter
         }
 
         issues.Add(new Issue("aps.layout.beams", IssueLevel.Info,
-            $"Помещение «{zone.RoomName}»: {spanning.Count} балок высотой до {new Length(tallest)} при H = {zone.CeilingHeight} — ИП в полях между балками, поперёк балок не дальше {row.Value.Across} друг от друга и {row.Value.ToWall} от грани (строка {row.Value.RecordId}).",
+            $"Помещение «{zone.RoomName}»: балки высотой до {new Length(tallest)} (количество — {spanning.Count}) при H = {zone.CeilingHeight} — ИП в полях между балками, поперёк балок не дальше {row.Value.Across} друг от друга и {row.Value.ToWall} от грани (строка {row.Value.RecordId}).",
             zone.RoomId, "СП 484.1311500.2020, табл. 6.2", zone.Outline.Centroid));
 
         var cuts = spanning.Select(x => alongX ? (x.Box.Y0, x.Box.Y1) : (x.Box.X0, x.Box.X1)).OrderBy(c => c.Item1).ToList();

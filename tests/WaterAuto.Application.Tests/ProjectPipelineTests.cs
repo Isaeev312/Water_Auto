@@ -328,6 +328,26 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Compliance_table_for_the_expert_review_lists_requirements_with_clauses_and_verdicts()
+    {
+        // Таблица соответствия: требование, пункт, нормативное и принятое значение, вывод — по расчёту, без чисел в коде.
+        Drawing();
+        var result = Run(Project());
+
+        result.Success.ShouldBeTrue();
+        var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.ComplianceFile, StringComparison.Ordinal)));
+        IReadOnlyList<string> Row(string requirement) => rows.Single(r => r.Count > 1 && r[1].StartsWith(requirement, StringComparison.Ordinal));
+        Row("Интенсивность орошения")[5].ShouldBe("соответствует");
+        Row("Площадь для расчёта расхода")[5].ShouldBe("соответствует");
+        Row("Расход АУП")[5].ShouldBe("соответствует");
+        Row("Шаг оросителей")[2].ShouldContain("табл. 6.1");
+        Row("Скорость в подводящем")[2].ShouldContain("6.7.1.37");
+        Row("Напор насосной установки")[5].ShouldBe("соответствует");
+        // Замечания расчёта уровня «предупреждение» тоже попадают в таблицу — с пунктом и выводом «проверить».
+        rows.ShouldContain(r => r.Count > 5 && r[5] == "проверить" && r[1].Contains("температур", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Section_feed_of_its_own_shortens_the_supply_and_lowers_the_pump_head()
     {
         // Склад группы 5 задаёт напор при общем подводящем 30 м DN125; свой подвод к секции склада 5 м DN150 — напор ниже,
@@ -690,7 +710,7 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
             ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
-            ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
+            ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.ComplianceFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);
         result.Design!.PumpHead.Meters.ShouldBeGreaterThan(0);

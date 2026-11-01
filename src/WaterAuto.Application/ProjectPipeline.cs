@@ -108,6 +108,9 @@ public static class ProjectPipeline
     /// <summary>Раздел 9 по п. 26 ПП РФ № 87 (стадия П), в корне выпуска.</summary>
     public const string Pp87File = "pb_razdel9.docx";
 
+    /// <summary>Таблица соответствия требованиям норм для экспертизы.</summary>
+    public const string ComplianceFile = "compliance.xlsx";
+
     /// <summary>План этажа АУПТ из design.levels (k = 1, 2, …; основной этаж — <see cref="PlanDxfFile"/>).</summary>
     public static string LevelPlanFile(int k) => string.Create(CultureInfo.InvariantCulture, $"plan_level{k}.dxf");
 
@@ -302,7 +305,7 @@ public static class ProjectPipeline
 
                         if (soueRelayOutputs > 0)
                         {
-                            issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — {soueRelayOutputs} выходов реле на линии оповещения (по помещениям); учтены в релейных блоках и питании."));
+                            issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — выходы реле на линии оповещения по помещениям (количество — {soueRelayOutputs}); учтены в релейных блоках и питании."));
                         }
                     }
                 }
@@ -1961,6 +1964,8 @@ public static class ProjectPipeline
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
+        var compliance = ComplianceComposer.Compose(worst, setChoice?.Chosen is not null ? setChoice.HeadAtDuty : null, issues);
+        Write(auptDir, ComplianceFile, files, p => ComplianceXlsx.Write(p, compliance, $"{project.Name}. Соответствие требованиям норм (АУПТ)", project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet
             ? new PumpSetSummary(
