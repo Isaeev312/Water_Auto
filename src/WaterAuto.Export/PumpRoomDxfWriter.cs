@@ -420,12 +420,22 @@ public static class PumpRoomDxfWriter
         if (data.Piping)
         {
             var ru = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
-            foreach (var (at, zTop, zBottom) in data.Pipes.SelectMany(p => p.Risers))
+            // Одинаковые стояки разных труб — одна выноска; близкие выноски уходят ступенькой вниз, чтобы подписи не сливались.
+            var shelves = new List<XY>();
+            foreach (var (at, zTop, zBottom) in data.Pipes.SelectMany(p => p.Risers)
+                .DistinctBy(r => (Math.Round(r.At.XMm), Math.Round(r.At.YMm), Math.Round(r.Top, 3), Math.Round(r.Bottom, 3))))
             {
+                var drop = 2.5 * h;
+                while (shelves.Any(s => Math.Abs(s.X - at.XMm) < 10 * h && Math.Abs(s.Y - (at.YMm - drop)) < 1.2 * h))
+                {
+                    drop += 1.3 * h;
+                }
+
+                shelves.Add(new XY(at.XMm, at.YMm - drop));
                 doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.45 * h, Layer = equipment });
-                doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm - (2.5 * h), at.YMm - (2.5 * h))) { Layer = text });
-                doc.Entities.Add(new Line(P(at.XMm - (2.5 * h), at.YMm - (2.5 * h)), P(at.XMm - (9.5 * h), at.YMm - (2.5 * h))) { Layer = text });
-                Text(at.XMm - (9.3 * h), at.YMm - (2.3 * h), string.Create(ru, $"отм. {zTop:+0.000;−0.000} / {zBottom:+0.000;−0.000}"), 0.6 * h);
+                doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm - (2.5 * h), at.YMm - drop)) { Layer = text });
+                doc.Entities.Add(new Line(P(at.XMm - (2.5 * h), at.YMm - drop), P(at.XMm - (9.5 * h), at.YMm - drop)) { Layer = text });
+                Text(at.XMm - (9.3 * h), at.YMm - drop + (0.2 * h), string.Create(ru, $"отм. {zTop:+0.000;−0.000} / {zBottom:+0.000;−0.000}"), 0.6 * h);
             }
 
             // Привязки осей труб к стенам: у каждой стены — цепочка «стена — оси труб, идущих вдоль неё».
