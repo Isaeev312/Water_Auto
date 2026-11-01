@@ -32,7 +32,7 @@ public static class AlarmNote
 
         sections.Add(new("2", "Выбор извещателей и алгоритма", Choice(zones, norms)));
         sections.Add(new("3", "Размещение извещателей", Placement(zones, layout, issues, norms)));
-        sections.Add(new("4", "Зоны контроля, ручные извещатели, изоляторы и прибор", Zones(zones, layout, issues, zoning)));
+        sections.Add(new("4", "Зоны контроля, ручные извещатели, изоляторы и прибор", Zones(zones, layout, issues, zoning, norms)));
         sections.Add(new("5", "Сигналы от установки пожаротушения", Signals(points)));
         sections.Add(new("6", "Электропитание и аккумуляторная батарея", Power(budget)));
         if (soue is not null)
@@ -49,9 +49,11 @@ public static class AlarmNote
 
     private static List<NoteBlock> Choice(IReadOnlyList<DetectorZone> zones, INormsProvider norms)
     {
+        var smoke = norms.Find("sp484.p6_6_16.smokePoint")!.Values;
+        var heat = norms.Find("sp484.p6_6_15.heatPoint")!.Values;
         var blocks = new List<NoteBlock>
         {
-            new NoteParagraph("Точечные дымовые ИП применяются в помещениях высотой до 12 м, радиус зоны контроля не более 6,4 м (п. 6.6.16); точечные тепловые — до 9 м, радиус не более 3,5 м (п. 6.6.15). Зона контроля точечного ИП — круг (п. 6.6.5): помещение защищено, когда каждая его точка попадает в круг хотя бы одного ИП."),
+            new NoteParagraph(string.Create(Ru, $"Точечные дымовые ИП применяются в помещениях высотой до {smoke["maxRoomHeight"]:0.#} м, радиус зоны контроля не более {smoke["radius"]:0.0#} м (п. 6.6.16); точечные тепловые — до {heat["maxRoomHeight"]:0.#} м, радиус не более {heat["radius"]:0.0#} м (п. 6.6.15). Зона контроля точечного ИП — круг (п. 6.6.5): помещение защищено, когда каждая его точка попадает в круг хотя бы одного ИП.")),
             new NoteParagraph("Алгоритм принятия решения о пожаре (п. 6.4): A — по одному срабатыванию, B — по повторному срабатыванию или второму ИП за 60 с, C — по двум разным ИП. Для зон, которые формируют сигналы управления АУП, алгоритмы A и B не допускаются (п. 6.4.5). От алгоритма и адресности зависит, сколькими ИП должна контролироваться каждая точка помещения: при A и B с адресными ИП — одним (п. 6.6.1), с безадресными — двумя; при C — всегда двумя (п. 6.6.2). Двукратный контроль примерно удваивает число извещателей."),
         };
         foreach (var z in zones)
@@ -70,11 +72,12 @@ public static class AlarmNote
 
     private static List<NoteBlock> Placement(IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, INormsProvider norms)
     {
+        var wall = norms.Find("sp484.p6_6_36.wallOffset")!.Values;
         var blocks = new List<NoteBlock>
         {
             new NoteParagraph("Извещатели расставлены равномерной сеткой. Шаг сетки выбирается так, чтобы круги зон контроля перекрывали помещение без пропусков: при однократном контроле ячейка сетки — квадрат, вписанный в круг радиуса *R*, при двукратном — квадрат со стороной *R*. После расстановки покрытие проверяется по сетке точек через 0,25 м по всему помещению; если какая-то точка видна меньшему числу ИП, чем требуется, сетка уплотняется."),
             new NoteFormula("*a* = *R*·√2 — при контроле каждой точки одним ИП; *a* = *R* — при контроле двумя ИП,", "3.1", ["где *a* — шаг сетки извещателей, м; *R* — радиус зоны контроля, м."]),
-            new NoteParagraph("Отступ от стен и выступающих более чем на 0,25 м конструкций — не менее 0,5 м (п. 6.6.36); расстояние между ИП при алгоритме C — не менее 1,2 м (п. 6.5.1). При балках выше 10 % высоты помещения извещатели ставятся в полях между балками, а расстояние поперёк балок между ИП и от ИП до грани балки ограничено таблицей 6.2."),
+            new NoteParagraph(string.Create(Ru, $"Отступ от стен и выступающих более чем на {wall["lowProtrusion"]:0.0#} м конструкций — не менее {wall["minToWall"]:0.0#} м (п. 6.6.36); расстояние между ИП при алгоритме C — не менее {norms.Find("sp484.p6_5_1.minSpacingAlgorithmC")!.Values["minSpacing"]:0.0#} м (п. 6.5.1). При балках выше 10 % высоты помещения извещатели ставятся в полях между балками, а расстояние поперёк балок между ИП и от ИП до грани балки ограничено таблицей 6.2.")),
         };
         var rows = new List<IReadOnlyList<string>>();
         foreach (var z in zones)
@@ -99,12 +102,17 @@ public static class AlarmNote
         return blocks;
     }
 
-    private static List<NoteBlock> Zones(IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, AlarmZoningResult? zoning)
+    private static List<NoteBlock> Zones(IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, AlarmZoningResult? zoning, INormsProvider norms)
     {
+        var zone = norms.Find("sp484.p6_3_4.zone")!.Values;
+        var fault = norms.Find("sp484.p6_3_5.singleFault")!.Values;
+        var panel = norms.Find("sp484.p6_1_5.controlPanel")!.Values;
+        var reserve = norms.Find("sp484.p5_20.capacityReserve")!.Values;
+        var manual = norms.Find("sp484.p6_6_27.manual")!.Values;
         var area = zones.Sum(z => z.Outline.AreaMm2) / 1e6;
         var blocks = new List<NoteBlock>
         {
-            new NoteParagraph("Зона контроля пожарной сигнализации (ЗКСПС) — не больше 2000 м² и не больше пяти помещений одного этажа и пожарного отсека (п. 6.3.4). Единичная неисправность линии не должна отключать больше 24 автоматических ИП и одного ручного (п. 6.3.5) — для адресной линии это обеспечивается изоляторами короткого замыкания, которые ставятся в линию между группами извещателей. На один прибор — не больше 512 ИП и 12 000 м² (п. 6.1.5); запас ёмкости прибора — не меньше 20 % при известной планировке (п. 5.20)."),
+            new NoteParagraph(string.Create(Ru, $"Зона контроля пожарной сигнализации (ЗКСПС) — не больше {zone["maxArea"]:0} м² и не больше {zone["maxRooms"]:0} помещений одного этажа и пожарного отсека (п. 6.3.4). Единичная неисправность линии не должна отключать больше {fault["maxAutoDetectors"]:0} автоматических ИП и {fault["maxManualDetectors"]:0} ручного (п. 6.3.5) — для адресной линии это обеспечивается изоляторами короткого замыкания, которые ставятся в линию между группами извещателей. На один прибор — не больше {panel["maxDetectors"]:0} ИП и {panel["maxArea"]:# ##0} м² (п. 6.1.5); запас ёмкости прибора — не меньше {reserve["knownLayout"]:0} % при известной планировке (п. 5.20).")),
             new NoteParagraph(string.Create(Ru, $"Защищаемая площадь — {area:0} м², извещателей — {layout.Detectors.Count} шт.{(layout.Detectors.Count > 0 ? string.Create(Ru, $", запас по ёмкости прибора на 512 ИП — {(512 - layout.Detectors.Count) * 100.0 / 512:0} %") : "")}.")),
         };
         var zoneIssues = issues.Where(i => i.Code.StartsWith("aps.zone", StringComparison.Ordinal) || i.Code.StartsWith("aps.panel", StringComparison.Ordinal)).ToList();
@@ -120,7 +128,7 @@ public static class AlarmNote
         var zoneRows = zoning.ZoneOf.GroupBy(kv => kv.Value).OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => (IReadOnlyList<string>)[g.Key, string.Join(", ", g.Select(kv => kv.Key.Split('.')[0]).Distinct().Select(id => zones.FirstOrDefault(z => z.RoomId == id)?.RoomName ?? id)), g.Count().ToString(Ru), ((g.Count() + 23) / 24).ToString(Ru)]).ToList();
         blocks.Add(new NoteTable("Зоны контроля пожарной сигнализации", ["ЗКСПС", "Помещение", "Автоматических ИП", "Групп по 24 ИП (изоляторов)"], zoneRows));
-        blocks.Add(new NoteParagraph(string.Create(Ru, $"Ручные извещатели — {zoning.Manuals.Count} шт., на стенах на высоте 1,5 м (п. 6.6.27). Выходы из помещений на чертеже не размечены, поэтому ИПР расставлены по правилу для неустановленной планировки: любая точка помещения не дальше 30 м от ближайшего ИПР; при известных выходах ИПР ставят у выходов, не дальше 45 м друг от друга и 30 м от выхода. Изоляторов короткого замыкания — {zoning.Isolators} шт.: по одному на группу не более 24 автоматических ИП в пределах ЗКСПС и на каждый ИПР без встроенного изолятора (п. 6.3.5); места установки по линии зависят от её топологии (кольцо или дерево) и уточняются на схеме соединений.")));
+        blocks.Add(new NoteParagraph(string.Create(Ru, $"Ручные извещатели — {zoning.Manuals.Count} шт., на стенах на высоте {manual["mountHeight"]:0.0#} м (п. 6.6.27). Выходы из помещений на чертеже не размечены, поэтому ИПР расставлены по правилу для неустановленной планировки: любая точка помещения не дальше {manual["maxToAnyPointUnknownLayout"]:0} м от ближайшего ИПР; при известных выходах ИПР ставят у выходов, не дальше {manual["maxBetweenIndoor"]:0} м друг от друга и {manual["maxToRoomExit"]:0} м от выхода. Изоляторов короткого замыкания — {zoning.Isolators} шт.: по одному на группу не более {fault["maxAutoDetectors"]:0} автоматических ИП в пределах ЗКСПС и на каждый ИПР без встроенного изолятора (п. 6.3.5); места установки по линии зависят от её топологии (кольцо или дерево) и уточняются на схеме соединений.")));
         blocks.Add(new NotePending("Деление на ЗКСПС выполнено полосами по площади — условно; точные границы зон, положение ИПР у выходов и изоляторов на линии — решение проектировщика АПС."));
         return blocks;
     }
