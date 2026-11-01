@@ -16,7 +16,7 @@ public sealed record TomeEntry(string Designation, string Name, IReadOnlyList<st
 public sealed record TomeManifest(IReadOnlyList<TomeEntry> Tomes, IReadOnlyList<IulSignature> Signatures, string Font);
 
 /// <summary>
-/// Сборка томов в один PDF и ИУЛ по форме 15 ГОСТ Р 21.101-2020 (прил. Х, ADR 0015): PDF документов — рядом с исходными
+/// Сборка томов в один PDF и ИУЛ по форме 15 ГОСТ Р 21.101-2026 (прил. У, ADR 0015): PDF документов — рядом с исходными
 /// (DrawingPdf, WordPdf), том — «обозначение.pdf», ИУЛ — «обозначение-УЛ.pdf».
 /// </summary>
 public static class Tome

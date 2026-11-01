@@ -11,7 +11,7 @@ public sealed record IulDocument(string Designation, string Name, string Version
 public sealed record IulSignature(string Role, string Name);
 
 /// <summary>
-/// Информационно-удостоверяющий лист по форме 15 ГОСТ Р 21.101-2020 (прил. Х) на листе А4 и склейка PDF тома (ADR 0015).
+/// Удостоверяющий лист по форме 15 ГОСТ Р 21.101-2026 (прил. У) на листе А4 и склейка PDF тома (ADR 0015).
 /// </summary>
 public static class IulPdf
 {
@@ -74,7 +74,7 @@ public static class IulPdf
             g.DrawRectangle(thick, R(x0, 5, w, 287));
 
             double y = 15;
-            g.DrawString("Информационно-удостоверяющий лист", title, XBrushes.Black, R(x0, y, w, 8), XStringFormats.Center);
+            g.DrawString("Удостоверяющий лист", title, XBrushes.Black, R(x0, y, w, 8), XStringFormats.Center);
             y += 14;
 
             void Cell(double x, double yy, double cw, double ch, string value, XFont f, bool center = true)

@@ -120,7 +120,7 @@ public static class GostFrame
                 Signatures(boxes, 2, 6, b.Signatures);
                 boxes.Add(new(0, 6, 3, 4, Text(b.Designation, 12)));
                 boxes.Add(new(3, 6, 5, 1, Text(b.Name)));
-                boxes.Add(new(3, 7, 1, 1, Text("Стадия", 7)));
+                boxes.Add(new(3, 7, 1, 1, Text("Вид док.", 7)));
                 boxes.Add(new(3, 8, 1, 1, Text("Лист", 7)));
                 boxes.Add(new(3, 9, 1, 1, Text("Листов", 7)));
                 boxes.Add(new(4, 7, 1, 1, Text(b.Stage)));

@@ -4,7 +4,7 @@ using PdfSharp.Pdf;
 
 namespace WaterAuto.Export;
 
-/// <summary>Обложка и титульный лист тома проектной документации (ГОСТ Р 21.101-2020, разд. 5).</summary>
+/// <summary>Обложка и титульный лист тома проектной документации (ГОСТ Р 21.101-2026, разд. 5).</summary>
 /// <param name="Signatures">Подписи титульного листа (должность, фамилия); на обложке не ставятся.</param>
 public sealed record TomeCover(
     string Organization,
@@ -178,7 +178,7 @@ public static class TomePagesPdf
     }
 
     /// <summary>
-    /// Основная надпись для текстовых документов, форма 5 ГОСТ Р 21.101-2020 (185 × 40 мм), и дополнительные графы 20–22 на поле
+    /// Основная надпись для текстовых документов, форма 5 ГОСТ Р 21.101-2026 (185 × 40 мм), и дополнительные графы 20–22 на поле
     /// для подшивки — те же графы, что в docx выпуска (GostFrame).
     /// </summary>
     public static void Form5(XGraphics g, string family, string designation, string name, string stage, string sheet, string sheets, string organization, IReadOnlyList<IulSignature> signatures)
@@ -246,7 +246,7 @@ public static class TomePagesPdf
 
         Box(0, 6, 3, 4, designation, f12);
         Box(3, 6, 5, 1, name, f10);
-        Box(3, 7, 1, 1, "Стадия", f7);
+        Box(3, 7, 1, 1, "Вид док.", f7); // ГОСТ Р 21.101-2026, форма 5: графа 6 — «Вид док.»
         Box(3, 8, 1, 1, "Лист", f7);
         Box(3, 9, 1, 1, "Листов", f7);
         Box(4, 7, 1, 1, stage, f10);

@@ -43,7 +43,7 @@ public class GostFrameTests
     [Fact]
     public void Specification_without_title_sheet_has_form_3_on_first_sheet_and_form_6_on_the_others()
     {
-        // ГОСТ Р 21.101-2020, п. 5.2.3: без титульного листа первый лист — по форме 3, последующие — по форме 6.
+        // ГОСТ Р 21.101-2026, п. 5.2.3: без титульного листа первый лист — по форме 3, последующие — по форме 6.
         var (first, others, frame, title, bottomMm) = Open(p => SpecificationDocx.Write(p, Takeoff, Stamp), d =>
         {
             var section = d.MainDocumentPart!.Document.Body!.GetFirstChild<SectionProperties>()!;
