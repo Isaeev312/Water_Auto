@@ -1964,7 +1964,7 @@ public static class ProjectPipeline
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
-        var compliance = ComplianceComposer.Compose(worst, setChoice?.Chosen is not null ? setChoice.HeadAtDuty : null, issues);
+        var compliance = ComplianceComposer.Compose(designs, worst, setChoice?.Chosen is not null ? setChoice.HeadAtDuty : null, issues);
         Write(auptDir, ComplianceFile, files, p => ComplianceXlsx.Write(p, compliance, $"{project.Name}. Соответствие требованиям норм (АУПТ)", project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet

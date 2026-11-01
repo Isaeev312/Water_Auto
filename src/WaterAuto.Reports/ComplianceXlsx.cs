@@ -16,6 +16,7 @@ public static class ComplianceXlsx
     {
         ComplianceVerdict.Complies => "соответствует",
         ComplianceVerdict.Violates => "не соответствует",
+        ComplianceVerdict.Adopted => "принято по норме",
         _ => "проверить",
     };
 
@@ -50,6 +51,7 @@ public static class ComplianceXlsx
             {
                 ComplianceVerdict.Complies => XLColor.DarkGreen,
                 ComplianceVerdict.Violates => XLColor.DarkRed,
+                ComplianceVerdict.Adopted => XLColor.Black,
                 _ => XLColor.DarkOrange,
             };
         }

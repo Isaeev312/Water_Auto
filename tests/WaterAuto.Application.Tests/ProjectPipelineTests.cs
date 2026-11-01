@@ -325,6 +325,11 @@ public sealed class ProjectPipelineTests : IDisposable
         envelope.Message.ShouldContain("группа 5 (табл. 6.2)");
         result.Design!.PumpFlow.LitersPerSecond.ShouldBe(48.5, 0.05);
         result.Design.PumpHead.Meters.ShouldBe(95.6, 0.05);
+        // Таблица соответствия — строки по каждой группе, без замечаний АПС.
+        var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.ComplianceFile, StringComparison.Ordinal)));
+        rows.ShouldContain(r => r.Count > 1 && r[1] == "Шаг оросителей (группа 2)");
+        rows.ShouldContain(r => r.Count > 1 && r[1] == "Шаг оросителей (группа 5)");
+        rows.ShouldContain(r => r.Count > 2 && r[1] == "Интенсивность орошения (группа 5)" && r[2].Contains("табл. 6.2", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -337,9 +342,9 @@ public sealed class ProjectPipelineTests : IDisposable
         result.Success.ShouldBeTrue();
         var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.ComplianceFile, StringComparison.Ordinal)));
         IReadOnlyList<string> Row(string requirement) => rows.Single(r => r.Count > 1 && r[1].StartsWith(requirement, StringComparison.Ordinal));
-        Row("Интенсивность орошения")[5].ShouldBe("соответствует");
+        Row("Интенсивность орошения")[5].ShouldBe("принято по норме");
         Row("Площадь для расчёта расхода")[5].ShouldBe("соответствует");
-        Row("Расход АУП")[5].ShouldBe("соответствует");
+        Row("Расход АУП")[5].ShouldBe("принято по норме");
         Row("Шаг оросителей")[2].ShouldContain("табл. 6.1");
         Row("Скорость в подводящем")[2].ShouldContain("6.7.1.37");
         Row("Напор насосной установки")[5].ShouldBe("соответствует");

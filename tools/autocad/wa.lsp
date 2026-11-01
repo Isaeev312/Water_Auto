@@ -183,16 +183,18 @@
   (princ (strcat "\nWater_Auto: точек ввода — " (itoa n) ". Видны при PDMODE = 34."))
   (princ))
 
-(defun c:WA-BEAM (/ h p1 p2 w a v n)
-  ;; Балка по оси: две точки, ширина и высота, мм. Толщина полилинии = высота балки (README §7).
+(defun c:WA-BEAM (/ h z p1 p2 w a v n)
+  ;; Балка по оси: две точки, ширина и высота, мм. Толщина полилинии = высота балки, Уровень = отметка низа перекрытия (README §7).
   (wa:layer "ПТ_БАЛКИ" 30)
   (setq n 0)
-  (if (and (setq w (getdist "\nШирина балки, мм: ")) (setq h (getdist "\nВысота балки (от низа перекрытия), мм: ")))
+  (if (and (setq w (getdist "\nШирина балки, мм: "))
+           (setq h (getdist "\nВысота балки (от низа перекрытия), мм: "))
+           (setq z (getreal "\nОтметка низа перекрытия (абсолютная, как отметки ПТ_ОТМЕТКИ), мм, например -1200: ")))
     (while (and (setq p1 (getpoint "\nНачало оси балки <выход>: ")) (setq p2 (getpoint p1 "\nКонец оси балки: ")))
       (setq a (+ (angle p1 p2) (/ pi 2))
             v (list (polar p1 a (/ w 2)) (polar p2 a (/ w 2)) (polar p2 a (/ w -2)) (polar p1 a (/ w -2))))
       (if (entmake (append (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") '(8 . "ПТ_БАЛКИ") '(100 . "AcDbPolyline")
-                                 '(90 . 4) '(70 . 1) (cons 39 h))
+                                 '(90 . 4) '(70 . 1) (cons 38 z) (cons 39 h))
                            (mapcar '(lambda (p) (cons 10 (list (car p) (cadr p)))) v)))
         (setq n (1+ n)))))
   (princ (strcat "\nWater_Auto: балок — " (itoa n) "."))

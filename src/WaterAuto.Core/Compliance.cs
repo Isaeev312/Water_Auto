@@ -6,6 +6,9 @@ public enum ComplianceVerdict
     Complies,
     Violates,
     Check,
+
+    /// <summary>Значение принято по таблице или формуле нормы — сравнивать не с чем.</summary>
+    Adopted,
 }
 
 /// <summary>
