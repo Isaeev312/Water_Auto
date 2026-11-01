@@ -91,6 +91,18 @@ internal static class InputFields
         new("Unrated", "Unrated — класс не определён"),
     ];
 
+    private static readonly ChoiceOption[] Regions =
+    [
+        new("Kg", "Кыргызская Республика (ВПВ — СН КР 40-04:2025)"),
+        new("Ru", "Российская Федерация (ВПВ — СП 10.13130.2020)"),
+    ];
+
+    private static readonly ChoiceOption[] WarningMethods =
+    [
+        new("Sound", "Звуковое"),
+        new("Speech", "Речевое"),
+    ];
+
     private static readonly ChoiceOption[] Joints =
     [
         new("Grooved", "Разъёмные (грувлочные) муфты, малые DN — на резьбе"),
@@ -167,6 +179,8 @@ internal static class InputFields
                             Hint: "Путь от папки проекта; слои ПТ_ по соглашению о слоях (README, разд. 7)."),
                         new FieldSpec("", "font", "Шрифт выпуска", FieldKind.Text, Advanced: true,
                             Hint: "Единый шрифт записки, спецификаций и надписей на чертежах; пусто — шрифт по умолчанию."),
+                        new FieldSpec("", "norms", "Страна объекта (нормы)", FieldKind.Choice, Options: Regions,
+                            Hint: "Общие нормы (СП 485, 484, 3, 6) не меняются; различается ВПВ (ADR 0014)."),
                         new FieldSpec("", "pp87", "Выпустить раздел 9 по ПП РФ № 87", FieldKind.Bool,
                             Hint: "Дополнительно pb_razdel9.docx: подпункты п. 26 по АУПТ, остальное — заготовки для заполнения."),
                     ],
@@ -462,6 +476,37 @@ internal static class InputFields
             OptionalPath: "design.tank",
             OptionalLabel: "Сравнивать с резервуаром пользователя",
             OptionalHint: "Если выключено, сравнение требуемого объёма с резервуаром не выполняется."),
+        new("АПС и СОУЭ",
+            "Зоны пожарной сигнализации и оповещение (СП 484, СП 3). Без зон раздел не рассчитывается.",
+            [
+                new CardSpec("Зоны АПС",
+                    [
+                        new FieldSpec("alarm", "zones", "Помещения с извещателями", FieldKind.Table,
+                            Hint: "Помещение — имя с чертежа или * (все). Тип: Smoke — дымовой, Heat — тепловой. Алгоритм: A, B или C (СП 484, 6.4). Извещатели — адресные; неадресные — полем addressable в файле проекта.",
+                            Columns:
+                            [
+                                new TableColumn("room", "Помещение", Required: true),
+                                new TableColumn("detector", "Тип (Smoke/Heat)", Required: true),
+                                new TableColumn("algorithm", "Алгоритм (A/B/C)"),
+                                new TableColumn("ceilingHeight", "Высота, м", ColumnKind.Number),
+                                new TableColumn("model", "Модель (ID каталога)"),
+                            ]),
+                    ]),
+                new CardSpec("СОУЭ",
+                    [
+                        new FieldSpec("alarm.warning", "method", "Способ оповещения", FieldKind.Choice, Options: WarningMethods,
+                            Hint: "Проверяется по табл. Б.1 СП 3 (строка ниже)."),
+                        new FieldSpec("alarm.warning", "methodRow", "Строка табл. Б.1 (ID)", FieldKind.Text, Advanced: true,
+                            Hint: "ID из data/norms/sp3/table_B_1_method.json; пусто — не проверять."),
+                        new FieldSpec("alarm.warning", "indicator", "Показатель для табл. Б.1", FieldKind.Number,
+                            Hint: "Машино-мест, м² или человек — по строке таблицы."),
+                        new FieldSpec("alarm.warning", "backgroundDba", "Фоновый шум, дБА", FieldKind.NullableNumber, Advanced: true,
+                            Hint: "По заданию; пусто — по строке табл. В.1."),
+                        new FieldSpec("alarm.warning", "largeOpenSpaceArea", "Большое открытое пространство от, м²", FieldKind.NullableNumber, Advanced: true,
+                            Hint: "Решение проектировщика (А-19): световые оповещатели — по периметру (п. 6.16.2 СП 3); пусто — везде по удалённости."),
+                    ],
+                    "Модели оповещателей и усилителя — из каталога data/catalog/alarm_notifiers.json."),
+            ]),
         new("Титульный лист",
             "Данные титульного листа пояснительной записки и основной надписи.",
             [
@@ -478,6 +523,16 @@ internal static class InputFields
                             Hint: "Графа 3 основной надписи."),
                         new FieldSpec("title", "cityYear", "Город, год", FieldKind.Text),
                     ]),
+                new CardSpec("Стадия П (проектная документация)",
+                    [
+                        new FieldSpec("title", "sectionMark", "Шифр раздела (части)", FieldKind.Text,
+                            Hint: "Например «ИОС2.2»: том — «шифр проекта-ИОС2.2», записка — «.ПЗ», спецификация — «.СО», содержание — «.С»."),
+                        new FieldSpec("title", "sectionTitle", "Наименование раздела, подраздела, части", FieldKind.Text,
+                            Hint: "Для обложки и титула; по ПП РФ № 87 в действующей редакции."),
+                        new FieldSpec("title", "volume", "Номер тома", FieldKind.Text),
+                        new FieldSpec("title", "customer", "Заказчик", FieldKind.Text),
+                    ],
+                    "Используются только при стадии «П»: том собирается с обложкой, титульным листом и содержанием тома."),
                 new CardSpec("Исполнители",
                     [
                         new FieldSpec("title", "author", "Разработал", FieldKind.Text),
