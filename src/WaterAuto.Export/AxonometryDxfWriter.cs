@@ -237,12 +237,16 @@ public static class AxonometryDxfWriter
                     continue;
                 }
 
-                var p0 = Project(o, z, style);
+                var q0 = Project(o, z, style);
                 var p1 = Project(b, z, style);
-                var dl = Math.Sqrt(Math.Pow(p1.X - p0.X, 2) + Math.Pow(p1.Y - p0.Y, 2));
-                var (dx, dy) = ((p1.X - p0.X) / dl, (p1.Y - p0.Y) / dl);
+                var dl = Math.Sqrt(Math.Pow(p1.X - q0.X, 2) + Math.Pow(p1.Y - q0.Y, 2));
+                var (dx, dy) = ((p1.X - q0.X) / dl, (p1.Y - q0.Y) / dl);
+
+                // Отступ от узла (отвода к оросителю, тройника): 3 мм листа, но не дальше 30 % участка — значок не сливается с отводом.
+                var gap = Math.Min(3 * unit, 0.3 * dl);
+                var p0 = new XY(q0.X + (dx * gap), q0.Y + (dy * gap));
                 var (nx, ny) = (-dy, dx);
-                var (big, small, len) = (1.2 * unit, 0.6 * unit, 2.5 * unit);
+                var (big, small, len) = (1.2 * unit, 0.6 * unit, Math.Min(2.5 * unit, 0.4 * dl));
                 var wideFirst = parent.Dn > seg.Dn;
                 var (h0, h1) = wideFirst ? (big, small) : (small, big);
                 var shape = new List<XY>
