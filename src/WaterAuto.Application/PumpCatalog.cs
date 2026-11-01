@@ -42,6 +42,27 @@ public static class PumpCatalog
         return sets;
     }
 
+    /// <summary>Обозначение арматуры изготовителя по виду и DN (data/catalog/valves_*.json); null — в каталоге нет.</summary>
+    public static Func<string, int, string?> Valves(string normsDir)
+    {
+        var rows = new List<(string Kind, int[] Dn, string Designation)>();
+        foreach (var file in Directory.EnumerateFiles(Dir(normsDir), "valves_*.json").Order(StringComparer.Ordinal))
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
+            foreach (var kind in doc.RootElement.GetProperty("kinds").EnumerateObject())
+            {
+                foreach (var r in kind.Value.EnumerateArray())
+                {
+                    rows.Add((kind.Name, [.. r.GetProperty("dn").EnumerateArray().Select(x => x.GetInt32())], r.GetProperty("designation").GetString()!));
+                }
+            }
+        }
+
+        return (kind, dn) => rows.FirstOrDefault(r => r.Kind == kind && r.Dn.Contains(dn)) is { Designation: { } d }
+            ? d.Replace("{dn}", dn.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            : null;
+    }
+
     /// <summary>Мембранные баки для жокей-насоса (data/catalog/membrane_tanks_*.json).</summary>
     public static IReadOnlyList<MembraneTank> Tanks(string normsDir)
     {

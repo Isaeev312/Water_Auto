@@ -1144,7 +1144,7 @@ public static class ProjectPipeline
                 ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
             };
             var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount, ["ringValves"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount), ["suctionCaps"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount) > 0 ? 0 : 1 };
-            stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
+            stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts, PumpCatalog.Valves(normsDir))] };
 
             // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,
             // кроме шкафа: прибор управления есть и в установке, его выходы в АПС нужны так же (ГОСТ Р 53325-2012, п. 7.4.5).
@@ -1196,7 +1196,7 @@ public static class ProjectPipeline
                 roomData?.SetNote ?? "по каталогу изготовителя",
                 1,
                 "компл.",
-                $"коллекторы DN{chosenSetRow.CollectorDn}; или аналог",
+                $"коллекторы DN{chosenSetRow.CollectorDn}",
                 Supplier: chosenSetRow.Maker,
                 Role: "pumpSet");
             stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !EquipmentSet.PumpSetRoles.Contains(i.Role))] };
@@ -1316,8 +1316,8 @@ public static class ProjectPipeline
                 {
                     new TakeoffItem(TakeoffGroup.PumpStationPipes,
                         sp is null ? $"Трубы стальные DN{g.Key}" : string.Create(ruP, $"Трубы {sp.PipeType} DN{g.Key}, Ø{sp.OuterDiameterMm:0.##}×{sp.WallMm:0.##} мм"),
-                        sp?.Standard, Math.Round(meters, 1), "м", "по трассе на плане насосной, с опусками"),
-                    new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "повороты трассы и опуски к оборудованию"),
+                        sp?.Standard, Math.Round(meters, 1), "м", "по плану насосной"),
+                    new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "по плану насосной"),
                 };
             });
             // Гильзы в стенах (закладные): на каждом проходе трубы через стену, Ø — наружный диаметр трубы + запас (Козицина, с. 26).
@@ -1331,7 +1331,7 @@ public static class ProjectPipeline
                 .Select(g =>
                 {
                     var outer = series.Pick(g.Key)?.OuterDiameterMm ?? g.Key;
-                    return new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruP, $"Гильза стальная для прохода трубы DN{g.Key} через стену: Ø не менее {outer + sleeveExtra:0} мм, L = {wallT:0} мм"), "по месту", g.Count(), "шт.", "закладная деталь; заделка — эластичным негорючим материалом", Role: "sleeve");
+                    return new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruP, $"Гильза стальная для прохода трубы DN{g.Key} через стену: Ø не менее {outer + sleeveExtra:0} мм, L = {wallT:0} мм"), "по месту", g.Count(), "шт.", "заделка негорючим материалом", Role: "sleeve");
                 });
             var extraRows = new List<TakeoffItem>(sleeveRows);
             if (design.PumpRoom.Underground)
@@ -1340,7 +1340,7 @@ public static class ProjectPipeline
                 extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStation, "Насос дренажный погружной с поплавковым выключателем", "марка — по каталогу", drains, "шт.", "в приямке; I категория электроснабжения (п. 6.10.23)", Role: "drainPump"));
             }
 
-            extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", units.Count, "шт.", "в верхней точке напорной линии (п. 6.10.29); или аналог", Role: "airVent"));
+            extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", units.Count, "шт.", "в верхней точке напорной линии (п. 6.10.29)", Role: "airVent"));
 
             // Отводы патрубков ГМ теперь считаются по трассе — строка шаблона убирается.
             stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Where(i => i.Role != "elbowT"), .. pipeRows, .. extraRows] };
@@ -1424,7 +1424,7 @@ public static class ProjectPipeline
                         .. stationTakeoff.Items,
                         new TakeoffItem(TakeoffGroup.PumpStationPipes, spI is null ? $"Трубы стальные DN{dnI}" : string.Create(ruI, $"Трубы {spI.PipeType} DN{dnI}, Ø{spI.OuterDiameterMm:0.##}×{spI.WallMm:0.##} мм"), spI?.Standard, Math.Round(meters, 1), "м", "трасса от вводов в здание до насосной (план трассы ввода)", Role: "inletPipe"),
                         new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{dnI}", design.FittingStandards.TryGetValue("Отвод", out var esI) ? esI : null, inletRoutes.Sum(r => r.Elbows) + riserElbows, "шт.", "повороты трассы ввода, подъёмы и опуски", Role: "inletElbow"),
-                        .. rise > 0.001 ? new[] { new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", inletRoutes.Count, "шт.", "в верхней точке трассы ввода перед опуском к насосной (п. 6.10.29); или аналог", Role: "inletVent") } : [],
+                        .. rise > 0.001 ? new[] { new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", inletRoutes.Count, "шт.", "в верхней точке трассы ввода перед опуском к насосной (п. 6.10.29)", Role: "inletVent") } : [],
                         new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruI, $"Гильза стальная для прохода трубы DN{dnI} через наружную стену: Ø не менее {outerI + PumpCatalog.PipingExtras(normsDir).SleeveExtra:0} мм"), "по месту", inletRoutes.Count, "шт.", "ввод в здание; заделка — по узлу прохода (сальник), Козицина, с. 26", Role: "inletSleeve"),
                     ],
                 };

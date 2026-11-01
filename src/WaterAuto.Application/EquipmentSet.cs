@@ -57,7 +57,7 @@ public static class EquipmentSet
     /// по полю count шаблона (<paramref name="counts"/>: «pumps», «truckInlets»).
     /// </summary>
     /// <remarks>Раздел строки — поле group шаблона (equipment, valves, fittings — разделы насосной), без него — <paramref name="group"/>.</remarks>
-    public static IReadOnlyList<TakeoffItem> Items(string path, TakeoffGroup group, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts)
+    public static IReadOnlyList<TakeoffItem> Items(string path, TakeoffGroup group, IReadOnlyDictionary<string, string> tokens, IReadOnlyDictionary<string, int> counts, Func<string, int, string?>? valves = null)
     {
         ArgumentNullException.ThrowIfNull(tokens);
         ArgumentNullException.ThrowIfNull(counts);
@@ -66,6 +66,13 @@ public static class EquipmentSet
         foreach (var t in doc.RootElement.GetProperty("items").EnumerateArray())
         {
             string Fill(string text) => tokens.Aggregate(text, (s, kv) => s.Replace("{" + kv.Key + "}", kv.Value, StringComparison.Ordinal));
+
+            // Графа «Тип, марка» — обозначение изготовителя из каталога арматуры по DN; нет такого DN — обозначение шаблона.
+            string? Catalog(JsonElement item) =>
+                valves is not null && item.TryGetProperty("catalog", out var kind) && item.TryGetProperty("catalogDn", out var dnToken)
+                && tokens.TryGetValue(dnToken.GetString()!, out var dnText) && int.TryParse(dnText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dn)
+                    ? valves(kind.GetString()!, dn)
+                    : null;
             var name = Fill(t.GetProperty("name").GetString()!);
             var times = t.TryGetProperty("count", out var c) ? counts.GetValueOrDefault(c.GetString()!) : 1;
             if (times == 0)
@@ -82,7 +89,7 @@ public static class EquipmentSet
             items.Add(new TakeoffItem(
                 section,
                 name,
-                t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? Fill(designation) : null,
+                Catalog(t) ?? (t.TryGetProperty("designation", out var d) && d.GetString() is { Length: > 0 } designation ? Fill(designation) : null),
                 t.GetProperty("per").GetDouble() * times,
                 t.GetProperty("unit").GetString()!,
                 t.TryGetProperty("note", out var n) && n.GetString() is { } note ? Fill(note) : null,

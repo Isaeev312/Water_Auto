@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/valves.schema.json",
+  "title": "Пожарная запорная арматура изготовителя: условные обозначения по DN для графы «Тип, марка» спецификации",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "maker", "verified", "source", "kinds"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "maker": { "type": "string" },
+    "verified": { "type": "boolean" },
+    "source": { "type": "string" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "kinds": {
+      "type": "object",
+      "description": "Вид арматуры (ключ из шаблона насосной, поле catalog) → строки по диапазонам DN.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["dn", "designation", "page"],
+          "properties": {
+            "dn": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
+            "designation": { "type": "string", "description": "Условное обозначение изготовителя; {dn} — номинальный диаметр." },
+            "page": { "type": "string", "description": "Страница каталога." }
+          }
+        }
+      }
+    }
+  }
+}
