@@ -103,12 +103,18 @@ public static class SoueLayouter
             var placed = Grid(z.Outline, step);
             sounders.AddRange(placed.Select((p, i) => new PlacedNotifier($"{z.RoomId}.S{i + 1}", z.RoomId, p, z.Method == WarningMethod.Speech ? NotifierKind.Speech : NotifierKind.Sound)));
 
-            var wall = WallCover(z.Outline, lightReach);
+            var wall = z.LargeOpenSpace ? Perimeter(z.Outline, lightRule.Values["perimeterStep"]!.Value * 1000) : WallCover(z.Outline, lightReach);
             lights.AddRange(wall.Select((p, i) => new PlacedNotifier($"{z.RoomId}.L{i + 1}", z.RoomId, p, NotifierKind.Light)));
+            if (z.LargeOpenSpace)
+            {
+                issues.Add(new Issue("soue.lightsPerimeter", IssueLevel.Info,
+                    string.Create(ru, $"«{z.RoomName}» принято большим открытым пространством (решение проектировщика): световые оповещатели — по периметру с шагом не более {lightRule.Values["perimeterStep"]:0} м ({wall.Count} шт.)."),
+                    z.RoomId, Doc + ", п. 6.16.2", z.Outline.Centroid));
+            }
 
             // Табло на стене ближе шага проверки покрытия — покрытие «до 15 м» выполняется лишь на пределе (зал шириной около 30 м):
             // число табло завышено, выбор правила — за проектировщиком (А-19).
-            if (wall.Count > 1 && wall.Min(p => wall.Where(q => q != p).Min(q => Math.Sqrt(D2(p, q)))) <= (StepMm * 1.5))
+            if (!z.LargeOpenSpace && wall.Count > 1 && wall.Min(p => wall.Where(q => q != p).Min(q => Math.Sqrt(D2(p, q)))) <= (StepMm * 1.5))
             {
                 issues.Add(new Issue("soue.lightsDense", IssueLevel.Warning,
                     string.Create(ru, $"«{z.RoomName}»: при правиле «до самого удалённого места не более {lightRule.Values["maxDistance"]:0} м» табло на стенах стоят вплотную ({wall.Count} шт.) — помещение покрывается только на пределе. Решите, применять ли для большого открытого пространства шаг по периметру не более {lightRule.Values["perimeterStep"]:0} м или ставить табло над путём эвакуации (вопрос А-19)."),
@@ -155,6 +161,33 @@ public static class SoueLayouter
         }
 
         return points;
+    }
+
+    /// <summary>Световые оповещатели по периметру: равные шаги по обходу контура, не больше заданного, первый — в начале первой стены.</summary>
+    private static List<PlanPoint> Perimeter(Polygon outline, double stepMm)
+    {
+        var edges = outline.Edges().Select(e => (e.Item1, e.Item2, Len: Math.Sqrt(D2(e.Item1, e.Item2)))).ToList();
+        var total = edges.Sum(e => e.Len);
+        var n = Math.Max(1, (int)Math.Ceiling((total / stepMm) - 1e-9));
+        var step = total / n;
+        var result = new List<PlanPoint>();
+        for (var k = 0; k < n; k++)
+        {
+            // Половина шага от начала — табло не в углу, а на стене.
+            var s = (k + 0.5) * step;
+            foreach (var (a, b, len) in edges)
+            {
+                if (s <= len)
+                {
+                    result.Add(new PlanPoint(a.XMm + ((b.XMm - a.XMm) * s / len), a.YMm + ((b.YMm - a.YMm) * s / len)));
+                    break;
+                }
+
+                s -= len;
+            }
+        }
+
+        return result;
     }
 
     /// <summary>Световые оповещатели на стенах: жадное покрытие точек помещения в заданном радиусе (как ИПР).</summary>

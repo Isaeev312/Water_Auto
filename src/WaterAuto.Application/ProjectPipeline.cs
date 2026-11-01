@@ -285,7 +285,10 @@ public static class ProjectPipeline
                     }
                     else
                     {
-                        var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)).ToList();
+                        var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)
+                        {
+                            LargeOpenSpace = warning.LargeOpenSpaceArea is { } open && z.Outline.AreaMm2 / 1e6 >= open,
+                        }).ToList();
                         soue = SoueLayouter.Layout(soueZones, sounderEntry.Model, lightEntry.Model, norms);
                         issues.AddRange(soue.Issues);
                         var speakersOnLine = sounderEntry.Speaker is not null;

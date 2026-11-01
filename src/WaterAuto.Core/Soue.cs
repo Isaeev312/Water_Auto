@@ -22,7 +22,11 @@ public enum NotifierKind
 public sealed record NotifierModel(string Name, NotifierKind Kind, double? LevelAt1m, Current Current, string Source, string? Certificate);
 
 /// <summary>Зона оповещения — помещение с фоновым шумом (табл. В.1 или задание) и способом оповещения (решение проектировщика по табл. Б.1).</summary>
-public sealed record SoueZone(string RoomId, string RoomName, Polygon Outline, double BackgroundDba, WarningMethod Method);
+public sealed record SoueZone(string RoomId, string RoomName, Polygon Outline, double BackgroundDba, WarningMethod Method)
+{
+    /// <summary>Помещение — большое открытое пространство (решение проектировщика, А-19): световые — по периметру, п. 6.16.2.</summary>
+    public bool LargeOpenSpace { get; init; }
+}
 
 /// <summary>Результат по зоне: требуемый уровень на 1,5 м и радиус, в котором оповещатель его обеспечивает (В.2).</summary>
 public sealed record SoueZoneResult(string RoomId, double RequiredLevel, Length SoundRadius, int Sounders, int Lights);
