@@ -136,27 +136,10 @@ public static class PlanDxfWriter
             doc.Entities.Add(new Circle(new XYZ(at.XMm, at.YMm, 0), style.IssueRadiusMm) { Layer = marks });
             doc.Entities.Add(new MText
             {
-                Value = $"{issue.Level}: {issue.Code} — {issue.Message}",
+                Value = IssueText(issue),
                 InsertPoint = new XYZ(at.XMm + style.IssueRadiusMm, at.YMm + style.IssueRadiusMm, 0),
                 Height = style.TextHeightMm,
                 RectangleWidth = 40 * style.TextHeightMm,
-                Layer = marks,
-            });
-        }
-
-        var unlocated = issues.Where(i => i.Location is null).ToList();
-        if (unlocated.Count > 0)
-        {
-            var points = layout.Sprinklers.Select(s => s.Location)
-                .Concat(routes.SelectMany(r => r.Nodes.Select(n => n.Location)))
-                .DefaultIfEmpty(new PlanPoint(0, 0))
-                .ToList();
-            doc.Entities.Add(new MText
-            {
-                Value = string.Join("\\P", unlocated.Select(i => $"{i.Level}: {i.Code} — {i.Message}")),
-                InsertPoint = new XYZ(points.Min(p => p.XMm), points.Max(p => p.YMm) + (unlocated.Count + 2) * 2 * style.TextHeightMm, 0),
-                Height = style.TextHeightMm,
-                RectangleWidth = 60 * style.TextHeightMm,
                 Layer = marks,
             });
         }
@@ -167,6 +150,25 @@ public static class PlanDxfWriter
         if (summary is not null)
         {
             AddSummary(doc, layout, routes, summary, style, zoneLayer, summaryLayer, axisBand);
+        }
+
+        // Замечания без координат — столбцом под сводкой справа от плана, не поверх рядков и размеров.
+        var unlocated = issues.Where(i => i.Location is null).ToList();
+        if (unlocated.Count > 0)
+        {
+            var points = layout.Sprinklers.Select(s => s.Location)
+                .Concat(routes.SelectMany(r => r.Nodes.Select(n => n.Location)))
+                .DefaultIfEmpty(new PlanPoint(0, 0))
+                .ToList();
+            var below = summary is null ? 0 : (summary.Rows.Count + 3) * 1.7 * style.TextHeightMm;
+            doc.Entities.Add(new MText
+            {
+                Value = "ЗАМЕЧАНИЯ РАСЧЁТА\\P" + string.Join("\\P", unlocated.Select(IssueText)),
+                InsertPoint = new XYZ(points.Max(p => p.XMm) + (10 * style.TextHeightMm) + axisBand, points.Max(p => p.YMm) - below, 0),
+                Height = style.TextHeightMm,
+                RectangleWidth = 60 * style.TextHeightMm,
+                Layer = marks,
+            });
         }
 
         // Опоры: косой крест на трубе (слой ПТ_КРЕПЛЕНИЯ).
@@ -236,6 +238,9 @@ public static class PlanDxfWriter
     }
 
     // Разбивочные оси (ГОСТ 21.101): тонкая линия за пределы плана, марка в кружке на обоих концах.
+    // Замечание на рабочем слое: уровень по-русски и код (по нему ищут в issues.txt), затем текст.
+    private static string IssueText(Issue i) => $"{(i.Level == IssueLevel.Error ? "Ошибка" : "Предупреждение")} [{i.Code}]: {i.Message}";
+
     private static void AddAxes(CadDocument doc, IReadOnlyList<PlanAxis> axes, PlanDxfStyle style, Layer layer, List<PlanPoint> content, double margin)
     {
         var bubble = style.TextHeightMm * 2;
