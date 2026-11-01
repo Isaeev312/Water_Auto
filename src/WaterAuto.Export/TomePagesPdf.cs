@@ -170,38 +170,114 @@ public static class TomePagesPdf
                     Row([r.Designation, r.Name, r.Pages], text, Math.Max(8, (n * 4.3) + 2));
                 }
 
-                // Основная надпись для текстовых документов (форма 5, упрощённо): графы подписей, обозначение, наименование, стадия, лист, листов.
-                const double sy = 292 - 40;
-                const double sx = 20;
-                g.DrawRectangle(thick, R(sx, sy, 185, 40));
-                g.DrawString(designation + ".С", new XFont(family, 12), XBrushes.Black, R(sx + 65, sy, 120, 10), XStringFormats.Center);
-                g.DrawString("Содержание тома", text, XBrushes.Black, R(sx + 65, sy + 15, 70, 25), XStringFormats.Center);
-                g.DrawString(organization, text, XBrushes.Black, R(sx + 135, sy + 25, 50, 15), XStringFormats.Center);
-                string[] cells = ["Стадия", "Лист", "Листов"];
-                string[] values = [stage, "1", "1"];
-                for (var i = 0; i < 3; i++)
-                {
-                    g.DrawRectangle(thin, R(sx + 135 + (i * 50.0 / 3), sy + 15, 50.0 / 3, 5));
-                    g.DrawRectangle(thin, R(sx + 135 + (i * 50.0 / 3), sy + 20, 50.0 / 3, 5));
-                    g.DrawString(cells[i], small, XBrushes.Black, R(sx + 135 + (i * 50.0 / 3), sy + 15, 50.0 / 3, 5), XStringFormats.Center);
-                    g.DrawString(values[i], small, XBrushes.Black, R(sx + 135 + (i * 50.0 / 3), sy + 20, 50.0 / 3, 5), XStringFormats.Center);
-                }
-
-                g.DrawLine(thin, (sx + 65) * Mm, sy * Mm, (sx + 65) * Mm, (sy + 40) * Mm);
-                g.DrawLine(thin, (sx + 65) * Mm, (sy + 10) * Mm, (sx + 185) * Mm, (sy + 10) * Mm);
-                g.DrawLine(thin, (sx + 65) * Mm, (sy + 15) * Mm, (sx + 185) * Mm, (sy + 15) * Mm);
-                g.DrawLine(thin, (sx + 135) * Mm, (sy + 15) * Mm, (sx + 135) * Mm, (sy + 40) * Mm);
-                var yy = sy + 15;
-                foreach (var s in signatures.Take(5))
-                {
-                    g.DrawLine(thin, sx * Mm, yy * Mm, (sx + 65) * Mm, yy * Mm);
-                    g.DrawString(s.Role, small, XBrushes.Black, R(sx + 1, yy, 18, 5), XStringFormats.CenterLeft);
-                    g.DrawString(s.Name, small, XBrushes.Black, R(sx + 20, yy, 25, 5), XStringFormats.CenterLeft);
-                    yy += 5;
-                }
+                Form5(g, family, designation + ".С", "Содержание тома", stage, "1", "1", organization, signatures);
             }
 
             pdf.Save(path);
+        }
+    }
+
+    /// <summary>
+    /// Основная надпись для текстовых документов, форма 5 ГОСТ Р 21.101-2020 (185 × 40 мм), и дополнительные графы 20–22 на поле
+    /// для подшивки — те же графы, что в docx выпуска (GostFrame).
+    /// </summary>
+    public static void Form5(XGraphics g, string family, string designation, string name, string stage, string sheet, string sheets, string organization, IReadOnlyList<IulSignature> signatures)
+    {
+        ArgumentNullException.ThrowIfNull(g);
+        ArgumentNullException.ThrowIfNull(signatures);
+        var thick = new XPen(XColors.Black, 0.5 * Mm);
+        var thin = new XPen(XColors.Black, 0.18 * Mm);
+        var f7 = new XFont(family, 7);
+        var f10 = new XFont(family, 10);
+        var f12 = new XFont(family, 12);
+        double[] cols = [10, 10, 10, 10, 15, 10, 70, 15, 15, 20];
+        var cx = new double[cols.Length + 1];
+        cx[0] = 20;
+        for (var i = 0; i < cols.Length; i++)
+        {
+            cx[i + 1] = cx[i] + cols[i];
+        }
+
+        const double y0 = 292 - 40;
+        double Ry(int row) => y0 + (row * 5);
+        void Box(int row, int col, int rows, int span, string text, XFont font, bool left = false)
+        {
+            var rect = R(cx[col], Ry(row), cx[col + span] - cx[col], rows * 5);
+            g.DrawRectangle(thin, rect);
+            if (text.Length > 0)
+            {
+                var lines = Lines(g, text, font, rect.Width - (2 * Mm));
+                var lh = font.Size * 1.15;
+                var top = rect.Y + ((rect.Height - (lines.Count * lh)) / 2);
+                for (var k = 0; k < lines.Count; k++)
+                {
+                    g.DrawString(lines[k], font, XBrushes.Black, new XRect(rect.X + Mm, top + (k * lh), rect.Width - (2 * Mm), lh), left ? XStringFormats.CenterLeft : XStringFormats.Center);
+                }
+            }
+        }
+
+        // Строка изменений, шапка, шесть строк подписей («Н. контр.» — внизу).
+        for (var c = 0; c < 6; c++)
+        {
+            Box(0, c, 1, 1, "", f7);
+        }
+
+        string[] head = ["Изм.", "Кол.уч.", "Лист", "№ док.", "Подп.", "Дата"];
+        for (var c = 0; c < 6; c++)
+        {
+            Box(1, c, 1, 1, head[c], f7);
+        }
+
+        var rows = new IulSignature?[6];
+        var top6 = signatures.Where(x => x.Role != "Н. контр.").Take(5).ToList();
+        for (var k = 0; k < top6.Count; k++)
+        {
+            rows[k] = top6[k];
+        }
+
+        rows[5] = signatures.FirstOrDefault(x => x.Role == "Н. контр.") ?? new IulSignature("Н. контр.", "");
+        for (var k = 0; k < 6; k++)
+        {
+            Box(2 + k, 0, 1, 2, rows[k]?.Role ?? "", f7, left: true);
+            Box(2 + k, 2, 1, 2, rows[k]?.Name ?? "", f7, left: true);
+            Box(2 + k, 4, 1, 1, "", f7);
+            Box(2 + k, 5, 1, 1, "", f7);
+        }
+
+        Box(0, 6, 3, 4, designation, f12);
+        Box(3, 6, 5, 1, name, f10);
+        Box(3, 7, 1, 1, "Стадия", f7);
+        Box(3, 8, 1, 1, "Лист", f7);
+        Box(3, 9, 1, 1, "Листов", f7);
+        Box(4, 7, 1, 1, stage, f10);
+        Box(4, 8, 1, 1, sheet, f10);
+        Box(4, 9, 1, 1, sheets, f10);
+        Box(5, 7, 3, 3, organization, f10);
+
+        // Контур надписи и шапка — основными линиями.
+        g.DrawRectangle(thick, R(20, y0, 185, 40));
+        g.DrawLine(thick, cx[0] * Mm, Ry(1) * Mm, cx[6] * Mm, Ry(1) * Mm);
+        g.DrawLine(thick, cx[0] * Mm, Ry(2) * Mm, cx[6] * Mm, Ry(2) * Mm);
+        g.DrawLine(thick, cx[6] * Mm, y0 * Mm, cx[6] * Mm, (y0 + 40) * Mm);
+        g.DrawLine(thick, cx[6] * Mm, Ry(3) * Mm, cx[10] * Mm, Ry(3) * Mm);
+        g.DrawLine(thick, cx[7] * Mm, Ry(3) * Mm, cx[7] * Mm, (y0 + 40) * Mm);
+        g.DrawLine(thick, cx[7] * Mm, Ry(5) * Mm, cx[10] * Mm, Ry(5) * Mm);
+
+        // Графы 20–22 слева на поле для подшивки (снизу вверх 25, 35, 25 мм).
+        string[] side = ["Инв. № подл.", "Подп. и дата", "Взам. инв. №"];
+        double[] heights = [25, 35, 25];
+        var yb = 292.0;
+        for (var k = 0; k < 3; k++)
+        {
+            var yt = yb - heights[k];
+            g.DrawRectangle(thick, R(8, yt, 12, heights[k]));
+            g.DrawLine(thin, 13 * Mm, yt * Mm, 13 * Mm, yb * Mm);
+            var state = g.Save();
+            g.TranslateTransform(10.5 * Mm, (yt + (heights[k] / 2)) * Mm);
+            g.RotateTransform(-90);
+            g.DrawString(side[k], f7, XBrushes.Black, new XRect(-heights[k] / 2 * Mm, -2.5 * Mm, heights[k] * Mm, 5 * Mm), XStringFormats.Center);
+            g.Restore(state);
+            yb = yt;
         }
     }
 
