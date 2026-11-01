@@ -69,6 +69,29 @@ internal static class DxfDrawing
     }
 
     /// <summary>Слой программы; в чертеже-подложке уже существующий слой (например, из шаблона) используется с цветом и толщиной программы.</summary>
+    /// <summary>Тип линии осей — штрихпунктирная тонкая (ГОСТ 2.303): штрих, промежуток, точка, промежуток; длины — в мм бумаги.</summary>
+    public const string AxisLineTypeName = "WA_ОСЕВАЯ";
+
+    /// <summary>Тип линии осей в документе (создаётся при первом обращении); масштаб к листу — LineTypeScale примитива.</summary>
+    public static LineType AxisLineType(CadDocument doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc.LineTypes.TryGetValue(AxisLineTypeName, out var existing))
+        {
+            return existing;
+        }
+
+        // ГОСТ 2.303: штрих 5–30 мм, промежуток 3–5 мм — принято 12 и 3 мм.
+        var type = new LineType(AxisLineTypeName) { Description = "Штрихпунктирная тонкая (ГОСТ 2.303) __ . __ ." };
+        foreach (var length in new[] { 12.0, -3, 0, -3 })
+        {
+            type.AddSegment(new LineType.Segment { Length = length });
+        }
+
+        doc.LineTypes.Add(type);
+        return type;
+    }
+
     public static Layer AddLayer(CadDocument doc, string name, short color, LineWeightType lineWeight = LineWeightType.Default)
     {
         OwnLayers.GetOrCreateValue(doc).Add(name);

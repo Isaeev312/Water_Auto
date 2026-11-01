@@ -280,7 +280,8 @@ public static class PlanDxfWriter
             var (from, to) = a.Vertical
                 ? (new XY(a.Position, y0 - reach), new XY(a.Position, y1 + reach))
                 : (new XY(x0 - reach, a.Position), new XY(x1 + reach, a.Position));
-            doc.Entities.Add(new Line(new XYZ(from.X, from.Y, 0), new XYZ(to.X, to.Y, 0)) { Layer = layer });
+            // Ось — штрихпунктирная тонкая (ГОСТ 2.303); масштаб типа линии — масштаб листа (высота текста — 2,5 мм бумаги).
+            doc.Entities.Add(new Line(new XYZ(from.X, from.Y, 0), new XYZ(to.X, to.Y, 0)) { Layer = layer, LineType = DxfDrawing.AxisLineType(doc), LineTypeScale = style.TextHeightMm / 2.5 });
             foreach (var (end, dir) in new[] { (from, -1.0), (to, 1.0) })
             {
                 var c = a.Vertical ? new XYZ(end.X, end.Y + (dir * bubble), 0) : new XYZ(end.X + (dir * bubble), end.Y, 0);

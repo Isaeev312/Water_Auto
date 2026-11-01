@@ -268,4 +268,16 @@ public class PlanDxfWriterTests
         summary.InsertPoint.X.ShouldBeGreaterThan(fx0);
         summary.InsertPoint.Y.ShouldBeGreaterThan(fy0);
     }
+    [Fact]
+    public void Axis_lines_are_thin_dash_dot_by_GOST_2_303()
+    {
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), axes: [new PlanAxis("1", true, 3000)]);
+        var line = On(doc, PlanDxfWriter.AxisLayer).OfType<Line>().Single();
+        var type = line.LineType.Name == "ByLayer" ? line.Layer.LineType : line.LineType;
+        type.Name.ShouldBe("WA_ОСЕВАЯ");
+        type.Segments.Count().ShouldBe(4);
+
+        // Длины штрихов — в мм бумаги, масштаб типа линии — масштаб листа (текст 2,5 мм бумаги).
+        line.LineTypeScale.ShouldBe(new PlanDxfStyle().TextHeightMm / 2.5, 1e-9);
+    }
 }

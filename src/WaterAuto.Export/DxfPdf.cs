@@ -69,7 +69,7 @@ public static partial class DxfPdf
         page.Height = XUnit.FromMillimeter(format.HeightMm);
         using (var g = XGraphics.FromPdfPage(page))
         {
-            var painter = new Painter(g, box.MinX, box.MinY, scale, format.HeightMm, family, color);
+            var painter = new Painter(g, box.MinX, box.MinY, scale, format.HeightMm, family, color, doc.Header.LineTypeScale > 0 ? doc.Header.LineTypeScale : 1);
             foreach (var e in doc.Entities)
             {
                 painter.Draw(e, Affine.Identity);
@@ -139,6 +139,17 @@ public static partial class DxfPdf
         }
     }
 
+    /// <summary>
+    /// Рисунок штрихов типа линии в мм бумаги: длины сегментов × масштаб документа × масштаб примитива / масштаб листа
+    /// (штрих, промежуток, точка = 0); сплошная — пусто.
+    /// </summary>
+    public static double[] DashPatternMm(LineType type, double headerScale, double entityScale, double sheetScale)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        var k = headerScale * entityScale / sheetScale;
+        return [.. type.Segments.Select(seg => Math.Abs(seg.Length) * k)];
+    }
+
     private readonly record struct Box(double MinX, double MinY, double MaxX, double MaxY)
     {
         public double Width => MaxX - MinX;
@@ -182,7 +193,7 @@ public static partial class DxfPdf
         public double Angle => Math.Atan2(B, A);
     }
 
-    private sealed class Painter(XGraphics g, double minX, double minY, double scale, double pageHeightMm, string family, bool color)
+    private sealed class Painter(XGraphics g, double minX, double minY, double scale, double pageHeightMm, string family, bool color, double ltScale)
     {
         // Цвет текущего примитива: свой, слоя или вставки блока (ПоБлоку); белый (7) — чёрным, светлые — темнее для печати на белом.
         private XColor ink = XColors.Black;
@@ -235,7 +246,25 @@ public static partial class DxfPdf
             return (int)w > 0 ? (int)w / 100.0 : DefaultWeightMm;
         }
 
-        private XPen Pen(Entity e) => new(ink, Math.Max(WeightMm(e, e.Layer), 0.13) * PtPerMm) { LineCap = XLineCap.Round, LineJoin = XLineJoin.Round };
+        private XPen Pen(Entity e)
+        {
+            var width = Math.Max(WeightMm(e, e.Layer), 0.13) * PtPerMm;
+            var pen = new XPen(ink, width) { LineCap = XLineCap.Round, LineJoin = XLineJoin.Round };
+
+            // Тип линии примитива или слоя (ПоСлою); штрихи — в долях толщины пера (так задаёт PDFsharp), точка — короткий штрих.
+            var type = e.LineType is { } t && t.Name is not ("ByLayer" or "ByBlock") ? t : e.Layer?.LineType;
+            if (type is not null && type.Segments.Any() && !string.Equals(type.Name, "Continuous", StringComparison.OrdinalIgnoreCase))
+            {
+                var mm = DashPatternMm(type, ltScale, e.LineTypeScale > 0 ? e.LineTypeScale : 1, scale);
+                if (mm.Sum() > 0.5)
+                {
+                    pen.DashStyle = XDashStyle.Custom;
+                    pen.DashPattern = [.. mm.Select(x => Math.Max(x, 0.1) * PtPerMm / width)];
+                }
+            }
+
+            return pen;
+        }
 
         public void Draw(Entity e, Affine t) => Draw(e, t, XColors.Black);
 

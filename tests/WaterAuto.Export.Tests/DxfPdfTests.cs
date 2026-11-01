@@ -46,4 +46,16 @@ public class DxfPdfTests
     {
         DxfPdf.Plain(@"{\fArial|b0;Текст}\Pстрока\~2").ShouldBe("Текст\nстрока 2");
     }
+    [Fact]
+    public void Dashed_line_type_gives_a_dash_pattern_in_paper_millimetres()
+    {
+        // Штрих 12 мм, промежутки 3 мм, точка; масштаб типа линии 100 на листе 1:100 — те же мм на бумаге.
+        var type = new ACadSharp.Tables.LineType("WA_ОСЕВАЯ");
+        foreach (var length in new[] { 12.0, -3, 0, -3 })
+        {
+            type.AddSegment(new ACadSharp.Tables.LineType.Segment { Length = length });
+        }
+
+        DxfPdf.DashPatternMm(type, 1, 100, 100).ShouldBe([12, 3, 0, 3]);
+    }
 }
