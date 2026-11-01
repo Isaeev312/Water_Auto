@@ -605,9 +605,9 @@ public static class PumpRoomDxfWriter
         var top = sheet.At(0, sheet.Format.HeightMm - 15);
         Text(sheet.At(30, 0).X, top.Y, data.Piping ? "План обвязки насосной станции" : "План насосной станции пожаротушения", 2 * h);
         var ny = sheet.At(0, 92).Y;
-        // Примечания — подряд; шаг — по числу строк переноса (≈ 0,6 высоты на знак).
+        // Примечания — подряд; шаг — по числу строк переноса (≈ 0,75 высоты на знак).
         var noteWidth = sheet.Format.WidthMm * s * 0.45;
-        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.75));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
             var lines = Math.Ceiling((note.Length + 4) / perLine);

@@ -68,7 +68,7 @@ public static class PowderPlanDxfWriter
         foreach (var (note, k) in rooms.Select(r => r.Summary).Concat(notes).Select((n, k) => (n, k)))
         {
             doc.Entities.Add(new MText { Value = $"{k + 1}. {note}", InsertPoint = new XYZ(lx, ny, 0), Height = 0.8 * h, RectangleWidth = width, Layer = text });
-            ny -= ((Math.Ceiling((note.Length + 4) / Math.Max(20, width / (0.8 * h * 0.62))) * 1.5) + 0.6) * 0.8 * h;
+            ny -= ((Math.Ceiling((note.Length + 4) / Math.Max(20, width / (0.8 * h * 0.75))) * 1.5) + 0.6) * 0.8 * h;
         }
 
         return doc;

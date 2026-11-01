@@ -127,7 +127,7 @@ public static class PumpRoomAxonometryDxfWriter
         Text(new XY(sheet.At(30, 0).X, sheet.At(0, sheet.Format.HeightMm - 15).Y), "Аксонометрическая схема обвязки насосной станции", 2 * h);
         var ny = sheet.At(0, 92).Y;
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
-        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.75));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
             doc.Entities.Add(new MText { Value = $"{k + 1}. {note}", InsertPoint = new XYZ(sheet.At(25, 0).X, ny, 0), Height = 0.9 * h, RectangleWidth = noteWidth, Layer = text });

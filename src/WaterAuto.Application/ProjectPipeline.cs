@@ -1685,7 +1685,7 @@ public static class ProjectPipeline
                     string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Отметка пола насосной {pr1.FloorElevation:+0.000;−0.000;0.000}; уровень земли {pr1.GroundElevation:+0.000;−0.000}; стены — {pr1.WallThickness * 1000:0} мм (условно, по архитектурному разделу)."),
                     string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Пол — с уклоном к приямку {pr1.PitSize:0.0} × {pr1.PitSize:0.0} м глубиной {pr1.PitDepth:0.0} м; дренажные насосы в приямке (п. 6.10.23)."),
                     string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Фундамент установки — по паспорту изготовителя; при отсутствии сведений масса фундамента не менее {norms.Find("sp485.p6_10_26.foundation")!.Values["massRatio"]:0.#} масс агрегатов (п. 6.10.26). Электродвигатели — не ниже {norms.Find("sp485.p6_10_22.flooding")!.Values["motorAboveFloor"]:0.0#} м от пола (п. 6.10.22)."),
-                    "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно (data/catalog/pump_room.json), уточнить по выбранному оборудованию.",
+                    "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно, уточнить по выбранному оборудованию.",
                     "Свободная зона у двери 1 × 1 м — правило программы.",
                     "Номера позиций — по спецификации ПТ2.СО.",
                 ])
@@ -1812,7 +1812,7 @@ public static class ProjectPipeline
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод — на отметке {Elev(pr1.GroundElevation - pr1.InletDepth)} ({pr1.InletDepth:0.0} м от уровня земли {Elev(pr1.GroundElevation)}); трубопроводы АУП — на {Elev(design.PipeElevation)}."),
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:{1 / norms.Find("sp485.p6_10_29.suctionSlope")!.Values["minSlope"]!.Value:0} (п. 6.10.29); переходы — эксцентрические."),
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Электродвигатели насосов — не ниже {norms.Find("sp485.p6_10_22.flooding")!.Values["motorAboveFloor"]:0.0#} м от пола (п. 6.10.22); установка — на фундаменте по паспорту изготовителя (п. 6.10.26)."),
-                        "Высоты узла управления и жокей-насоса — условные (data/catalog/pump_room.json).",
+                        "Высоты узла управления и жокей-насоса — условные, уточнить по выбранному оборудованию.",
                     ]),
                 SheetStamp(project, "Разрез", "Разрез 1-1 насосной станции") with { Name = "Разрез 1-1 насосной станции" },
                 project.Font));
