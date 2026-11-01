@@ -41,11 +41,11 @@ public static class ComplianceComposer
             rows.Add(new("Площадь для расчёта расхода" + suffix, source + ", Б.1.2.1",
                 $"не менее {F(p.MinArea, "0")} м²", $"{F(design.ZoneArea, "0.#")} м² ({design.ZoneSprinklers.Count} оросителей диктующей зоны)",
                 Ok(design.ZoneArea >= p.MinArea - Eps)));
-            // Б.24: расчётный расход меньше нормативного — принимается нормативный; больше — расчётный (Б.26).
+            // Б.24: расчётный расход меньше нормативного — принимается нормативный («принято по норме»); больше — расчётный (Б.26), он и проверен.
             rows.Add(new("Расход АУП" + suffix, source + ", Б.24, Б.26",
                 $"не менее {F(design.NormativeFlow.LitersPerSecond, "0.##")} л/с",
                 $"{F(Math.Max(design.DesignFlow.LitersPerSecond, design.NormativeFlow.LitersPerSecond), "0.##")} л/с (по гидравлическому расчёту {F(design.DesignFlow.LitersPerSecond, "0.##")} л/с)",
-                ComplianceVerdict.Adopted));
+                design.DesignFlow.LitersPerSecond > design.NormativeFlow.LitersPerSecond + Eps ? ComplianceVerdict.Complies : ComplianceVerdict.Adopted));
             rows.Add(new("Продолжительность подачи воды" + suffix, source, $"{F(p.Duration, "0")} мин", $"{F(design.Duration, "0")} мин", ComplianceVerdict.Adopted));
             rows.Add(new("Шаг оросителей" + suffix, $"{Sp485}, табл. 6.1",
                 $"не более {F(p.MaxSpacing.Meters, "0.##")} м", $"{F(spacing, "0.##")} м", Ok(spacing <= p.MaxSpacing.Meters + Eps)));
