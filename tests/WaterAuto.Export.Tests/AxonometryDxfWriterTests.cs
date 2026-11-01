@@ -227,4 +227,12 @@ public class AxonometryDxfWriterTests
         texts.ShouldContain("DN65 L=6,00 м");
         texts.Count(t => t == "DN65 L=9,00 м").ShouldBe(2);
     }
+    [Fact]
+    public void Reducer_is_drawn_where_the_pipe_continues_straight_with_a_smaller_DN()
+    {
+        // T1: подводящий DN50 продолжается рядком DN32 по той же прямой — переход; ответвление DN25 вбок — тройник, перехода нет.
+        var doc = AxonometryDxfWriter.Build([Route], Elevation, new AxonometryStyle());
+        var reducers = doc.Entities.OfType<LwPolyline>().Where(e => e.Layer.Name == AxonometryDxfWriter.ReducerLayer).ToList();
+        reducers.Count.ShouldBe(1); // без листа условных обозначений нет — только переход на трассе
+    }
 }
