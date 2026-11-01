@@ -157,7 +157,7 @@ public static class AlarmPlanDxfWriter
         {
             Legend(doc, sheet, summary, textHeightMm, radius, manuals is { Count: > 0 }, zones.Any(z => z.Kind == DetectorKind.Heat), zones.Any(z => z.Kind == DetectorKind.Smoke),
                 notifiers?.Any(n => n.Kind != NotifierKind.Light) == true, notifiers?.Any(n => n.Kind == NotifierKind.Light) == true);
-            var notes = summaryLines.Concat(planIssues.Select((i, k) => $"{k + 1}. {i.Level}: {i.Message}")).ToList();
+            var notes = summaryLines.Concat(planIssues.Select((i, k) => $"{k + 1}. {i.Level.Ru()}: {i.Message}")).ToList();
             if (notes.Count > 0)
             {
                 var x = sheet.At(100, 0).X;

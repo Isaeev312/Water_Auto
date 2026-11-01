@@ -15,3 +15,14 @@ public enum IssueLevel
 /// <param name="Clause">Пункт нормы, если есть.</param>
 /// <param name="Location">Место на плане, мм — для слоя ПТ_ЗАМЕЧАНИЯ и сообщений импорта.</param>
 public sealed record Issue(string Code, IssueLevel Level, string Message, string? ElementId = null, string? Clause = null, PlanPoint? Location = null);
+
+/// <summary>Название уровня замечания для документов и окон: в записках и на листах — по-русски.</summary>
+public static class IssueLevels
+{
+    public static string Ru(this IssueLevel level) => level switch
+    {
+        IssueLevel.Error => "Ошибка",
+        IssueLevel.Warning => "Предупреждение",
+        _ => "Информация",
+    };
+}

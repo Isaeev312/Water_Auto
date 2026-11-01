@@ -107,7 +107,7 @@ switch (args[0])
             foreach (var issue in preview.Issues.OrderByDescending(i => i.Level))
             {
                 var at = issue.Location is { } p ? string.Create(ru, $" — X {p.XMm:0}, Y {p.YMm:0} мм") : "";
-                Console.WriteLine($"[{issue.Level}] {issue.Message}{at}");
+                Console.WriteLine($"[{WaterAuto.Core.IssueLevels.Ru(issue.Level)}] {issue.Message}{at}");
             }
 
             Console.WriteLine(preview.HasErrors ? "Чертёж к расчёту не готов." : "Чертёж готов к расчёту.");

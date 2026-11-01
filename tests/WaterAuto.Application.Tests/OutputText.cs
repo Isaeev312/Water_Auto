@@ -4,8 +4,8 @@ using WaterAuto.Reports;
 namespace WaterAuto.Application.Tests;
 
 /// <summary>
-/// Проверка текстов выпуска (docx и xlsx): нет следов незаполненной подстановки ({, }), нечисел (NaN, ∞, Infinity)
-/// и десятичной точки перед единицей измерения — тексты для экспертизы в русской записи. DXF не проверяется:
+/// Проверка текстов выпуска (docx и xlsx): нет следов незаполненной подстановки ({, }), нечисел (NaN, ∞, Infinity),
+/// десятичной точки перед единицей измерения и английских уровней замечаний — тексты для экспертизы в русской записи. DXF не проверяется:
 /// в MText фигурные скобки — разметка.
 /// </summary>
 internal static partial class OutputText
@@ -25,7 +25,8 @@ internal static partial class OutputText
             {
                 if (line.Contains('{', StringComparison.Ordinal) || line.Contains('}', StringComparison.Ordinal)
                     || line.Contains("NaN", StringComparison.Ordinal) || line.Contains('∞', StringComparison.Ordinal)
-                    || line.Contains("Infinity", StringComparison.Ordinal) || DotDecimal().IsMatch(line))
+                    || line.Contains("Infinity", StringComparison.Ordinal) || DotDecimal().IsMatch(line)
+                    || line.Contains("Warning", StringComparison.Ordinal) || line.Contains("Error:", StringComparison.Ordinal))
                 {
                     problems.Add($"{Path.GetFileName(file)}: {line}");
                 }

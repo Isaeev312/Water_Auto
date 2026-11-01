@@ -1052,7 +1052,7 @@ public partial class MainWindow : Window
         CheckDetails.Text = string.Join(Environment.NewLine, lines);
         CheckDetails.ToolTip = preview.Issues.Count == 0
             ? null
-            : string.Join(Environment.NewLine, preview.Issues.Select(i => $"{i.Level}: {i.Message}"));
+            : string.Join(Environment.NewLine, preview.Issues.Select(i => $"{i.Level.Ru()}: {i.Message}"));
         CheckDetails.Visibility = Visibility.Visible;
     }
 

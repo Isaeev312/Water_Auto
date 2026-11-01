@@ -239,7 +239,7 @@ public static class PlanDxfWriter
 
     // Разбивочные оси (ГОСТ 21.101): тонкая линия за пределы плана, марка в кружке на обоих концах.
     // Замечание на рабочем слое: уровень по-русски и код (по нему ищут в issues.txt), затем текст.
-    private static string IssueText(Issue i) => $"{(i.Level == IssueLevel.Error ? "Ошибка" : "Предупреждение")} [{i.Code}]: {i.Message}";
+    private static string IssueText(Issue i) => $"{i.Level.Ru()} [{i.Code}]: {i.Message}";
 
     private static void AddAxes(CadDocument doc, IReadOnlyList<PlanAxis> axes, PlanDxfStyle style, Layer layer, List<PlanPoint> content, double margin)
     {

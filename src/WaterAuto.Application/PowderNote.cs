@@ -63,7 +63,7 @@ public static class PowderNote
         var problems = issues.Where(i => i.Code.StartsWith("powder.", StringComparison.Ordinal) && i.Level != IssueLevel.Info).ToList();
         if (problems.Count > 0)
         {
-            sections.Add(new("4", "Замечания расчёта", [.. problems.Select(i => (NoteBlock)new NotePending($"{i.Level}: {i.Message}"))]));
+            sections.Add(new("4", "Замечания расчёта", [.. problems.Select(i => (NoteBlock)new NotePending($"{i.Level.Ru()}: {i.Message}"))]));
         }
 
         return new NoteDocument(title with { Title = "Установка порошкового пожаротушения модульного типа. Пояснительная записка" }, sections, []);

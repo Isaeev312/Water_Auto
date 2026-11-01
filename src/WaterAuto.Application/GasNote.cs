@@ -72,7 +72,7 @@ public static class GasNote
         var problems = issues.Where(i => i.Code.StartsWith("gas.", StringComparison.Ordinal) && i.Level != IssueLevel.Info).ToList();
         if (problems.Count > 0)
         {
-            sections.Add(new("5", "Замечания расчёта", [.. problems.Select(i => (NoteBlock)new NotePending($"{i.Level}: {i.Message}"))]));
+            sections.Add(new("5", "Замечания расчёта", [.. problems.Select(i => (NoteBlock)new NotePending($"{i.Level.Ru()}: {i.Message}"))]));
         }
 
         return new NoteDocument(title with { Title = "Установка газового пожаротушения. Пояснительная записка" }, sections, []);
