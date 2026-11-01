@@ -25,6 +25,9 @@ public sealed record ProjectFile
     /// <summary>Выпустить раздел 9 «Мероприятия по обеспечению пожарной безопасности» в части систем ППЗ по п. 26 ПП РФ № 87 (стадия П).</summary>
     public bool Pp87 { get; init; }
 
+    /// <summary>Страна объекта (ADR 0014): Kg — нормы КР (по умолчанию, как во всех прежних проектах), Ru — нормы РФ.</summary>
+    public Core.NormsRegion Norms { get; init; } = Core.NormsRegion.Kg;
+
     public ProjectDesign Design { get; init; } = new();
 
     public ProjectTitle Title { get; init; } = new();

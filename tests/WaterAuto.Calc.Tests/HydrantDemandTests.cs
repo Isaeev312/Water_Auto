@@ -24,6 +24,15 @@ public class HydrantDemandTests
         PipeDn: 65);
 
     [Fact]
+    public void Russian_norms_without_data_stop_with_an_issue_instead_of_using_Kyrgyz_tables()
+    {
+        // ADR 0014: числа СН КР для объекта в РФ не подставляются; пока нет данных СП 10 — замечание-ошибка.
+        var r = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru });
+        r.Demand.ShouldBeNull();
+        r.Issues.ShouldContain(i => i.Code == "vpv.noNormsRu" && i.Level == IssueLevel.Error && i.Clause!.Contains("СП 10.13130.2020"));
+    }
+
+    [Fact]
     public void Jets_and_minimum_flow_follow_table_Zh2()
     {
         var r = HydrantDemand.Resolve(Norms, Parking);

@@ -13,6 +13,7 @@ namespace WaterAuto.Calc.Hydraulics;
 /// <param name="AboveAxis">Отметка клапана диктующего ПК над осью насоса.</param>
 /// <param name="Zh1Row">Строка табл. Ж.1 (жилые и общественные здания) — ID без префикса, напр. «g4.seats_over300»; null — табл. Ж.2.</param>
 /// <param name="ExtraJet">Зал с массовым пребыванием людей при сгораемой отделке — на одну струю больше (п. 7.7, только с табл. Ж.1).</param>
+/// <param name="Region">Страна объекта (ADR 0014): КР — СН КР 40-04:2025; РФ — СП 10.13130.2020.</param>
 /// <param name="IsParking">Отапливаемая автостоянка закрытого типа: струи — по п. 6.4 СНиП 21-02-99* вместо табл. Ж.2 (ADR 0010).</param>
 public sealed record HydrantSettings(
     string FireResistance,
@@ -29,7 +30,8 @@ public sealed record HydrantSettings(
     int PipeDn,
     bool IsParking = false,
     string? Zh1Row = null,
-    bool ExtraJet = false);
+    bool ExtraJet = false,
+    NormsRegion Region = NormsRegion.Kg);
 
 /// <summary>Требование к ВПВ: n струй, расход и напор диктующего ПК по табл. Ж.3.</summary>
 public sealed record HydrantDemandValue(
@@ -71,6 +73,13 @@ public static class HydrantDemand
         {
             issues.Add(new Issue(code, level, message, Clause: clause));
             return new HydrantDemandResult(null, issues);
+        }
+
+        if (s.Region == NormsRegion.Ru)
+        {
+            return Stop("vpv.noNormsRu", IssueLevel.Error,
+                "ВПВ для объекта в РФ считается по СП 10.13130.2020, его данных ещё нет в программе; таблицы СН КР 40-04:2025 для РФ не применяются. Расчёт ВПВ не выполнен.",
+                "СП 10.13130.2020, разд. 7");
         }
 
         int n;
