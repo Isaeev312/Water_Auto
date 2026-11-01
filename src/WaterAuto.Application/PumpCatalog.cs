@@ -63,6 +63,28 @@ public static class PumpCatalog
             : null;
     }
 
+    /// <summary>Муфты и фасонные части под муфту изготовителя (data/catalog/grooved_*.json); null — каталога нет.</summary>
+    public static GroovedCatalog? Grooved(string normsDir)
+    {
+        var file = Directory.EnumerateFiles(Dir(normsDir), "grooved_*.json").Order(StringComparer.Ordinal).FirstOrDefault();
+        if (file is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(file));
+        var items = new Dictionary<string, IReadOnlyList<GroovedItem>>(StringComparer.Ordinal);
+        foreach (var kind in doc.RootElement.GetProperty("items").EnumerateObject())
+        {
+            items[kind.Name] = [.. kind.Value.EnumerateArray().Select(i => new GroovedItem(
+                i.GetProperty("od").GetDouble(),
+                i.TryGetProperty("od2", out var o2) ? o2.GetDouble() : null,
+                i.GetProperty("designation").GetString()!))];
+        }
+
+        return new GroovedCatalog(doc.RootElement.GetProperty("toleranceMm").GetDouble(), items);
+    }
+
     /// <summary>Мембранные баки для жокей-насоса (data/catalog/membrane_tanks_*.json).</summary>
     public static IReadOnlyList<MembraneTank> Tanks(string normsDir)
     {

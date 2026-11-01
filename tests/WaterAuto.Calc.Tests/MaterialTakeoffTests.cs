@@ -315,4 +315,20 @@ public class MaterialTakeoffTests
         tee.Name.ShouldContain("концы");
         (tee.Note ?? "").ShouldNotContain("муфт");
     }
+    [Fact]
+    public void Grooved_parts_take_the_maker_designation_by_pipe_outer_diameter()
+    {
+        // ГОСТ 3262: DN80 — Ø88,5 мм → изделия 3" (89) в допуске 1,5 мм; DN50 — Ø60 → 2" (60); размера нет в каталоге — «по каталогу».
+        var catalog = new GroovedCatalog(1.5, new Dictionary<string, IReadOnlyList<GroovedItem>>
+        {
+            ["coupling"] = [new(60, null, "Муфта МГ03 2\" (60)"), new(89, null, "Муфта МГ03 3\" (89)")],
+            ["elbow90"] = [new(89, null, "Колено К902 3\" (89)")],
+        });
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved with { Catalog = catalog });
+        t.Items.Single(i => i.Name == "Муфта трубопроводная разъёмная DN80").Designation.ShouldBe("Муфта МГ03 3\" (89); ГОСТ Р 51737-2001");
+        var elbow = t.Items.Single(i => i.Name == "Отвод 90° DN80 (под разъёмную муфту)");
+        elbow.Designation.ShouldBe("Колено К902 3\" (89)");
+        elbow.Note.ShouldBeNull();
+        t.Items.Single(i => i.Name == "Муфта трубопроводная разъёмная DN50").Designation.ShouldBe("Муфта МГ03 2\" (60); ГОСТ Р 51737-2001");
+    }
 }

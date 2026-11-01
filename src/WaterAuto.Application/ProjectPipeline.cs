@@ -1059,6 +1059,14 @@ public static class ProjectPipeline
         var noGroovedGrade = standardByDn.Keys.Where(dn => smallSeries.Pick(dn)?.Dn != dn).ToHashSet();
         var jointPlan = PipeJoints.Resolve(standardByDn, design.Joints, design.GroovedMinDn, norms, noGroovedGrade);
         issues.AddRange(jointPlan.Issues);
+
+        // ГОСТ Р 51737 (разд. 1) распространяется на муфты водозаполненных установок — для воздухозаполненной это надо подтвердить.
+        if (design.AirFilled && jointPlan.ByDn.Values.Contains(JointKind.Grooved) && norms.Find("gost51737.p1.scope") is { } scope)
+        {
+            issues.Add(new Issue("joints.airFilled", IssueLevel.Warning,
+                $"Разъёмные муфты в воздухозаполненной установке: {scope.Doc} распространяется на {scope.Attributes["subject"]} — применимость муфт подтвердить технической документацией изготовителя или принять сварку.",
+                Clause: $"{scope.Doc}, разд. {scope.Clause}"));
+        }
         var jointsText = JointsText(design, jointPlan);
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, seriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
@@ -1069,7 +1077,7 @@ public static class ProjectPipeline
             materials.SteelDensity,
             pipeSizes,
             materials.Coating,
-            new JointSpec(jointPlan.ByDn, design.PipeStockLength, design.ThreadedFittingStandards, design.CouplingStandard));
+            new JointSpec(jointPlan.ByDn, design.PipeStockLength, design.ThreadedFittingStandards, design.CouplingStandard, PumpCatalog.Grooved(normsDir)));
 
         // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
         var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));

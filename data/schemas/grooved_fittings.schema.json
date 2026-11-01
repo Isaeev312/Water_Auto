@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/grooved_fittings.schema.json",
+  "title": "Трубопроводные разъёмные муфты и фасонные части под муфту изготовителя: обозначения по наружному диаметру трубы",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "maker",
+    "verified",
+    "source",
+    "toleranceMm",
+    "items"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "maker": {
+      "type": "string"
+    },
+    "verified": {
+      "type": "boolean"
+    },
+    "source": {
+      "type": "string"
+    },
+    "toleranceMm": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Допуск совпадения наружного диаметра трубы и изделия, мм."
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "items": {
+      "type": "object",
+      "description": "Вид изделия: coupling, elbow90, tee, cross, teeReducing, crossReducing, reducer.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "od",
+            "designation"
+          ],
+          "properties": {
+            "od": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Наружный диаметр трубы, мм."
+            },
+            "od2": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Меньший наружный диаметр (переходные детали), мм."
+            },
+            "designation": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
+}

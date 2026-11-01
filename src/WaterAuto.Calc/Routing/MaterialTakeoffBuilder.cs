@@ -13,7 +13,8 @@ public sealed record CoatingSpec(string Name, string? Designation);
 /// Соединения сети для спецификации: вид по DN (<see cref="PipeJoints"/>), мерная длина труб, стандарты резьбовых соединительных
 /// частей по началу наименования и стандарт разъёмных муфт.
 /// </summary>
-public sealed record JointSpec(IReadOnlyDictionary<int, JointKind> ByDn, double StockLengthM, IReadOnlyDictionary<string, string> ThreadedStandards, string CouplingStandard);
+/// <param name="Catalog">Муфты и фасонные части изготовителя (графа «Тип, марка»); null — «по каталогу изготовителя муфт».</param>
+public sealed record JointSpec(IReadOnlyDictionary<int, JointKind> ByDn, double StockLengthM, IReadOnlyDictionary<string, string> ThreadedStandards, string CouplingStandard, GroovedCatalog? Catalog = null);
 
 /// <summary>
 /// Ведомость материалов по трассе: оросители и запас (п. 6.1.15), трубы по DN сортамента с длинами,
@@ -201,12 +202,33 @@ public static class MaterialTakeoffBuilder
             fittings[$"Муфта прямая DN{dn}"] = n;
         }
 
+        // Обозначение изготовителя по наружному диаметру трубы каждого DN (из сортамента сети).
+        string? Maker(string kind, int dn, int dn2) =>
+            joints?.Catalog is { } catalog && series.Pick(dn) is { } p1
+                ? catalog.Find(kind, p1.OuterDiameterMm, dn2 > 0 && series.Pick(dn2) is { } p2 ? p2.OuterDiameterMm : null)
+                : null;
+
         // Стандарт: муфты — ГОСТ Р 51737; резьбовые части — по своим стандартам; под муфту — по каталогу изготовителя муфт; приварные — как раньше.
         TakeoffItem Row(string name, int count)
         {
             if (joints is not null && name.StartsWith("Муфта трубопроводная разъёмная", StringComparison.Ordinal))
             {
-                return new TakeoffItem(TakeoffGroup.Fittings, name, joints.CouplingStandard, count, "шт.");
+                var maker = Maker("coupling", Diameters(name).First, 0);
+                return new TakeoffItem(TakeoffGroup.Fittings, name, maker is null ? joints.CouplingStandard : $"{maker}; {joints.CouplingStandard}", count, "шт.");
+            }
+
+            if (joints is not null && name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal))
+            {
+                var (a, b) = Diameters(name);
+                var kind = name.StartsWith("Отвод 90° DN", StringComparison.Ordinal) ? "elbow90"
+                    : name.StartsWith("Тройник DN", StringComparison.Ordinal) ? (b == 0 ? "tee" : "teeReducing")
+                    : name.StartsWith("Крестовина DN", StringComparison.Ordinal) ? (b == 0 || b == a ? "cross" : "crossReducing")
+                    : name.StartsWith("Переход DN", StringComparison.Ordinal) ? "reducer"
+                    : null;
+                if (kind is not null && Maker(kind, a, kind is "teeReducing" or "crossReducing" or "reducer" ? b : 0) is { } designation)
+                {
+                    return new TakeoffItem(TakeoffGroup.Fittings, name, designation, count, "шт.");
+                }
             }
 
             if (joints is not null && (name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal) || (name.Contains(" (концы: ", StringComparison.Ordinal) && name.Contains("под муфту", StringComparison.Ordinal))))
