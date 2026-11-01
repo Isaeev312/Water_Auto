@@ -60,6 +60,17 @@ public class SoueLayouterTests
     }
 
     [Fact]
+    public void Light_notifiers_bunched_on_a_wall_in_a_30_m_wide_hall_are_flagged_for_the_designer()
+    {
+        // 60 × 30 м: середина зала ровно в 15 м от стен — покрытие только на пределе, табло на стене сбиваются через 1 м (А-19).
+        var wide = SoueLayouter.Layout([Zone(Rect(60000, 30000))], Sounder, Light, Norms);
+        wide.Issues.ShouldContain(i => i.Code == "soue.lightsDense" && i.Level == IssueLevel.Warning);
+
+        // 60 × 20 м покрывается без скучивания — замечания нет.
+        SoueLayouter.Layout([Zone(Rect(60000, 20000))], Sounder, Light, Norms).Issues.ShouldNotContain(i => i.Code == "soue.lightsDense");
+    }
+
+    [Fact]
     public void Light_notifiers_cover_every_point_within_15_m_from_walls()
     {
         var zone = Zone(Rect(60000, 20000));

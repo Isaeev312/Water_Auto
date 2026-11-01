@@ -106,6 +106,15 @@ public static class SoueLayouter
             var wall = WallCover(z.Outline, lightReach);
             lights.AddRange(wall.Select((p, i) => new PlacedNotifier($"{z.RoomId}.L{i + 1}", z.RoomId, p, NotifierKind.Light)));
 
+            // Табло на стене ближе шага проверки покрытия — покрытие «до 15 м» выполняется лишь на пределе (зал шириной около 30 м):
+            // число табло завышено, выбор правила — за проектировщиком (А-19).
+            if (wall.Count > 1 && wall.Min(p => wall.Where(q => q != p).Min(q => Math.Sqrt(D2(p, q)))) <= (StepMm * 1.5))
+            {
+                issues.Add(new Issue("soue.lightsDense", IssueLevel.Warning,
+                    string.Create(ru, $"«{z.RoomName}»: при правиле «до самого удалённого места не более {lightRule.Values["maxDistance"]:0} м» табло на стенах стоят вплотную ({wall.Count} шт.) — помещение покрывается только на пределе. Решите, применять ли для большого открытого пространства шаг по периметру не более {lightRule.Values["perimeterStep"]:0} м или ставить табло над путём эвакуации (вопрос А-19)."),
+                    z.RoomId, Doc + ", п. 6.16.2", z.Outline.Centroid));
+            }
+
             var area = z.Outline.AreaMm2 / 1e6;
             if (area > fault.Values["maxArea"]!.Value)
             {
