@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using WaterAuto.Calc.Hydraulics;
 using WaterAuto.Core;
 
@@ -10,7 +11,7 @@ namespace WaterAuto.Application;
 /// площадь диктующей зоны, шаг оросителей, скорость в подводящем; затем напор подобранной установки по огибающей
 /// и замечания расчёта АУПТ уровня «предупреждение» и «ошибка» с их пунктами. Чисел норм здесь нет.
 /// </summary>
-public static class ComplianceComposer
+public static partial class ComplianceComposer
 {
     private const string Sp485 = "СП 485.1311500.2020";
     private const double Eps = 1e-6;
@@ -68,10 +69,14 @@ public static class ComplianceComposer
             .Where(i => i.Level >= IssueLevel.Warning && !OtherSystems.Any(s => i.Code.StartsWith(s, StringComparison.Ordinal)))
             .DistinctBy(i => (i.Code, i.Message)))
         {
-            rows.Add(new(issue.Message, issue.Clause ?? "—", "—", "—",
+            rows.Add(new(ProjectKey().Replace(issue.Message, ""), issue.Clause ?? "—", "—", "—",
                 issue.Level == IssueLevel.Error ? ComplianceVerdict.Violates : ComplianceVerdict.Check));
         }
 
         return rows;
     }
+
+    // Ключи файла проекта в скобках («(design.maxAmbientTemperature)») — подсказка проектировщику, экспертизе не нужны.
+    [GeneratedRegex(@" ?\((design|alarm|gas|powder)\.[A-Za-z.]+\)")]
+    private static partial Regex ProjectKey();
 }
