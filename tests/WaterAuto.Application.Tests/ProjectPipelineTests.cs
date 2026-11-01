@@ -353,6 +353,24 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Auto_inlets_place_a_connection_point_in_a_room_without_one()
+    {
+        // Чертёж без ПТ_ВВОД: с design.autoInlets программа ставит точку у стены помещения (замечание с координатами) и считает;
+        // без флага — прежняя ошибка импорта.
+        Drawing(withInlet: false);
+        Run(Project()).Issues.ShouldContain(i => i.Code == "import.noInlet");
+
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("auto.waproj", ProjectFile.ToJson(project with { Design = project.Design with { AutoInlets = true } })));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        var placed = result.Issues.Single(i => i.Code == "design.autoInlet");
+        placed.Level.ShouldBe(IssueLevel.Warning);
+        placed.Location.ShouldNotBeNull();
+        result.Design.ShouldNotBeNull();
+    }
+
+    [Fact]
     public void Section_feed_of_its_own_shortens_the_supply_and_lowers_the_pump_head()
     {
         // Склад группы 5 задаёт напор при общем подводящем 30 м DN125; свой подвод к секции склада 5 м DN150 — напор ниже,

@@ -155,11 +155,17 @@ public static class ProjectPipeline
         }
 
         var drawing = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(projectPath))!, project.Drawing));
-        var import = FloorPlanImporter.Import(drawing, requireInlet: project.Aupt);
+        var import = FloorPlanImporter.Import(drawing, requireInlet: project.Aupt && !design.AutoInlets);
         issues.AddRange(import.Issues);
         if (import.Plan is not { } plan)
         {
             return Stop();
+        }
+
+        // Точки ввода по умолчанию (design.autoInlets): помещениям без ПТ_ВВОД — у стены со стороны насосной, с предупреждением.
+        if (project.Aupt && design.AutoInlets)
+        {
+            plan = AutoInlets.Apply(plan, issues);
         }
 
         var norms = JsonNormsProvider.Load(normsDir);

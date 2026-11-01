@@ -167,6 +167,9 @@ public sealed record ProjectDesign
     /// <summary>Свои подводы секций: длина и DN подводящего от насоса до ввода помещения; остальные помещения — SupplyLength и SupplyDn.</summary>
     public IReadOnlyList<ProjectFeed> Feeds { get; init; } = [];
 
+    /// <summary>Помещениям без точки ПТ_ВВОД ставить ввод у стены со стороны насосной (предупреждение с координатами).</summary>
+    public bool AutoInlets { get; init; }
+
     /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
     public double? FloorElevation { get; init; }
 

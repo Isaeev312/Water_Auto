@@ -243,6 +243,8 @@ internal static class InputFields
                             Hint: "От насоса до точки ввода ПТ_ВВОД. Можно заполнить по чертежу в карточке «Проверка чертежа»."),
                         new FieldSpec("design", "supplyDn", "DN подводящего трубопровода", FieldKind.Dn, Advanced: true,
                             Hint: "Проверяется по предельной скорости (п. 6.7.1.37)."),
+                        new FieldSpec("design", "autoInlets", "Ставить вводы автоматически, если на чертеже нет ПТ_ВВОД", FieldKind.Bool,
+                            Hint: "Точка у стены помещения со стороны насосной; каждая — предупреждение с координатами, перенесите её на место стояка."),
                         new FieldSpec("design", "inletReference", "Ссылка в выноске у ввода", FieldKind.Text, Advanced: true,
                             Hint: "Текст у точки ввода на плане."),
                         new FieldSpec("design", "pipeElevation", "Отметка трубопроводов, м", FieldKind.Number,
