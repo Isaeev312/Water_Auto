@@ -820,7 +820,7 @@ public static class ExplanatoryNoteComposer
         }
 
         yield return new NoteParagraph("Вопросы, требующие решения проектировщика:");
-        yield return new NoteList(issues.Select(x => x.Clause is null ? x.Message : $"{x.Message} ({ClauseRef(x.Clause)})").Distinct().ToList());
+        yield return new NoteList(issues.Select(x => x.Clause is null ? x.DocumentText() : $"{x.DocumentText()} ({ClauseRef(x.Clause)})").Distinct().ToList());
     }
 
     private static string Role(RouteSegmentRole role) => role switch

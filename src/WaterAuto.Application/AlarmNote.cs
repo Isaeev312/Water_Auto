@@ -96,7 +96,7 @@ public static class AlarmNote
         blocks.Add(new NoteParagraph(string.Create(Ru, $"Всего извещателей — {layout.Detectors.Count} шт. Расстановка — на плане АПС (aps_plan.dxf), обозначения ИП — «помещение.D номер».")));
         foreach (var i in issues.Where(i => i.Code.StartsWith("aps.layout", StringComparison.Ordinal) && i.Level != IssueLevel.Info))
         {
-            blocks.Add(new NotePending($"{i.Level.Ru()}: {i.Message}"));
+            blocks.Add(new NotePending($"{i.Level.Ru()}: {i.DocumentText()}"));
         }
 
         return blocks;
@@ -175,7 +175,7 @@ public static class AlarmNote
 
         foreach (var i in issues.Where(i => i.Code.StartsWith("soue.", StringComparison.Ordinal) && i.Level != IssueLevel.Info))
         {
-            blocks.Add(new NotePending($"{i.Level.Ru()}: {i.Message}"));
+            blocks.Add(new NotePending($"{i.Level.Ru()}: {i.DocumentText()}"));
         }
 
         return blocks;

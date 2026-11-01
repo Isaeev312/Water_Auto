@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace WaterAuto.Core;
 
 public enum IssueLevel
@@ -17,7 +19,7 @@ public enum IssueLevel
 public sealed record Issue(string Code, IssueLevel Level, string Message, string? ElementId = null, string? Clause = null, PlanPoint? Location = null);
 
 /// <summary>Название уровня замечания для документов и окон: в записках и на листах — по-русски.</summary>
-public static class IssueLevels
+public static partial class IssueLevels
 {
     public static string Ru(this IssueLevel level) => level switch
     {
@@ -25,4 +27,14 @@ public static class IssueLevels
         IssueLevel.Warning => "Предупреждение",
         _ => "Информация",
     };
+
+    /// <summary>Текст замечания для документа: без ключей файла проекта в скобках («(design.maxAmbientTemperature)») — они подсказка проектировщику.</summary>
+    public static string DocumentText(this Issue issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        return ProjectKey().Replace(issue.Message, "");
+    }
+
+    [GeneratedRegex(@" ?\((design|alarm|gas|powder)\.[A-Za-z.]+\)")]
+    private static partial Regex ProjectKey();
 }

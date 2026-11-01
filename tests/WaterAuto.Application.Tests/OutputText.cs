@@ -26,7 +26,8 @@ internal static partial class OutputText
                 if (line.Contains('{', StringComparison.Ordinal) || line.Contains('}', StringComparison.Ordinal)
                     || line.Contains("NaN", StringComparison.Ordinal) || line.Contains('∞', StringComparison.Ordinal)
                     || line.Contains("Infinity", StringComparison.Ordinal) || DotDecimal().IsMatch(line)
-                    || line.Contains("Warning", StringComparison.Ordinal) || line.Contains("Error:", StringComparison.Ordinal))
+                    || line.Contains("Warning", StringComparison.Ordinal) || line.Contains("Error:", StringComparison.Ordinal)
+                    || ProjectKey().IsMatch(line))
                 {
                     problems.Add($"{Path.GetFileName(file)}: {line}");
                 }
@@ -38,4 +39,8 @@ internal static partial class OutputText
 
     [GeneratedRegex(@"\d\.\d+ ?(м|мм|МПа|л/с|м/с|м²|м³)(?![\p{L}])")]
     private static partial Regex DotDecimal();
+
+    // Ключи файла проекта («(design.maxAmbientTemperature)») — подсказка проектировщику, в документах для экспертизы им не место.
+    [GeneratedRegex(@"\((design|alarm|gas|powder)\.")]
+    private static partial Regex ProjectKey();
 }
