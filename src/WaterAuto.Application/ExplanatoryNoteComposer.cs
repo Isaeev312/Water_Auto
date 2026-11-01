@@ -173,11 +173,14 @@ public static class ExplanatoryNoteComposer
         if (Math.Abs(p.HeightFactor - 1) > 1e-12 && p.RoomHeight is { } h)
         {
             var baseI = p.Intensity / p.HeightFactor;
+            var note3 = norms.Find("sp485.t6_2.note3")!.Values;
+            var hRef = note3["hRef"]!.Value;
+            var k1 = note3["k1"]!.Value;
             var baseQ = p.Flow.LitersPerSecond / p.HeightFactor;
-            blocks.Add(new NoteParagraph("Высота помещения склада более 10 м — интенсивность и расход по примечанию 3 к таблице 6.2:"));
-            blocks.Add(new NoteFormula(string.Create(Ru, $"*i*_{{h}} = [1 + 0,05·(*H* − 10)]·*i* = [1 + 0,05·({h.Meters:0.##} − 10)]·{baseI:0.###} = {p.Intensity:0.###} л/(с·м^{{2}}),"), "2.1", []));
-            blocks.Add(new NoteFormula(string.Create(Ru, $"*Q*_{{h}} = [1 + 0,05·(*H* − 10)]·*Q* = {p.HeightFactor:0.###}·{baseQ:0.##} = {p.Flow.LitersPerSecond:0.##} л/с,"), "2.2", [
-                "где *i*, *Q* — по таблице 6.2 при высоте помещения не более 10 м; *H* — высота помещения, м.",
+            blocks.Add(new NoteParagraph(string.Create(Ru, $"Высота помещения склада более {hRef:0.#} м — интенсивность и расход по примечанию 3 к таблице 6.2:")));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*i*_{{h}} = [1 + {k1:0.0#}·(*H* − {hRef:0.#})]·*i* = [1 + {k1:0.0#}·({h.Meters:0.##} − {hRef:0.#})]·{baseI:0.###} = {p.Intensity:0.###} л/(с·м^{{2}}),"), "2.1", []));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*Q*_{{h}} = [1 + {k1:0.0#}·(*H* − {hRef:0.#})]·*Q* = {p.HeightFactor:0.###}·{baseQ:0.##} = {p.Flow.LitersPerSecond:0.##} л/с,"), "2.2", [
+                string.Create(Ru, $"где *i*, *Q* — по таблице 6.2 при высоте помещения не более {hRef:0.#} м; *H* — высота помещения, м."),
             ]));
         }
 
@@ -417,7 +420,7 @@ public static class ExplanatoryNoteComposer
 
         if (d.Hydrants is { } h)
         {
-            blocks.AddRange(HydrantBlocks(d, h, qAup));
+            blocks.AddRange(HydrantBlocks(d, h, qAup, norms));
             if (i.HydrantCount > 0 && i.HydrantReach is { } reach)
             {
                 blocks.Add(new NoteParagraph($"**Размещение пожарных кранов.** Краны размещены у стен так, чтобы каждая точка помещения орошалась {h.Demand.Jets} струями (п. 7.14 СН КР 40-04:2025); струя достаёт точку в пределах радиуса действия {F(reach.Meters, "0.#")} м по прямой внутри помещения — длина рукава {h.Settings.HoseLength} м плюс радиус компактной части струи {F(h.Demand.TableJetHeight.Meters, "0")} м (п. 7.9). Принято **{i.HydrantCount}** пожарных кранов; места кранов — на плане (слой ПТ_ПК); краны ближе {F(HydrantPlacement.RiserSeparationMm / 1000, "0")} м друг к другу считаются одним стояком (две струи — из двух разных стояков). Трубопроводы к кранам на плане не трассируются: в гидравлическом расчёте краны диктующей секции приняты присоединёнными в точке подключения (см. выше, с запасом). Клапаны — на высоте {F(norms.Find("snkr4004.p7_16.valveHeight")?.Values["height"] ?? 0, "0.00")} м от пола (п. 7.16)."));
@@ -432,7 +435,7 @@ public static class ExplanatoryNoteComposer
     }
 
     // ВПВ, совмещённый с АУП: Ж.2, Ж.3 и п. 7.9 СН КР 40-04:2025; включение ПК в сеть — Б.1.3.8, Б.1.3.16; расход — Б.29 (ADR 0010).
-    private static List<NoteBlock> HydrantBlocks(DesignResult d, HydrantResult h, double qAup)
+    private static List<NoteBlock> HydrantBlocks(DesignResult d, HydrantResult h, double qAup, INormsProvider norms)
     {
         var s = h.Settings;
         var v = h.Demand;
@@ -458,7 +461,7 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Расход насосов совмещённого водопровода (Б.29):"),
             new NoteFormula($"*Q*_{{нас}} = *Q*_{{АУП}} + *n*·*q*_{{ПК}} = {F(qAup, "0.00")} + {n}·{F(h.JetFlowActual.LitersPerSecond, "0.00")} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**.", "5.11", []),
             .. (d.Issues.Any(x => x.Code == "vpv.diaphragm")
-                ? [new NoteParagraph($"Давление у пожарного крана *P*_{{ПК}} = (*q*_{{ПК}} / *K*_{{ПК}})^{{2}} = {F(h.ValvePressure.Mpa, "0.000")} МПа больше 0,4 МПа, поэтому между краном и соединительной головкой предусматриваются диафрагмы или регуляторы давления (примечание к п. 7.11 СН КР 40-04:2025). Расход кранов в расчёте принят без учёта диафрагм — с запасом.")]
+                ? [new NoteParagraph($"Давление у пожарного крана *P*_{{ПК}} = (*q*_{{ПК}} / *K*_{{ПК}})^{{2}} = {F(h.ValvePressure.Mpa, "0.000")} МПа больше {F(norms.Find("snkr4004.p7_10_11.pressure")!.Values["diaphragmAbove"]!.Value)} МПа, поэтому между краном и соединительной головкой предусматриваются диафрагмы или регуляторы давления (примечание к п. 7.11 СН КР 40-04:2025). Расход кранов в расчёте принят без учёта диафрагм — с запасом.")]
                 : Array.Empty<NoteBlock>()),
             new NoteParagraph("Продолжительность работы ВПВ, совмещённого с АУП, равна времени работы АУП (п. Б.1.3.15 СП 485; п. 7.13 СН КР 40-04:2025)."),
         ];
