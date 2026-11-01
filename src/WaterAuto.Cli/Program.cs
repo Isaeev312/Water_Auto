@@ -3,7 +3,7 @@
 //   new <проект.waproj> --drawing <чертёж.dwg|dxf>              — заготовка файла проекта с исходными данными
 //   template <файл.dwt|dwg|dxf>                                 — шаблон чертежа: слои ПТ_, мм, блок ввода, памятка
 //   check <проект.waproj> [--data <папка data>]                 — проверка чертежа без расчёта: помещения, вводы, замечания с координатами
-//   pdf <папка выпуска>                                          — docx выпуска в PDF через Word с обновлённым оглавлением (Windows)
+//   pdf <папка выпуска>                                          — чертежи DXF в PDF; docx — через Word с обновлённым оглавлением (Windows)
 using System.Text;
 using WaterAuto.Application;
 
@@ -125,9 +125,12 @@ switch (args[0])
                 return 2;
             }
 
+            // Чертежи — сами (ADR 0015), без AutoCAD; текстовые документы — через Word.
+            DrawingPdf.Export(folder, WaterAuto.Core.DocumentStyle.DefaultFont, line => Console.WriteLine($"  {line}"));
+
             if (!OperatingSystem.IsWindows())
             {
-                Console.Error.WriteLine("Выгрузка в PDF через Word доступна только в Windows.");
+                Console.Error.WriteLine("Выгрузка docx в PDF через Word доступна только в Windows.");
                 return 2;
             }
 
