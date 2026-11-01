@@ -412,7 +412,8 @@ public static class DesignCalculation
             issues,
             [],
             hydrant,
-            ringCheck) { RiserPipe = riser, RiserLinearLoss = new Pressure(riserLinear) };
+            ringCheck)
+        { RiserPipe = riser, RiserLinearLoss = new Pressure(riserLinear) };
     }
 
     // Трубы кольца: замыкающие участки и путь по дереву между их концами.
