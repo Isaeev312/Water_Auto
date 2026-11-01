@@ -86,6 +86,9 @@ public static class PumpRoomDxfWriter
         return t > 0.02 && t < 0.98 && u > 0.02 && u < 0.98 ? t : null;
     }
 
+    /// <summary>Полоса у левой и нижней стен плана, занятая цепочками размеров (вынос 10h и текст).</summary>
+    private static double DimBand(double h) => 12 * h;
+
     public static void Write(string path, PumpRoomDrawing data, TitleBlock stamp, string font = DocumentStyle.DefaultFont) =>
         DxfDrawing.Save(path, Build(data, stamp), font);
 
@@ -187,7 +190,9 @@ public static class PumpRoomDxfWriter
                 Rect(at.XMm - (dia / 2), Math.Min(at.YMm, at.YMm + (outward * t)), at.XMm + (dia / 2), Math.Max(at.YMm, at.YMm + (outward * t)), equipment);
             }
 
-            Text(at.XMm + (vertical ? outward * (t + h) - (outward < 0 ? 6 * h : 0) : h), at.YMm + (vertical ? h : outward * (t + h)), label, 0.6 * h);
+            var lw = 0.6 * h * 0.75 * label.Length;
+            var off = outward < 0 ? t + DimBand(h) : t + h;
+            Text(at.XMm + (vertical ? (outward * off) - (outward < 0 ? lw : 0) : h), at.YMm + (vertical ? h : (outward * off) + (outward < 0 ? -h : 0)), label, 0.6 * h);
         }
 
         // Дверь: проём 900 мм по стене и дуга открывания внутрь.
@@ -545,10 +550,17 @@ public static class PumpRoomDxfWriter
             var width = 0.8 * h * 0.75 * label.Length;
             var (dl, dr, db, dt) = (at.XMm - x0, x1 - at.XMm, at.YMm - y0, y1 - at.YMm);
             var m = new[] { dl, dr, db, dt }.Min();
-            var (tx, ty) = m == dl ? (at.XMm - width - h, at.YMm - (0.4 * h))
+            // У левой и нижней стен плана стоят цепочки размеров — подпись выносится за них, с выноской от отметки.
+            var band = data.Piping ? h : DimBand(h);
+            var (tx, ty) = m == dl ? (at.XMm - width - band, at.YMm - (0.4 * h))
                 : m == dr ? (at.XMm + h, at.YMm - (0.4 * h))
-                : m == db ? (at.XMm - (width / 2), at.YMm - (2 * h))
+                : m == db ? (at.XMm - (width / 2), at.YMm - band - h)
                 : (at.XMm - (width / 2), at.YMm + h);
+            if (band > h && (m == dl || m == db))
+            {
+                doc.Entities.Add(new Line(P(at.XMm, at.YMm), m == dl ? P(tx + width, at.YMm) : P(at.XMm, ty + h)) { Layer = text });
+            }
+
             Text(tx, ty, label, 0.8 * h);
         }
 

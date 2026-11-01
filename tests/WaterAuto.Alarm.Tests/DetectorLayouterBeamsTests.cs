@@ -41,6 +41,7 @@ public class DetectorLayouterBeamsTests
         }
 
         layout.Issues.ShouldContain(i => i.Code == "aps.layout.beams" && i.Level == IssueLevel.Info && i.Clause!.Contains("табл. 6.2"));
+        layout.Issues.ShouldAllBe(i => !i.Message.Contains("sp484."), "в текст замечания не попадают ключи записей норм");
     }
 
     [Fact]

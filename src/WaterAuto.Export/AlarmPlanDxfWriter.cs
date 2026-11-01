@@ -80,7 +80,17 @@ public static class AlarmPlanDxfWriter
             else
             {
                 // На листе — подпись помещения на плане, сводка — в примечаниях под планом.
-                doc.Entities.Add(new TextEntity(z.RoomName) { InsertPoint = new XYZ(c.XMm, c.YMm, 0), Height = textHeightMm * 1.4, Layer = summary });
+                // Подпись — в промежутке между рядами ИП, ближайшем к центру помещения, по центру по горизонтали.
+                var labelH = textHeightMm * 1.4;
+                var rows = layout.Detectors.Where(d => d.RoomId == z.RoomId).Select(d => d.Location.YMm).Distinct().Order().ToList();
+                var labelY = c.YMm;
+                if (rows.Count > 1)
+                {
+                    var gap = rows.Zip(rows.Skip(1), (a, b) => (a + b) / 2).MinBy(m => Math.Abs(m - c.YMm));
+                    labelY = gap - (labelH / 2);
+                }
+
+                doc.Entities.Add(new TextEntity(z.RoomName) { InsertPoint = new XYZ(c.XMm - (z.RoomName.Length * 0.75 * labelH / 2), labelY, 0), Height = labelH, Layer = summary });
                 summaryLines.Add(line);
             }
         }
