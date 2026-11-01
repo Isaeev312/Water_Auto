@@ -88,9 +88,32 @@ public static class PumpSchemeDxfWriter
             data.Marks?.TryGetValue(role, out var list) == true && index < list.Count ? list[index] : fallback;
 
         // Вводы (п. 6.10.27): всасывающий коллектор; каждый ввод — отдельная линия со своей задвижкой до коллектора.
-        d.Pipe(25, yS, xJ + 8, yS);
-        d.Cap(xJ + 8, yS, horizontal: true);
-        Pos(xJ + 8, yS, "capS");
+        // При двух вводах коллектор — кольцо из двух линий с задвижками между ответвлениями (ремонт участка без остановки).
+        var ring = RingValves(data.Pumps, data.Inlets) > 0;
+        const double yL = yS - 10, xL = 95;
+        if (ring)
+        {
+            d.Pipe(25, yS, xJ + 8, yS);
+            d.Pipe(25, yL, xJ + 8, yL);
+            d.Pipe(xL, yL, xL, yS);
+            d.Pipe(xJ + 8, yL, xJ + 8, yS);
+            var taps = branches.Append(xJ).ToList();
+            for (var k = 0; k + 1 < taps.Count; k++)
+            {
+                var xv = (taps[k] + taps[k + 1]) / 2;
+                d.Valve(xv, yS, vertical: false, sensor: false);
+                d.Valve(xv, yL, vertical: false, sensor: false);
+            }
+
+            Pos((taps[0] + taps[1]) / 2, yL, "ringValve");
+        }
+        else
+        {
+            d.Pipe(25, yS, xJ + 8, yS);
+            d.Cap(xJ + 8, yS, horizontal: true);
+            Pos(xJ + 8, yS, "capS");
+        }
+
         d.Pipe(x0, yD, xEnd + (Math.Max(1, data.Outlets?.Count ?? 1) - 1) * 30, yD);
         d.Cap(x0, yD, horizontal: true, left: true);
         Pos(x0, yD, "capD", -1);
@@ -99,7 +122,17 @@ public static class PumpSchemeDxfWriter
         d.Valve(85, yS, vertical: false, sensor: true);
         Pos(85, yS, "inletValve", -1);
         Mark(80, yS - 7, "inletValve", 0);
-        for (var k = 1; k < Math.Max(1, data.Inlets); k++)
+        if (ring)
+        {
+            // Второй ввод — в нижнюю линию кольца; задвижка — левее первой, чтобы датчик и подписи не накладывались.
+            d.Arrow(34, yL, 1, 0);
+            d.Valve(60, yL, vertical: false, sensor: true);
+            d.Text(27, yL + 3, "Ввод 2", 2.5);
+            Pos(60, yL, "inletValve", -1);
+            Mark(55, yL - 7, "inletValve", 1);
+        }
+
+        for (var k = ring ? 2 : 1; k < Math.Max(1, data.Inlets); k++)
         {
             // Второй и следующие вводы — отдельными ветвями слева; задвижка — на ветви до общего коллектора.
             var yIn = yS + (12 * k);
@@ -224,7 +257,7 @@ public static class PumpSchemeDxfWriter
 
         d.Text(150, 280, "Принципиальная схема насосной станции пожаротушения", 5);
         Legend(d, 262, 104);
-        var y = 92.0;
+        var y = ring ? 76.0 : 92.0;
         foreach (var note in data.Notes.Select((n, k) => $"{k + 1}. {n}"))
         {
             d.Text(25, y, note, 2.5, width: 200);
@@ -235,6 +268,12 @@ public static class PumpSchemeDxfWriter
     }
 
     // Таблица условных обозначений — над основной надписью, в два столбца.
+    /// <summary>
+    /// Секционные задвижки кольцевого всасывающего коллектора: при двух и более вводах — по одной на каждой из двух линий
+    /// между соседними ответвлениями (агрегаты и жокей-насос); при одном вводе кольца нет.
+    /// </summary>
+    public static int RingValves(int pumps, int inlets) => inlets >= 2 ? 2 * pumps : 0;
+
     private static void Legend(Drawer d, double x, double top)
     {
         d.Text(x, top, "Условные обозначения", 3);

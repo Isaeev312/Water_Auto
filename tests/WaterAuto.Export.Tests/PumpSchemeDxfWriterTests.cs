@@ -112,4 +112,21 @@ public class PumpSchemeDxfWriterTests
         oneTexts.Count(t => t == "5").ShouldBe(1);
         oneTexts.ShouldNotContain("Ввод 2");
     }
+
+    [Fact]
+    public void Two_inlets_feed_a_ring_suction_manifold_with_section_valves()
+    {
+        // Как в типовых проектах: при двух вводах всасывающий коллектор — кольцо из двух линий, на обеих — задвижки между
+        // ответвлениями агрегатов и жокей-насоса (2 агрегата + жокей → по 2 на линии); торец не глушится.
+        var ring = PumpSchemeDxfWriter.Build(Data with { Inlets = 2, Positions = new Dictionary<string, int> { ["ringValve"] = 7 } }, Stamp);
+        var collector = ring.Entities.OfType<Line>()
+            .Where(l => l.Layer.Name == PumpSchemeDxfWriter.PipeLayer && l.StartPoint.Y == l.EndPoint.Y && l.StartPoint.Y < 100.5 && l.StartPoint.Y > 80)
+            .Select(l => l.StartPoint.Y).Distinct().ToList();
+        collector.Count.ShouldBe(2);
+        ring.Entities.OfType<TextEntity>().Count(t => t.Value == "7").ShouldBe(1);
+        ring.Entities.OfType<Arc>().Count(a => a.Layer.Name == PumpSchemeDxfWriter.EquipmentLayer).ShouldBe(2 + 1 + 1); // заглушка — только у напорного
+
+        PumpSchemeDxfWriter.RingValves(2, 2).ShouldBe(4);
+        PumpSchemeDxfWriter.RingValves(2, 1).ShouldBe(0);
+    }
 }

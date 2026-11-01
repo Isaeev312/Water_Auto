@@ -1132,7 +1132,7 @@ public static class ProjectPipeline
                 ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                 ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
             };
-            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount };
+            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount, ["ringValves"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount), ["suctionCaps"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount) > 0 ? 0 : 1 };
             stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
 
             // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,

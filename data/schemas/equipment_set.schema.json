@@ -61,6 +61,8 @@
             "enum": [
               "pumps",
               "truckInlets",
+              "ringValves",
+              "suctionCaps",
               "sections",
               "extraSections",
               "inlets"
