@@ -367,7 +367,11 @@ public sealed class ProjectPipelineTests : IDisposable
         var placed = result.Issues.Single(i => i.Code == "design.autoInlet");
         placed.Level.ShouldBe(IssueLevel.Warning);
         placed.Location.ShouldNotBeNull();
-        result.Design.ShouldNotBeNull();
+        // Трасса считается от поставленной точки, и точка лежит внутри контура помещения (не на стене).
+        result.Design!.Route.InletId.ShouldStartWith("AUTO.");
+        var room = WaterAuto.Import.FloorPlanImporter.Import(Path.Combine(_dir, "floor.dxf"), requireInlet: false).Plan!.Rooms.Single(r => r.Id == placed.ElementId);
+        room.Contour.Contains(placed.Location!.Value).ShouldBeTrue();
+        room.Contour.DistanceTo(placed.Location.Value).ShouldBeGreaterThan(1);
     }
 
     [Fact]
@@ -525,6 +529,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Write("ops.waproj", json));
 
         result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         result.Files.ShouldNotContain(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.AuptVolume);
         var names = result.Files.Select(Path.GetFileName).ToList();
         names.ShouldContain(ProjectPipeline.AlarmPlanFile);
@@ -571,6 +576,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Write("powder.waproj", json));
 
         result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         var names = result.Files.Select(Path.GetFileName).ToList();
         names.ShouldContain(ProjectPipeline.PowderNoteFile);
         names.ShouldContain(ProjectPipeline.PowderSpecFile);
@@ -668,6 +674,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Write("gas.waproj", json));
 
         result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         // Модули из каталога: наименьшее число 6 дают 180 и 187 л, берётся меньший: МПА-КД (50-180-50), 180 кг; 1,05·(1018,6 + 6·0,3) = 1071,4 кг → 6; запас 6.
         var gasSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.GasSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
         gasSpec.Single(r => r[2] == "МПА-КД (50-180-50)")[5].ShouldBe("12");
@@ -730,6 +737,7 @@ public sealed class ProjectPipelineTests : IDisposable
         Drawing();
         var result = Run(Project());
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
             ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
