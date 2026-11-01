@@ -137,14 +137,15 @@ public static class ExplanatoryNoteComposer
 
     private static NoteSection Initial(NoteInputs i)
     {
-        var rooms = i.Plan.Rooms.Select(r => string.Create(Ru, $"помещение «{r.Name}» — площадь {r.Contour.AreaMm2 / 1e6:0.0} м²")).ToList();
+        var rooms = i.Plan.Rooms.Select(r => string.Create(Ru, $"помещение «{r.Name.Trim()}» — площадь {r.Contour.AreaMm2 / 1e6:0.0} м²")).ToList();
         return new NoteSection("1", "Исходные данные", [
             new NoteList([
                 $"объект — {i.ObjectName}",
                 $"группа помещений по приложению А СП 485 — {i.RoomGroup}",
                 $"класс пожарной опасности перекрытий и стен — {Label(i.Construction)}",
                 .. rooms,
-                $"колонн на плане — {i.Plan.Columns.Count}, зон без оросителей — {i.Plan.NoSprinklerZones.Count}",
+                // Колонны и балки — из архитектурной подложки (АР, КР): в записке не перечисляются, учитываются раскладкой.
+                .. (i.Plan.NoSprinklerZones.Count > 0 ? [$"зон без оросителей — {i.Plan.NoSprinklerZones.Count}"] : Array.Empty<string>()),
                 $"точек подключения (вводов) — {i.Plan.Inlets.Count}",
             ]),
         ]);

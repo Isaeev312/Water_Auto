@@ -248,8 +248,9 @@ public static class NoteDocx
     private static void WriteTitlePage(Body body, NoteTitle t)
     {
         body.Append(Line(JustificationValues.Center, 0, R(t.Organization, caps: true)));
-        body.Append(Line(JustificationValues.Center, 60, R(t.Title, bold: true, size: "32", caps: true)));
-        body.Append(Line(JustificationValues.Center, 4, R(t.Subtitle, size: "32")));
+        // Наименование — шрифт 5 по ГОСТ 2.304 (20 пт: прописные ≈ 5 мм), остальное — 3,5 (14 пт).
+        body.Append(Line(JustificationValues.Center, 60, R(t.Title, bold: true, size: "40", caps: true)));
+        body.Append(Line(JustificationValues.Center, 4, R(t.Subtitle, size: "40")));
         if (t.ObjectName.Length > 0)
         {
             body.Append(Line(JustificationValues.Center, 4, R($"Объект: {t.ObjectName}")));
@@ -269,7 +270,20 @@ public static class NoteDocx
 
         body.Append(Line(JustificationValues.Center, 50));
         body.Append(signatures);
-        body.Append(Line(JustificationValues.Center, 30, R(t.CityYear)));
+        // Город и год — внизу листа (ГОСТ 7.32, 5.1.4): рамка абзаца, привязанная к странице, над нижним краем рамки листа.
+        body.Append(new Paragraph(
+            new ParagraphProperties(
+                new FrameProperties
+                {
+                    Width = Twips(185),
+                    X = Twips(20),
+                    Y = Twips(275),
+                    HorizontalPosition = HorizontalAnchorValues.Page,
+                    VerticalPosition = VerticalAnchorValues.Page,
+                    Wrap = TextWrappingValues.Around,
+                },
+                new Justification { Val = JustificationValues.Center }),
+            R(t.CityYear)));
     }
 
     private static void WriteContents(Body body)
