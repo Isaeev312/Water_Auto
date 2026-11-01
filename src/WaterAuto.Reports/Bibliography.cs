@@ -110,7 +110,7 @@ public static partial class Bibliography
             var rest = norm.Groups["rest"].Value.Trim();
             var kind = code.StartsWith("ГОСТ", StringComparison.Ordinal) ? "стандарт" : "свод правил";
             var edition = rest.Length > 0 ? $" : {rest}" : "";
-            return $"{code}. {name} : {kind}{edition}. — {Publication(entry)}.";
+            return Period($"{code}. {name} : {kind}{edition}. — {Publication(entry)}");
         }
 
         if (IsLegalAct(entry.Title))
@@ -121,8 +121,11 @@ public static partial class Bibliography
         }
 
         var authors = entry.Authors is "" or "—" ? "" : $"{entry.Authors.TrimEnd('.')}. ";
-        return $"{authors}{entry.Title.TrimEnd('.')}. — {Publication(entry)}.";
+        return Period($"{authors}{entry.Title.TrimEnd('.')}. — {Publication(entry)}");
     }
+
+    // Точка в конце описания — одна: объём уже оканчивается на «с.».
+    private static string Period(string text) => text.EndsWith('.') ? text : text + ".";
 
     // «Место : издательство, год. — объём с.»; отсутствующие части помечены, а не выдуманы.
     private static string Publication(LiteratureEntry e)

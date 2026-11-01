@@ -46,6 +46,7 @@ public class BibliographyTests
         var text = Bibliography.Format(book);
         text.ShouldStartWith("Мешман Л. М., Былинкин В. А. Проектирование водяных и пенных автоматических установок пожаротушения.");
         text.ShouldContain("М. : ВНИИПО, 2002. — 413 с.");
+        text.ShouldNotEndWith("с..");
     }
 
     [Fact]
