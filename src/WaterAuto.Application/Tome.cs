@@ -3,8 +3,14 @@ using WaterAuto.Export;
 
 namespace WaterAuto.Application;
 
-/// <summary>Том (основной комплект или документ) выпуска: обозначение, наименование и документы по порядку (имена исходных файлов).</summary>
-public sealed record TomeEntry(string Designation, string Name, IReadOnlyList<string> Documents);
+/// <summary>Документ в содержании тома стадии «П»: обозначение, наименование и его файлы (страницы считаются по их PDF).</summary>
+public sealed record TomeContentGroup(string Designation, string Name, IReadOnlyList<string> Documents);
+
+/// <summary>
+/// Том (основной комплект или документ) выпуска: обозначение, наименование и документы по порядку (имена исходных файлов).
+/// Том стадии «П» (<paramref name="Cover"/> задан) начинается обложкой, титульным листом и содержанием тома по <paramref name="Contents"/>.
+/// </summary>
+public sealed record TomeEntry(string Designation, string Name, IReadOnlyList<string> Documents, TomeCover? Cover = null, IReadOnlyList<TomeContentGroup>? Contents = null, string Stage = "Р", string Organization = "");
 
 /// <summary>Опись томов папки выпуска (tome.json): пишется при расчёте, по ней команда pdf собирает том и ИУЛ.</summary>
 public sealed record TomeManifest(IReadOnlyList<TomeEntry> Tomes, IReadOnlyList<IulSignature> Signatures, string Font);
@@ -73,7 +79,17 @@ public static class Tome
                 }
 
                 var target = Path.Combine(dir, tome.Designation + ".pdf");
-                var pages = IulPdf.Merge(pdfs, target, $"{tome.Designation} {tome.Name}");
+                var temp = Directory.CreateTempSubdirectory("wa_tome_").FullName;
+                int pages;
+                try
+                {
+                    pages = IulPdf.Merge(tome.Cover is null ? pdfs : [.. FrontPages(tome, dir, temp, manifest), .. pdfs], target, $"{tome.Designation} {tome.Name}");
+                }
+                finally
+                {
+                    Directory.Delete(temp, true);
+                }
+
                 var info = new FileInfo(target);
                 var iul = Path.Combine(dir, tome.Designation + "-УЛ.pdf");
                 IulPdf.Write(
@@ -89,5 +105,36 @@ public static class Tome
         }
 
         return done;
+    }
+
+    // Обложка, титульный лист и содержание тома: страницы нумеруются с титульного листа (1), содержание — 2, документы — с 3.
+    private static List<string> FrontPages(TomeEntry tome, string dir, string temp, TomeManifest manifest)
+    {
+        var cover = Path.Combine(temp, "cover.pdf");
+        var title = Path.Combine(temp, "title.pdf");
+        var contents = Path.Combine(temp, "contents.pdf");
+        TomePagesPdf.WriteCover(cover, tome.Cover!, titlePage: false, manifest.Font);
+        TomePagesPdf.WriteCover(title, tome.Cover!, titlePage: true, manifest.Font);
+        var counts = tome.Documents.ToDictionary(d => d, d =>
+        {
+            using var doc = PdfSharp.Pdf.IO.PdfReader.Open(Path.Combine(dir, Path.ChangeExtension(d, ".pdf")), PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+            return doc.PageCount;
+        });
+        var rows = new List<TomeContentRow> { new(tome.Designation + ".С", "Содержание тома", "2") };
+        var page = 3;
+        foreach (var group in tome.Contents ?? [])
+        {
+            var n = group.Documents.Sum(d => counts.GetValueOrDefault(d));
+            if (n == 0)
+            {
+                continue;
+            }
+
+            rows.Add(new TomeContentRow(group.Designation, group.Name, "Стр. " + TomePagesPdf.Pages(page, n)));
+            page += n;
+        }
+
+        TomePagesPdf.WriteContents(contents, tome.Designation, tome.Stage, tome.Organization, manifest.Signatures, rows, manifest.Font);
+        return [cover, title, contents];
     }
 }

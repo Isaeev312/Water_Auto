@@ -487,51 +487,51 @@ public static class ProjectPipeline
                         schemeLoops = loops;
                         if (project.Alarm?.Panel is { } panelPoint && File.Exists(cablesPath))
                         {
-                        var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
-                            plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
-                        issues.AddRange(journal.Issues);
-                        var allLines = journal.Lines.ToList();
+                            var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
+                                plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
+                            issues.AddRange(journal.Issues);
+                            var allLines = journal.Lines.ToList();
 
-                        // Неадресные оповещатели (адресов 0) — не на ДПЛС: линия 12 В от выхода релейного блока на посту через
-                        // оповещатели помещения цепочкой (по уровню — со стояком), отдельно звуковые и световые.
-                        var relayName = relayModel?.Name ?? "релейный блок";
-                        var notifierLine = 0;
-                        foreach (var (entry, list, purpose) in new[] { (sounderEntry, soue?.Sounders, "линия звукового оповещения 12 В"), (lightEntry, soue?.Lights, "линия светового оповещения 12 В") })
-                        {
-                            if (entry is not { Speaker: null, Device.Addresses: 0 } || list is not { Count: > 0 })
+                            // Неадресные оповещатели (адресов 0) — не на ДПЛС: линия 12 В от выхода релейного блока на посту через
+                            // оповещатели помещения цепочкой (по уровню — со стояком), отдельно звуковые и световые.
+                            var relayName = relayModel?.Name ?? "релейный блок";
+                            var notifierLine = 0;
+                            foreach (var (entry, list, purpose) in new[] { (sounderEntry, soue?.Sounders, "линия звукового оповещения 12 В"), (lightEntry, soue?.Lights, "линия светового оповещения 12 В") })
                             {
-                                continue;
+                                if (entry is not { Speaker: null, Device.Addresses: 0 } || list is not { Count: > 0 })
+                                {
+                                    continue;
+                                }
+
+                                foreach (var room in list.GroupBy(x => x.RoomId))
+                                {
+                                    var pts = room.Select(x => x.Location).ToList();
+                                    var segs = CableJournal.Segments(new PlanPoint(panelPoint.X, panelPoint.Y), pts, [.. room.Select(x => LevelMm(x.Id))]);
+                                    var baseM = segs.Take(segs.Count - 1).Sum(x => x.Mm) / 1000;
+                                    notifierLine++;
+                                    var roomName = detectorZones.FirstOrDefault(z => z.RoomId == room.Key)?.RoomName ?? room.Key;
+                                    allLines.Add(new CableLine($"ЛОН{notifierLine}", $"{relayName} (выход)", $"{room.Count()} × {entry.Model.Name} — {roomName}", purpose, LoadCables(cablesPath).PowerName, Math.Round(baseM * LoadCables(cablesPath).Reserve, 0),
+                                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"цепочка от поста через оповещатели помещения, ток {room.Count() * entry.Device.Alarm.Amperes * 1000:0} мА; сечение — по падению напряжения, проектировщик"), Math.Round(baseM, 0)));
+                                }
+                            }
+                            if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
+                            {
+                                // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
+                                var speechCables = AlarmCableCatalog.Load(cablesPath);
+                                foreach (var line in sp.Lines)
+                                {
+                                    var mark = speechCables.SpeechName is { } sn ? sn.Replace("{section}", (line.SectionMm2 ?? speechCables.SpeechSections?.Max() ?? 0).ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")), StringComparison.Ordinal) : "по проекту";
+                                    allLines.Add(new CableLine($"ЛО{line.Number}", ampl.Name, $"{line.Speakers} громкоговорителей {sounderEntry?.Model.Name} ({line.Group}){(lineMonitor is not null ? $", {lineMonitor.Name} в конце" : "")}", "линия речевого оповещения 100 В (дерево)", mark, line.LengthM,
+                                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{line.ConsumedW:0.#} Вт от линии, I = {line.ConsumedW / ampl.LineVoltage:0.###} А; сечение по формуле РЭ при ΔU ≤ {norms.Find("sp3.pB_3_4.voltageDrop")!.Values["maxDrop"]:0} % (В.3.4); отдельно от ДПЛС")));
+                                }
+
+                                for (var k = 1; k <= sp.Amplifiers; k++)
+                                {
+                                    allLines.Add(new CableLine($"С{k + 2}", "ВРУ (ввод 1)", $"{ampl.Name} №{k}", "питание 220 В, I категория", speechCables.MainsName, 0, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"до {ampl.MainsW:0} Вт; встроенные АКБ {ampl.Batteries} × {ampl.BatteryName}; длина — по месту ВРУ")));
+                                }
                             }
 
-                            foreach (var room in list.GroupBy(x => x.RoomId))
-                            {
-                                var pts = room.Select(x => x.Location).ToList();
-                                var segs = CableJournal.Segments(new PlanPoint(panelPoint.X, panelPoint.Y), pts, [.. room.Select(x => LevelMm(x.Id))]);
-                                var baseM = segs.Take(segs.Count - 1).Sum(x => x.Mm) / 1000;
-                                notifierLine++;
-                                var roomName = detectorZones.FirstOrDefault(z => z.RoomId == room.Key)?.RoomName ?? room.Key;
-                                allLines.Add(new CableLine($"ЛОН{notifierLine}", $"{relayName} (выход)", $"{room.Count()} × {entry.Model.Name} — {roomName}", purpose, LoadCables(cablesPath).PowerName, Math.Round(baseM * LoadCables(cablesPath).Reserve, 0),
-                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"цепочка от поста через оповещатели помещения, ток {room.Count() * entry.Device.Alarm.Amperes * 1000:0} мА; сечение — по падению напряжения, проектировщик"), Math.Round(baseM, 0)));
-                            }
-                        }
-                        if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
-                        {
-                            // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
-                            var speechCables = AlarmCableCatalog.Load(cablesPath);
-                            foreach (var line in sp.Lines)
-                            {
-                                var mark = speechCables.SpeechName is { } sn ? sn.Replace("{section}", (line.SectionMm2 ?? speechCables.SpeechSections?.Max() ?? 0).ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")), StringComparison.Ordinal) : "по проекту";
-                                allLines.Add(new CableLine($"ЛО{line.Number}", ampl.Name, $"{line.Speakers} громкоговорителей {sounderEntry?.Model.Name} ({line.Group}){(lineMonitor is not null ? $", {lineMonitor.Name} в конце" : "")}", "линия речевого оповещения 100 В (дерево)", mark, line.LengthM,
-                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{line.ConsumedW:0.#} Вт от линии, I = {line.ConsumedW / ampl.LineVoltage:0.###} А; сечение по формуле РЭ при ΔU ≤ {norms.Find("sp3.pB_3_4.voltageDrop")!.Values["maxDrop"]:0} % (В.3.4); отдельно от ДПЛС")));
-                            }
-
-                            for (var k = 1; k <= sp.Amplifiers; k++)
-                            {
-                                allLines.Add(new CableLine($"С{k + 2}", "ВРУ (ввод 1)", $"{ampl.Name} №{k}", "питание 220 В, I категория", speechCables.MainsName, 0, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"до {ampl.MainsW:0} Вт; встроенные АКБ {ampl.Batteries} × {ampl.BatteryName}; длина — по месту ВРУ")));
-                            }
-                        }
-
-                        cableLines = allLines;
+                            cableLines = allLines;
                         }
                     }
 
@@ -2150,13 +2150,40 @@ public static class ProjectPipeline
         IReadOnlyList<TitleSignature> signatures = t.Signatures.Count > 0
             ? [.. t.Signatures.Select(s => new TitleSignature(s.Role, s.Name))]
             : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
-        return new TitleBlock($"{t.Code}-{mark}", project.Name, t.Building, name, t.Stage, t.Organization, signatures);
+        return new TitleBlock($"{t.Code}-{DesignMark(project, mark)}", project.Name, t.Building, name, t.Stage, t.Organization, signatures);
     }
+
+    /// <summary>
+    /// Марка документа стадии «П»: основной комплект ПТ — шифр раздела, его спецификации — «шифр.СО», записка — «шифр.ПЗ»
+    /// (как в томе ИОС2.2 образца); на стадии «Р» и для других марок — без изменений.
+    /// </summary>
+    public static string DesignMark(ProjectFile project, string mark)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var t = project.Title;
+        return !t.IsDesignStage ? mark : mark switch
+        {
+            "ПТ" => t.SectionMark,
+            "ПТ.СО" or "ПТ2.СО" => t.SectionMark + ".СО",
+            "ПЗ" => t.SectionMark + ".ПЗ",
+            _ => mark,
+        };
+    }
+
+    /// <summary>Графическая часть тома стадии «П» по порядку листов: принципиальная схема, расчётная (аксонометрическая) схема, план сетей.</summary>
+    public static readonly IReadOnlyList<string> DesignSheets = ["Принципиальная", "Аксонометрическая схема трубопроводов", "План этажа"];
 
     // Основная надпись листа основного комплекта: номер и наименование — из ведомости чертежей (по началу наименования).
     private static TitleBlock SheetStamp(ProjectFile project, string prefix, string fallbackName)
     {
         var sheet = project.Sheets.FirstOrDefault(s => s.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (project.Title.IsDesignStage)
+        {
+            // Стадия «П»: листы графической части тома нумеруются по её порядку; остальные листы в том не входят.
+            var k = DesignSheets.ToList().FindIndex(d => prefix.StartsWith(d, StringComparison.OrdinalIgnoreCase) || d.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            return Stamp(project, "ПТ", sheet?.Name ?? fallbackName) with { Sheet = k >= 0 ? (k + 1).ToString(CultureInfo.InvariantCulture) : null };
+        }
+
         return Stamp(project, "ПТ", sheet?.Name ?? fallbackName) with { Sheet = sheet?.Sheet };
     }
 
@@ -2350,10 +2377,48 @@ public static class ProjectPipeline
             }
         }
 
-        Manifest(
-            auptDir,
-            new TomeEntry($"{t.Code}-ПТ", "Автоматическая установка водяного пожаротушения. Основной комплект рабочих чертежей", Tome.Ordered(In(auptDir), Tome.AuptOrder)),
-            new TomeEntry($"{t.Code}-ПЗ", "Автоматическая установка водяного пожаротушения. Пояснительная записка", Tome.Ordered(In(auptDir), [NoteFile])));
+        if (t.IsDesignStage)
+        {
+            // Стадия «П» (как том ИОС2.2 образца): обложка, титул, содержание, записка, графическая часть, спецификация.
+            var written = In(auptDir).ToList();
+            var code = $"{t.Code}-{t.SectionMark}";
+            var note = Tome.Ordered(written, [NoteFile]);
+            string[] sheetNames = ["Принципиальная схема насосной станции пожаротушения", "Аксонометрическая (расчётная) схема трубопроводов", "План сетей. Расстановка оросителей, трубопроводы"];
+            var drawings = new List<TomeContentGroup>();
+            foreach (var (file, k) in new[] { PumpSchemeFile, AxonometryFile, PlanFile }.Select((f, k) => (f, k)))
+            {
+                foreach (var d in Tome.Ordered(written, [file]))
+                {
+                    drawings.Add(new TomeContentGroup(code, $"Лист {k + 1}. {sheetNames[k]}", [d]));
+                }
+            }
+
+            var spec = Tome.Ordered(written, [SpecificationDocxFile, PumpStationSpecFile]);
+            List<TomeContentGroup> groups =
+            [
+                new(code + ".ПЗ", "Пояснительная записка", note),
+                .. drawings,
+                new(code + ".СО", "Спецификация оборудования, изделий и материалов", spec),
+            ];
+            var cover = new Export.TomeCover(
+                t.Organization,
+                t.Customer,
+                t.Building,
+                "ПРОЕКТНАЯ ДОКУМЕНТАЦИЯ",
+                t.SectionTitle,
+                code,
+                t.Volume,
+                t.CityYear,
+                t.TitleSignatures.Count > 0 ? [.. t.TitleSignatures.Select(s => new Export.IulSignature(s.Role, s.Name))] : [new("Главный инженер проекта", t.Supervisor)]);
+            Manifest(auptDir, new TomeEntry(code, t.SectionTitle, [.. groups.SelectMany(g => g.Documents)], cover, groups, t.Stage, t.Organization));
+        }
+        else
+        {
+            Manifest(
+                auptDir,
+                new TomeEntry($"{t.Code}-ПТ", "Автоматическая установка водяного пожаротушения. Основной комплект рабочих чертежей", Tome.Ordered(In(auptDir), Tome.AuptOrder)),
+                new TomeEntry($"{t.Code}-ПЗ", "Автоматическая установка водяного пожаротушения. Пояснительная записка", Tome.Ordered(In(auptDir), [NoteFile])));
+        }
         Manifest(
             alarmDir,
             new TomeEntry($"{t.Code}-АПС", "Автоматическая пожарная сигнализация. Основной комплект рабочих чертежей", Tome.Ordered(In(alarmDir), Tome.AlarmOrder)),
