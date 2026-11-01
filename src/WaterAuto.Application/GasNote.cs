@@ -12,9 +12,14 @@ public static class GasNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<(GasRoom Room, string Agent, GasMassResult Result)> rooms, double altitude, IReadOnlyList<Issue> issues,
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<(GasRoom Room, string Agent, GasMassResult Result)> rooms, double altitude, IReadOnlyList<Issue> issues, INormsProvider norms,
         IReadOnlyList<(string Room, string Module, GasModulesResult Result)>? modules = null)
     {
+        ArgumentNullException.ThrowIfNull(norms);
+        double V(string id, string key) => norms.Find(id)!.Values[key]!.Value;
+        var minFill = V("sp485.p9_6_5.minFill", "minFillPercent");
+        var reserve = V("sp485.p9_6.reserve", "reservePercent");
+        var discharge = norms.Find("sp485.p9_7_4.dischargeTime")!.Values;
         ArgumentNullException.ThrowIfNull(rooms);
         ArgumentNullException.ThrowIfNull(issues);
         static string F(double v, string fmt = "0.##") => v.ToString(fmt, Ru);
@@ -39,10 +44,10 @@ public static class GasNote
                 .. rooms.Select(x => (NoteBlock)new NoteParagraph(string.Create(Ru,
                     $"{x.Room.Name}: Mр = {F(x.Room.VolumeM3, "0")}·{F(x.Result.Rho1, "0.###")}·(1 + {F(x.Result.K2, "0.#####")})·{(x.Result.Concentration > 0 ? $"{F(x.Result.Concentration, "0.0")}/(100 − {F(x.Result.Concentration, "0.0")})" : "—")} = {F(x.Result.DesignMass, "0.#")} кг; Mг = 1,05·({F(x.Result.DesignMass, "0.#")} + {F(x.Room.PipeResidueKg ?? 0, "0.#")} + {F(x.Room.ModuleResidueKg * x.Room.Modules, "0.#")}) = {F(x.Result.TotalMass, "0")} кг."))),
                 .. modules is { Count: > 0 }
-                    ? new NoteBlock[] { new NoteTable("Модули (Mг по Д.1 с остатком Mб·n; наполнение не менее 44 % максимального, п. 9.6.5)", ["Помещение", "Модуль", "n, шт.", "ГОТВ в модуле, кг", "Наполнение, %"],
+                    ? new NoteBlock[] { new NoteTable(string.Create(Ru, $"Модули (Mг по Д.1 с остатком Mб·n; наполнение не менее {minFill:0} % максимального, п. 9.6.5)"), ["Помещение", "Модуль", "n, шт.", "ГОТВ в модуле, кг", "Наполнение, %"],
                         [.. modules.Select(m => (IReadOnlyList<string>)[m.Room, m.Module, m.Result.Modules.ToString(Ru), F(m.Result.MassPerModule, "0.#"), F(m.Result.FillPercent, "0")])]) }
                     : [],
-                new NoteParagraph(string.Create(Ru, $"Масса ГОТВ на объект — по наибольшему помещению (направлению): {F(rooms.Max(x => x.Result.TotalMass), "0")} кг; кроме расчётного количества — 100 % запас (модульные) или резерв (централизованные), п. 9.6.2, 9.6.3. Количество и типоразмер модулей — по ТД изготовителя (наполнение не менее 44 % максимального, п. 9.6.5).")),
+                new NoteParagraph(string.Create(Ru, $"Масса ГОТВ на объект — по наибольшему помещению (направлению): {F(rooms.Max(x => x.Result.TotalMass), "0")} кг; кроме расчётного количества — {F(reserve, "0")} % запас (модульные) или резерв (централизованные), п. 9.6.2, 9.6.3. Количество и типоразмер модулей — по ТД изготовителя (наполнение не менее {F(minFill, "0")} % максимального, п. 9.6.5).")),
             ]),
             new("3", "Проём для сброса избыточного давления",
             [
@@ -56,10 +61,10 @@ public static class GasNote
                 new NoteList(
                 [
                     "автоматический (основной) и дистанционный пуск; задержка выпуска ГОТВ на эвакуацию, отключение вентиляции и закрытие клапанов — не менее 10 с от включения СОУЭ (пп. 9.2.2, 9.7.1);",
-                    "все сосуды одного помещения включаются в интервале не более 2 с (п. 9.7.2); подача 95 % массы — за 10 с (модульные со сжиженными ГОТВ), 15 с (централизованные), 60 с (CO₂, сжатые газы) (п. 9.7.4);",
-                    "модули — при температуре −20…50 °С, не ближе 1 м от источников тепла (пп. 9.8.1, 9.8.4); насадки ГОТВ тяжелее воздуха — не дальше 0,5 м от перекрытия (п. 9.11.3);",
+                    $"все сосуды одного помещения включаются в интервале не более {F(V("sp485.p9_7_2.startInterval", "maxInterval"))} с (п. 9.7.2); подача {F(discharge["minMassPercent"]!.Value)} % массы — за {F(discharge["modularLiquefied"]!.Value)} с (модульные со сжиженными ГОТВ), {F(discharge["centralLiquefied"]!.Value)} с (централизованные), {F(discharge["co2OrCompressed"]!.Value)} с (CO₂, сжатые газы) (п. 9.7.4);",
+                    $"модули — при температуре {F(V("sp485.p9_8_4.moduleTemperature", "min")).Replace("-", "−", StringComparison.Ordinal)}…{F(V("sp485.p9_8_4.moduleTemperature", "max"))} °С, не ближе 1 м от источников тепла (пп. 9.8.1, 9.8.4); насадки ГОТВ тяжелее воздуха — не дальше {F(V("sp485.p9_11_3.nozzleCeiling", "maxFromCeiling"))} м от перекрытия (п. 9.11.3);",
                     "доводчики дверей, уплотнение кабельных проходок, указатели и сигнализация у входов «Газ — уходи!», «Газ — не входи!» (пп. 9.14.1, 9.14.4); удаление ГОТВ после тушения — по СП 7.13130 (п. 9.14.5);",
-                    "трубопроводы — стальные, прочность 1,25·Pраб, заземление, зазор от стены не менее 2 см (пп. 9.9.1–9.9.7); устройства ручного пуска — на высоте не более 1,7 м, опломбированы (пп. 9.10.4, 9.16.2).",
+                    $"трубопроводы — стальные, прочность 1,25·Pраб, заземление, зазор от стены не менее 2 см (пп. 9.9.1–9.9.7); устройства ручного пуска — на высоте не более {F(V("sp485.p9_10_4.remoteStartHeight", "maxHeight"))} м, опломбированы (пп. 9.10.4, 9.16.2).",
                 ]),
                 new NotePending("Гидравлический расчёт (диаметры, насадки, время подачи, остаток в трубопроводах) — по методике изготовителя установки (п. 9.4.2); до него масса предварительная (вопрос А-18)."),
             ]),

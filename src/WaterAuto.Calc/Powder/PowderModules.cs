@@ -191,7 +191,7 @@ public static class PowderModules
         var reserve = results.Count == 0 ? 0 : (int)Math.Ceiling(results.Max(r => r.Modules) * reserveRule.Values["reservePercent"]!.Value / 100 - 1e-9);
         if (reserve > 0)
         {
-            issues.Add(new Issue("powder.reserve", IssueLevel.Info, $"Запас модулей {module.Name} — {reserve} шт. (100 % наибольшего помещения).", Clause: Doc + ", п. 10.2.16"));
+            issues.Add(new Issue("powder.reserve", IssueLevel.Info, $"Запас модулей {module.Name} — {reserve} шт. ({reserveRule.Values["reservePercent"]:0} % наибольшего помещения).", Clause: Doc + ", п. 10.2.16"));
         }
 
         return new(results, reserve, issues);

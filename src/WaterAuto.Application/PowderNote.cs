@@ -12,8 +12,11 @@ public static class PowderNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<PowderRoom> rooms, PowderModuleEntry module, PowderResult result, IReadOnlyList<Issue> issues, PowderStartPlan? start = null, PowderStartUnit? unit = null)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<PowderRoom> rooms, PowderModuleEntry module, PowderResult result, IReadOnlyList<Issue> issues, INormsProvider norms, PowderStartPlan? start = null, PowderStartUnit? unit = null)
     {
+        ArgumentNullException.ThrowIfNull(norms);
+        var local = norms.Find("sp485.p10_2_7.localZone")!.Values;
+        var reservePercent = norms.Find("sp485.p10_2_16.reserve")!.Values["reservePercent"]!.Value;
         ArgumentNullException.ThrowIfNull(rooms);
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(result);
@@ -35,12 +38,12 @@ public static class PowderNote
                     "где *S*_{н}, *V*_{н} — площадь и объём, защищаемые одним модулем, по документации на модуль на высоте установки (формулы И.3, И.1);",
                     "*k*_{1} — неравномерность распыла 1…1,2 (1,2 — на предельной высоте); *k*_{2} — запас на затенения по документации изготовителя;",
                     "*k*_{3} — эффективность порошка по горючему веществу (табл. И.1); *k*_{4} — по площади 1,2, локально 1,3, по объёму 1 + 10·*f* (И.2);",
-                    "локально расчётная площадь увеличивается на 10 %, объём — на 15 % (п. 10.2.7); дробное *N* округляется вверх.",
+                    string.Create(Ru, $"локально расчётная площадь увеличивается на {local["areaIncrease"]:0.#} %, объём — на {local["volumeIncrease"]:0.#} % (п. 10.2.7); дробное *N* округляется вверх."),
                 ]),
                 new NoteTable("Результат", ["Помещение", "Расчётная величина", "На модуль", "k1", "k2", "k3", "k4", "N, шт."],
                     [.. result.Rooms.Select(r => (IReadOnlyList<string>)[rooms.First(x => x.Id == r.RoomId).Name, r.Protected.ToString("0.##", Ru), r.PerModule.ToString("0.##", Ru), r.K1.ToString("0.##", Ru), r.K2.ToString("0.##", Ru), r.K3.ToString("0.##", Ru), r.K4.ToString("0.###", Ru), r.Modules.ToString(Ru)])]),
                 .. result.Rooms.Select(r => (NoteBlock)new NoteParagraph($"{rooms.First(x => x.Id == r.RoomId).Name}: {r.Formula} ({r.Clause}).")),
-                new NoteParagraph(string.Create(Ru, $"Всего модулей — {result.Rooms.Sum(r => r.Modules)} шт.; запас — {result.Reserve} шт. (100 % модулей наибольшего помещения, п. 10.2.16).")),
+                new NoteParagraph(string.Create(Ru, $"Всего модулей — {result.Rooms.Sum(r => r.Modules)} шт.; запас — {result.Reserve} шт. ({reservePercent:0} % модулей наибольшего помещения, п. 10.2.16).")),
             ]),
             new("3", "Пуск и безопасность",
             [

@@ -733,7 +733,7 @@ public static class ProjectPipeline
                 }
             }
 
-            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, start, unit?.Model);
+            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, norms, start, unit?.Model);
             // План: модули сеткой по помещению, не меньше расчётного N (PowderLayout); если сетка дала больше — замечание.
             var planRooms = new List<PowderPlanRoom>();
             foreach (var rr in result.Rooms)
@@ -844,7 +844,7 @@ public static class ProjectPipeline
 
             var tg = project.Title;
             var gasNote = GasNote.Build(new NoteTitle(tg.Organization, tg.Subject, tg.Document, tg.Author, tg.Supervisor, tg.CityYear, project.Name), results, gas.Altitude, issues,
-                [.. chosen.Select(c => (c.Room.Name, c.Entry.Model.Name, c.Result))]);
+                norms, [.. chosen.Select(c => (c.Room.Name, c.Entry.Model.Name, c.Result))]);
             Write(Path.Combine(outDir, GasVolume), GasNoteFile, files, p => NoteDocx.Write(p, gasNote, Stamp(project, "АГП.ПЗ", "Газовое пожаротушение. Пояснительная записка"), project.Font));
             if (chosen.Count > 0)
             {
