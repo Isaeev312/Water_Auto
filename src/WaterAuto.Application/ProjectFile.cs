@@ -95,6 +95,11 @@ public sealed record ProjectFile
             return null;
         }
 
+        if (project.Design is null)
+        {
+            throw new InvalidDataException("В проекте раздел design пуст (null).");
+        }
+
         var node = System.Text.Json.Nodes.JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
         var hasJoints = node?["design"] is System.Text.Json.Nodes.JsonObject d && d.ContainsKey("joints");
         return hasJoints ? project : project with { Design = project.Design with { Joints = Core.JointKind.Welded } };

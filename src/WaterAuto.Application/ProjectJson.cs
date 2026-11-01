@@ -35,7 +35,19 @@ public static class ProjectJson
         var actual = JsonNode.Parse(File.ReadAllText(path), documentOptions: ReadOptions) as JsonObject
             ?? throw new InvalidDataException($"Файл проекта не является JSON-объектом: {path}");
         var defaults = JsonNode.Parse(ProjectFile.ToJson(new ProjectFile()), documentOptions: ReadOptions) as JsonObject ?? new JsonObject();
-        return Merge(defaults, actual);
+        var merged = Merge(defaults, actual);
+
+        // Проект без design.joints записан до выбора соединений и считался на сварке (ProjectFile.Load) — так же и в мастере,
+        // иначе сохранение молча переведёт его на муфты.
+        if (actual["design"] is not JsonObject design || !design.ContainsKey("joints"))
+        {
+            if (merged["design"] is JsonObject md)
+            {
+                md["joints"] = nameof(Core.JointKind.Welded);
+            }
+        }
+
+        return merged;
     }
 
     /// <summary>Слияние фактических значений поверх умолчаний; вложенные объекты сливаются, листья заменяются.</summary>

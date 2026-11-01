@@ -137,7 +137,12 @@ public static class MaterialTakeoffBuilder
                 }
                 else if (outs.Count == 1 && straight is null)
                 {
-                    Fitting($"Отвод 90° DN{inDn}", [inDn, Dn(outs[0])]);
+                    // Поворот со сменой DN — отвод большего DN и переход.
+                    Fitting($"Отвод 90° DN{inDn}", inDn);
+                    if (Dn(outs[0]) < inDn)
+                    {
+                        Fitting($"Переход DN{inDn}×{Dn(outs[0])}", inDn, Dn(outs[0]));
+                    }
                 }
                 else if (outs.Count == 2)
                 {
@@ -203,7 +208,7 @@ public static class MaterialTakeoffBuilder
                 return new TakeoffItem(TakeoffGroup.Fittings, name, joints.CouplingStandard, count, "шт.");
             }
 
-            if (joints is not null && (name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal) || name.Contains(" (концы: ", StringComparison.Ordinal)))
+            if (joints is not null && (name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal) || (name.Contains(" (концы: ", StringComparison.Ordinal) && name.Contains("под муфту", StringComparison.Ordinal))))
             {
                 return new TakeoffItem(TakeoffGroup.Fittings, name, null, count, "шт.", "по каталогу изготовителя муфт");
             }

@@ -1054,7 +1054,10 @@ public static class ProjectPipeline
         var standardByDn = routes.SelectMany(r => r.Segments.Concat(r.Loops))
             .Select(s => jointSeries.Pick(s.Dn)).OfType<SeriesPipe>()
             .GroupBy(x => x.Dn).ToDictionary(g => g.Key, g => g.First().Standard);
-        var jointPlan = PipeJoints.Resolve(standardByDn, design.Joints, design.GroovedMinDn, norms);
+        // DN, которых нет в сортаменте под муфты и резьбу (первый стандарт проекта): для них сварка — единственный вариант.
+        var smallSeries = new PipeSeries(norms, design.PipeStandard, pipeSizes);
+        var noGroovedGrade = standardByDn.Keys.Where(dn => smallSeries.Pick(dn)?.Dn != dn).ToHashSet();
+        var jointPlan = PipeJoints.Resolve(standardByDn, design.Joints, design.GroovedMinDn, norms, noGroovedGrade);
         issues.AddRange(jointPlan.Issues);
         var jointsText = JointsText(design, jointPlan);
         var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, seriesStandard, new SprinklerSpec(

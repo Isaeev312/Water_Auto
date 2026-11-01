@@ -61,4 +61,30 @@ public class PipeJointsTests
         r.Issues.ShouldContain(i => i.Code == "joints.check" && i.Level == IssueLevel.Info && i.Message.Contains("6.7.2.5") && i.Message.Contains("6.7.1.8"));
         r.NormIds.ShouldContain("sp485.p6_7_2_5.categoryAB");
     }
+    [Fact]
+    public void Threaded_choice_is_checked_against_the_pipe_standard_too()
+    {
+        var r = PipeJoints.Resolve(new Dictionary<int, string> { [32] = "ГОСТ 10704-91", [25] = "ГОСТ 3262-75" }, JointKind.Threaded, 50, Norms);
+        r.ByDn[32].ShouldBe(JointKind.Welded);
+        r.ByDn[25].ShouldBe(JointKind.Threaded);
+        r.Issues.ShouldContain(i => i.Code == "joints.standard");
+    }
+
+    [Fact]
+    public void Welded_network_still_reminds_of_rooms_A_B()
+    {
+        // п. 6.7.2.5: в помещениях А и Б сварка недопустима — напоминание нужно и сварной сети.
+        var r = PipeJoints.Resolve(new Dictionary<int, string> { [50] = "ГОСТ 10704-91" }, JointKind.Welded, 50, Norms);
+        r.Issues.ShouldContain(i => i.Code == "joints.check" && i.Message.Contains("6.7.2.5"));
+    }
+
+    [Fact]
+    public void DN_without_a_coupling_grade_in_the_data_is_welded_with_info_only()
+    {
+        // DN200 есть только в ГОСТ 10704: сварка — единственный вариант, это не предупреждение, а сведение.
+        var r = PipeJoints.Resolve(new Dictionary<int, string> { [200] = "ГОСТ 10704-91" }, JointKind.Grooved, 50, Norms, noGroovedGrade: new HashSet<int> { 200 });
+        r.ByDn[200].ShouldBe(JointKind.Welded);
+        r.Issues.ShouldNotContain(i => i.Level >= IssueLevel.Warning);
+        r.Issues.ShouldContain(i => i.Code == "joints.welded" && i.Level == IssueLevel.Info);
+    }
 }
