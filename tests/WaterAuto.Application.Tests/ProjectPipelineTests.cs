@@ -685,6 +685,11 @@ public sealed class ProjectPipelineTests : IDisposable
         var gasSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.GasSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
         gasSpec.Single(r => r[2] == "МПА-КД (50-180-50)")[5].ShouldBe("12");
         var note = result.Files.Single(f => f.EndsWith(ProjectPipeline.GasNoteFile, StringComparison.Ordinal));
+        // Числа общих требований разд. 9 — из данных норм (пп. 9.8.1, 9.9.4, 9.9.5).
+        var gasText = string.Join(" ", WaterAuto.Reports.DocxPreview.ReadParagraphs(note));
+        gasText.ShouldContain("не ближе 1 м от источников тепла");
+        gasText.ShouldContain("1,25·Pраб");
+        gasText.ShouldContain("не менее 2 см");
         Path.GetFileName(Path.GetDirectoryName(note)).ShouldBe(ProjectPipeline.GasVolume);
         using (var doc = WordprocessingDocument.Open(note, false))
         {
