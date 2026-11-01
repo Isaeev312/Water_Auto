@@ -65,24 +65,31 @@ public static class AuptLevels
         levels.FirstOrDefault(l => roomId.StartsWith(l.Prefix, StringComparison.Ordinal));
 
     /// <summary>Параметры расчёта трассы этажа: диктующий выше на Δz, подводящий длиннее на стояк |Δz|; основной этаж — без изменений.</summary>
-    public static DesignSettings SettingsFor(string roomId, IReadOnlyList<AuptLevel> levels, DesignSettings settings, ProjectDesign design)
+    /// <remarks>Свой подвод секции (<paramref name="feed"/>) заменяет общие длину и DN подводящего; стояк этажа добавляется к нему.</remarks>
+    public static DesignSettings SettingsFor(string roomId, IReadOnlyList<AuptLevel> levels, DesignSettings settings, ProjectDesign design, ProjectFeed? feed = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(design);
+        var supply = feed?.SupplyLength ?? design.SupplyLength;
+        if (feed is not null)
+        {
+            settings = settings with { SupplyLength = new Length(supply), SupplyDn = feed.SupplyDn ?? settings.SupplyDn };
+        }
+
         // Стояк своим DN — отдельный участок |Δz|, разводка до него — по DN подводящего; без DN — всё по подводящему (В-28).
         return Of(roomId, levels) is { } l
             ? l.RiserDn is { } dn
                 ? settings with
                 {
                     DictatingAboveAxis = new Length(design.DictatingAboveAxis + l.Delta),
-                    SupplyLength = new Length(design.SupplyLength + l.RiserRun),
+                    SupplyLength = new Length(supply + l.RiserRun),
                     RiserLength = new Length(Math.Abs(l.Delta)),
                     RiserDn = dn,
                 }
                 : settings with
                 {
                     DictatingAboveAxis = new Length(design.DictatingAboveAxis + l.Delta),
-                    SupplyLength = new Length(design.SupplyLength + l.RiserRun + Math.Abs(l.Delta)),
+                    SupplyLength = new Length(supply + l.RiserRun + Math.Abs(l.Delta)),
                 }
             : settings;
     }

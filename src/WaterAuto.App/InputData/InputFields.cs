@@ -397,6 +397,18 @@ internal static class InputFields
                                 new TableColumn("riserRun", "До стояка, м", ColumnKind.Number),
                             ]),
                     ]),
+                new CardSpec("Подводы секций",
+                    [
+                        new FieldSpec("design", "feeds", "Свой подводящий трубопровод помещения", FieldKind.Table,
+                            Hint: "Длина и DN от насоса до ввода ПТ_ВВОД этого помещения; остальные — по общему подводящему. " +
+                                "Расход не меняется (секционирование по п. 6.2.3 его не уменьшает), меняются потери и напор.",
+                            Columns:
+                            [
+                                new TableColumn("room", "Помещение", Required: true),
+                                new TableColumn("supplyLength", "Длина, м", ColumnKind.Number, Required: true),
+                                new TableColumn("supplyDn", "DN", ColumnKind.Int),
+                            ]),
+                    ]),
             ]),
         new("Водяные завесы",
             "Дренчерные завесы проёмов (пп. 6.3.6–6.3.14): число ниток, шаг оросителей и расход программа считает сама.",

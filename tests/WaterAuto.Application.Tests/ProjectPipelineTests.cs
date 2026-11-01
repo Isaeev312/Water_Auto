@@ -328,6 +328,44 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Section_feed_of_its_own_shortens_the_supply_and_lowers_the_pump_head()
+    {
+        // Склад группы 5 задаёт напор при общем подводящем 30 м DN125; свой подвод к секции склада 5 м DN150 — напор ниже,
+        // расход прежний (подвод на расход не влияет). Запись для помещения, которого нет на чертеже, — замечание.
+        Drawing(storeWidth: 15000);
+        ProjectFile Project(IReadOnlyList<ProjectFeed> feeds) => new()
+        {
+            Name = "Подводы секций",
+            Drawing = "floor.dxf",
+            Design = new ProjectDesign
+            {
+                RoomGroup = "2",
+                SprinklerK = 0.47,
+                SprinklerModel = "по каталогу",
+                PipeElevation = -1.5,
+                DictatingAboveAxis = 3.5,
+                SupplyLength = 30,
+                SupplyDn = 125,
+                InletPressure = 0.1,
+                DesignVelocity = 5,
+                Rooms = [new ProjectRoomGroup { Room = "Склад", Group = "5", StorageHeight = 3 }],
+                Feeds = feeds,
+            },
+        };
+        var common = Run(Write("common.waproj", ProjectFile.ToJson(Project([]))));
+        var commonHead = common.Design!.PumpHead.Meters;
+        var commonFlow = common.Design.PumpFlow.LitersPerSecond;
+
+        var result = Run(Write("feeds.waproj", ProjectFile.ToJson(Project(
+            [new ProjectFeed { Room = "Склад", SupplyLength = 5, SupplyDn = 150 }, new ProjectFeed { Room = "Нет такого", SupplyLength = 1 }]))));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        result.Design!.PumpHead.Meters.ShouldBeLessThan(commonHead - 1);
+        result.Design.PumpFlow.LitersPerSecond.ShouldBe(commonFlow, 0.05);
+        result.Issues.ShouldContain(i => i.Code == "design.feeds.noRoom" && i.Message.Contains("Нет такого"));
+    }
+
+    [Fact]
     public void Upper_level_is_fed_by_the_riser_and_governs_the_pump_head()
     {
         // Тот же этаж на отметке +3,3 м: диктующий выше на 3,3 м, подводящий длиннее на стояк — напор больше более чем на 3,3 м;

@@ -888,6 +888,17 @@ public static class ProjectPipeline
         }
 
         AuptGroups.CheckRooms(design, [plan, .. auptLevels.Select(l => l.Plan)], issues);
+
+        // Свои подводы секций (design.feeds): помещение по имени на любом этаже; без записи — общий подводящий.
+        var roomNames = new[] { plan }.Concat(auptLevels.Select(l => l.Plan)).SelectMany(p => p.Rooms).ToDictionary(r => r.Id, r => r.Name);
+        foreach (var f in design.Feeds.Where(f => !roomNames.Values.Any(n => string.Equals(n, f.Room, StringComparison.OrdinalIgnoreCase))))
+        {
+            issues.Add(new Issue("design.feeds.noRoom", IssueLevel.Warning, $"design.feeds: помещение «{f.Room}» на чертежах не найдено (слой ПТ_КОНТУР) — подвод не применён."));
+        }
+
+        ProjectFeed? FeedOf(string roomId) => roomNames.TryGetValue(roomId, out var name)
+            ? design.Feeds.FirstOrDefault(f => string.Equals(f.Room, name, StringComparison.OrdinalIgnoreCase))
+            : null;
         var mainZone = roomGroups.Zones.FirstOrDefault(z => z.Group == design.RoomGroup) ?? roomGroups.Zones[0];
         var rules = mainZone.Rules;
         var parameters = mainZone.Parameters;
@@ -960,13 +971,13 @@ public static class ProjectPipeline
         IReadOnlyList<int>? sprinklerTemps = null;
         if (sprinklerK > 0)
         {
-            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, roomGroups.ZoneOf(r.RoomId).Rules, AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design), roomGroups.ZoneOf(r.RoomId).Parameters, hydrants)).ToList();
+            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, roomGroups.ZoneOf(r.RoomId).Rules, AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design, FeedOf(r.RoomId)), roomGroups.ZoneOf(r.RoomId).Parameters, hydrants)).ToList();
         }
         else
         {
             // Автоподбор: модели каталога с нужным положением розетки, полный расчёт для каждой (SprinklerSelection).
             var catalog = SprinklerCatalog.ForWater(SprinklerCatalog.Load(catalogPath), design.SprinklerDeflector).ToList();
-            selection = SprinklerSelection.Select([.. routing.Routes.Select(r => (r, roomGroups.ZoneOf(r.RoomId).Rules, (FireParameters?)roomGroups.ZoneOf(r.RoomId).Parameters, (DesignSettings?)AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design)))], norms, settings, hydrants, catalog.Select(c => c.Candidate).ToList());
+            selection = SprinklerSelection.Select([.. routing.Routes.Select(r => (r, roomGroups.ZoneOf(r.RoomId).Rules, (FireParameters?)roomGroups.ZoneOf(r.RoomId).Parameters, (DesignSettings?)AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design, FeedOf(r.RoomId))))], norms, settings, hydrants, catalog.Select(c => c.Candidate).ToList());
             issues.AddRange(selection.Issues);
             if (selection is not { Chosen: { } chosen, Designs: { } chosenDesigns })
             {
@@ -1874,7 +1885,7 @@ public static class ProjectPipeline
                 routing with { Routes = routes },
                 takeoff,
                 governing,
-                AuptLevels.SettingsFor(governing.Route.RoomId, auptLevels, settings, design),
+                AuptLevels.SettingsFor(governing.Route.RoomId, auptLevels, settings, design, FeedOf(governing.Route.RoomId)),
                 literature,
                 ids,
                 selection,

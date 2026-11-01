@@ -164,6 +164,9 @@ public sealed record ProjectDesign
     /// <summary>Другие этажи сети: чертёж (с вводом — местом стояка, слой ПТ_ВВОД) и отметка пола; основной этаж — Drawing проекта.</summary>
     public IReadOnlyList<ProjectAuptLevel> Levels { get; init; } = [];
 
+    /// <summary>Свои подводы секций: длина и DN подводящего от насоса до ввода помещения; остальные помещения — SupplyLength и SupplyDn.</summary>
+    public IReadOnlyList<ProjectFeed> Feeds { get; init; } = [];
+
     /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
     public double? FloorElevation { get; init; }
 
@@ -258,6 +261,16 @@ public sealed record ProjectAuptLevel
 
     /// <summary>Разводка по основному этажу от подводящего до стояка, м (DN подводящего); 0 — стояк у точки подключения.</summary>
     public double RiserRun { get; init; }
+}
+
+/// <summary>Подвод секции: помещение (текст внутри контура ПТ_КОНТУР), длина подводящего от насоса до его ввода, м, и DN (пусто — SupplyDn).</summary>
+public sealed record ProjectFeed
+{
+    public string Room { get; init; } = "";
+
+    public double SupplyLength { get; init; }
+
+    public int? SupplyDn { get; init; }
 }
 
 /// <summary>Помещение со своей группой по приложению А СП 485 (имя — текст внутри контура ПТ_КОНТУР) и высотами для табл. 6.2, 6.3.</summary>
