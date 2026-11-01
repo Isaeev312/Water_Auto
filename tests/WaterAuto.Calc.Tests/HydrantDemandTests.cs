@@ -38,20 +38,26 @@ public class HydrantDemandTests
     }
 
     [Fact]
-    public void Russian_tall_production_building_takes_four_jets_of_5_lps_by_7_13()
+    public void Russian_production_building_above_50_m_takes_jets_of_5_lps_by_7_13()
     {
-        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, BuildingHeight = new Length(55), VolumeThousandM3 = 200, ValveDn = 65, NozzleMm = 19 }).Demand!;
-        d.Jets.ShouldBe(4);
-        d.MinJetFlow.LitersPerSecond.ShouldBe(5);
-        d.NormIds.ShouldContain("sp10.p7_13.highRise");
+        // Изм. № 1: табл. 7.2 — до 50 м; выше — п. 7.13: 2 × 5 л/с до 150 тыс. м³ включительно, 4 × 5 л/с — больше.
+        var tall = Parking with { Region = NormsRegion.Ru, BuildingHeight = new Length(55), ValveDn = 65, NozzleMm = 19 };
+        var big = HydrantDemand.Resolve(Norms, tall with { VolumeThousandM3 = 200 }).Demand!;
+        big.Jets.ShouldBe(4);
+        big.MinJetFlow.LitersPerSecond.ShouldBe(5);
+        big.NormIds.ShouldContain("sp10.p7_13.highRise");
+        var small = HydrantDemand.Resolve(Norms, tall with { VolumeThousandM3 = 100 }).Demand!;
+        small.Jets.ShouldBe(2);
+        small.MinJetFlow.LitersPerSecond.ShouldBe(5);
     }
 
     [Fact]
     public void Russian_public_building_takes_row_of_table_7_1()
     {
-        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, Zh1Row = "g4.seats_over300" }).Demand!;
-        d.Jets.ShouldBe(2);
-        d.NormIds.ShouldContain("sp10.t7_1.g4.seats_over300");
+        // Изм. № 1: зал Ф2.1 более 300 мест — 4 струи (в первоначальной редакции было 2).
+        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, Zh1Row = "g5.seats_over300" }).Demand!;
+        d.Jets.ShouldBe(4);
+        d.NormIds.ShouldContain("sp10.t7_1.g5.seats_over300");
     }
 
     [Fact]

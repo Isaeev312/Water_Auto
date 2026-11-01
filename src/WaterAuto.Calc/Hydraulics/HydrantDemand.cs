@@ -123,34 +123,39 @@ public static class HydrantDemand
                 return Stop("vpv.noRow", IssueLevel.Error, $"В {set.Table2} нет строки для степени {s.FireResistance}, категории {s.Category}, класса {s.HazardClass}. Допустимо: степень I–V, категория А, Б, В, Г, Д, класс С0–С3.", set.Table2);
             }
 
-            if (row.Values.GetValueOrDefault("heightMax") is { } heightMax && s.BuildingHeight.Meters > heightMax + 1e-9)
+            var high = set.HighRiseId is { } highId ? norms.Find(highId) : null;
+            if (high is not null && s.BuildingHeight.Meters > high.Values["heightOver"]!.Value + 1e-9)
+            {
+                // Производственное или складское здание выше предела таблицы — число струй по отдельному пункту
+                // (принято для любой строки таблицы, в запас; В-29).
+                var bigVolume = s.VolumeThousandM3 > high.Values["volumeSplit"]!.Value + 1e-9;
+                n = (int)high.Values[bigVolume ? "jetsOver150" : "jetsUpTo150"]!.Value;
+                qMin = high.Values["jetFlow"]!.Value;
+                (rowId, source) = (high.Id, $"п. {high.Clause} {set.Doc}");
+            }
+            else if (row.Values.GetValueOrDefault("heightMax") is { } heightMax && s.BuildingHeight.Meters > heightMax + 1e-9)
             {
                 return Stop("vpv.outOfTable", IssueLevel.Error, $"Высота здания {s.BuildingHeight} больше {heightMax} м — вне {set.Table2}.", set.Table2);
             }
 
-            if (s.VolumeThousandM3 < row.Values["volumeMin"]!.Value)
+            else
             {
-                return Stop("vpv.notRequired", IssueLevel.Info, $"Объём здания меньше {row.Values["volumeMin"]} тыс. м³ — ВПВ по {set.Table2} не требуется.", set.Table2);
-            }
+                if (s.VolumeThousandM3 < row.Values["volumeMin"]!.Value)
+                {
+                    return Stop("vpv.notRequired", IssueLevel.Info, $"Объём здания меньше {row.Values["volumeMin"]} тыс. м³ — ВПВ по {set.Table2} не требуется.", set.Table2);
+                }
 
-            var small = s.VolumeThousandM3 <= row.Values["volumeSplit"]!.Value;
-            var jets = row.Values[small ? "jetsUpTo150" : "jetsOver150"];
-            var minFlow = row.Values[small ? "jetFlowUpTo150" : "jetFlowOver150"];
-            if (jets is not { } jetsValue || minFlow is not { } flowMin)
-            {
-                return Stop("vpv.notRequired", IssueLevel.Info, $"ВПВ по {set.Table2} не требуется.", set.Table2);
-            }
+                var small = s.VolumeThousandM3 <= row.Values["volumeSplit"]!.Value;
+                var jets = row.Values[small ? "jetsUpTo150" : "jetsOver150"];
+                var minFlow = row.Values[small ? "jetFlowUpTo150" : "jetFlowOver150"];
+                if (jets is not { } jetsValue || minFlow is not { } flowMin)
+                {
+                    return Stop("vpv.notRequired", IssueLevel.Info, $"ВПВ по {set.Table2} не требуется.", set.Table2);
+                }
 
-            n = (int)jetsValue;
-            qMin = flowMin;
-            (rowId, source) = (row.Id, $"{set.Table2} {set.Doc}");
-            if (set.HighRiseId is { } highId && norms.Find(highId) is { } high
-                && s.BuildingHeight.Meters > high.Values["heightOver"]!.Value + 1e-9 && s.VolumeThousandM3 > high.Values["volumeOver"]!.Value + 1e-9)
-            {
-                // Высокое производственное здание большого объёма — особое правило вместо строки таблицы.
-                n = (int)high.Values["jets"]!.Value;
-                qMin = high.Values["jetFlow"]!.Value;
-                (rowId, source) = (high.Id, $"п. {high.Clause} {set.Doc}");
+                n = (int)jetsValue;
+                qMin = flowMin;
+                (rowId, source) = (row.Id, $"{set.Table2} {set.Doc}");
             }
         }
 

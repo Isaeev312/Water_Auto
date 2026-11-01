@@ -12,6 +12,7 @@ namespace WaterAuto.Calc.Hydraulics;
 /// <param name="Table3">Расход ствола и напор (давление) у диктующего ПК.</param>
 /// <param name="HeadInMpa">В таблице 3 давление в МПа (колонки P_…), иначе напор в м (колонки H_…).</param>
 /// <param name="ExtraJetId">Дополнительная струя для залов с массовым пребыванием; null — в документе нет.</param>
+/// <param name="ValveHeightId">Высота клапана ПК над полом; null — в документе нет (в СП 10 п. 6.2.5 исключён Изм. № 1).</param>
 /// <param name="ValveDnId">Граница расхода для клапана DN50/DN65; null — в документе нет.</param>
 /// <param name="HighRiseId">Особое правило для высоких производственных зданий; null — в документе нет.</param>
 /// <param name="ParkingSupported">Струи для автостоянок по п. 6.4 СНиП 21-02-99* (только для КР, ADR 0010).</param>
@@ -27,7 +28,7 @@ public sealed record VpvNorms(
     string JetHeightClause,
     string DiaphragmId,
     string DiaphragmClause,
-    string ValveHeightId,
+    string? ValveHeightId,
     string ValveHeightClause,
     string PlacementClause,
     string DurationClause,
@@ -48,7 +49,7 @@ public sealed record VpvNorms(
         NormsRegion.Ru, "СП 10.13130.2020", "sp10.", "табл. 7.1", "табл. 7.2", "табл. 7.3", true,
         "sp10.p7_15.jetHeight", "7.15",
         "sp10.p7_5.pressure", "7.5",
-        "sp10.p6_2_5.valveHeight", "6.2.5",
+        null, "",
         "6.2.2", "6.1.23",
         null, null, "sp10.p7_13.highRise", false);
 
