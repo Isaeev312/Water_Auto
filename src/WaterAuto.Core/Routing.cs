@@ -38,3 +38,41 @@ public sealed record RoutingResult(IReadOnlyList<PipeRoute> Routes, IReadOnlyLis
 
 /// <summary>Опора (держатель) трубопровода: место на плане, DN трубы и участок.</summary>
 public sealed record SupportPoint(PlanPoint At, int Dn, string SegmentId);
+
+/// <summary>Вид соединения стальных трубопроводов (п. 6.7.2.1 СП 485).</summary>
+public enum JointKind
+{
+    /// <summary>Сварные (фасонные части — приварные).</summary>
+    Welded,
+
+    /// <summary>Трубопроводные разъёмные (грувлочные) муфты по ГОСТ Р 51737.</summary>
+    Grooved,
+
+    /// <summary>Резьбовые (соединительные части из ковкого чугуна).</summary>
+    Threaded,
+}
+
+/// <summary>Изделие каталога муфт: наружный диаметр трубы (и меньший — у переходных), мм, и обозначение изготовителя.</summary>
+public sealed record GroovedItem(double Od, double? Od2, string Designation);
+
+/// <summary>
+/// Каталог муфт и фасонных частей под муфту изготовителя: изделия по видам (coupling, elbow90, tee, cross, teeReducing,
+/// crossReducing, reducer); подбор — по наружному диаметру трубы с допуском, при равной близости — первое в списке.
+/// </summary>
+public sealed record GroovedCatalog(double ToleranceMm, IReadOnlyDictionary<string, IReadOnlyList<GroovedItem>> Items)
+{
+    public string? Find(string kind, double od, double? od2 = null)
+    {
+        if (!Items.TryGetValue(kind, out var list))
+        {
+            return null;
+        }
+
+        return list
+            .Where(i => Math.Abs(i.Od - od) <= ToleranceMm + 1e-9 && (od2 is null ? i.Od2 is null : i.Od2 is { } b && Math.Abs(b - od2.Value) <= ToleranceMm + 1e-9))
+            .Select((i, k) => (i, k, d: Math.Abs(i.Od - od) + (od2 is { } o2 && i.Od2 is { } b2 ? Math.Abs(b2 - o2) : 0)))
+            .OrderBy(x => x.d).ThenBy(x => x.k)
+            .Select(x => x.i.Designation)
+            .FirstOrDefault();
+    }
+}

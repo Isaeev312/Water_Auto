@@ -2,6 +2,12 @@ using System.Globalization;
 
 namespace WaterAuto.Core;
 
+/// <summary>Подписи величин с единицами — в русской записи (запятая): они идут в замечания, записку и чертежи.</summary>
+file static class UnitCulture
+{
+    public static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
+}
+
 /// <summary>Давление, МПа (единица ядра, README §5.1).</summary>
 public readonly record struct Pressure(double Mpa)
 {
@@ -10,10 +16,13 @@ public readonly record struct Pressure(double Mpa)
     /// <summary>Геодезическое давление столба высотой h: Z = H/100 (Б.30).</summary>
     public static Pressure FromHeight(Length height) => new(height.Meters / 100.0);
 
+    /// <summary>Напор, соответствующий давлению, в той же записи H = 100·P (обратное <see cref="FromHeight"/>).</summary>
+    public Length ToHeight() => new(Mpa * 100.0);
+
     public static Pressure operator +(Pressure a, Pressure b) => new(a.Mpa + b.Mpa);
     public static Pressure operator -(Pressure a, Pressure b) => new(a.Mpa - b.Mpa);
 
-    public override string ToString() => Mpa.ToString("0.######", CultureInfo.InvariantCulture) + " МПа";
+    public override string ToString() => Mpa.ToString("0.######", UnitCulture.Ru) + " МПа";
 }
 
 /// <summary>Расход, л/с.</summary>
@@ -23,7 +32,7 @@ public readonly record struct Flow(double LitersPerSecond)
 
     public static Flow operator +(Flow a, Flow b) => new(a.LitersPerSecond + b.LitersPerSecond);
 
-    public override string ToString() => LitersPerSecond.ToString("0.####", CultureInfo.InvariantCulture) + " л/с";
+    public override string ToString() => LitersPerSecond.ToString("0.####", UnitCulture.Ru) + " л/с";
 }
 
 /// <summary>Длина или отметка, м.</summary>
@@ -34,7 +43,7 @@ public readonly record struct Length(double Meters)
 
     public double Millimeters => Meters * 1000.0;
 
-    public override string ToString() => Meters.ToString("0.###", CultureInfo.InvariantCulture) + " м";
+    public override string ToString() => Meters.ToString("0.###", UnitCulture.Ru) + " м";
 }
 
 /// <summary>Скорость воды в трубе, м/с (проверка по 6.7.1.37 — на этапе «Проверки», предел — в данных норм).</summary>
@@ -47,7 +56,7 @@ public readonly record struct Velocity(double MetersPerSecond)
         return new((flow.LitersPerSecond / 1000.0) / (Math.PI * d * d / 4.0));
     }
 
-    public override string ToString() => MetersPerSecond.ToString("0.###", CultureInfo.InvariantCulture) + " м/с";
+    public override string ToString() => MetersPerSecond.ToString("0.###", UnitCulture.Ru) + " м/с";
 }
 
 /// <summary>Коэффициент производительности оросителя K, л/(с·МПа^0,5): q = 10·K·√P.</summary>
@@ -75,17 +84,17 @@ public readonly record struct Current(double Amperes)
 
     public static Current operator +(Current a, Current b) => new(a.Amperes + b.Amperes);
 
-    public override string ToString() => Amperes.ToString("0.####", CultureInfo.InvariantCulture) + " А";
+    public override string ToString() => Amperes.ToString("0.####", UnitCulture.Ru) + " А";
 }
 
 /// <summary>Напряжение питания, В.</summary>
 public readonly record struct Voltage(double Volts)
 {
-    public override string ToString() => Volts.ToString("0.##", CultureInfo.InvariantCulture) + " В";
+    public override string ToString() => Volts.ToString("0.##", UnitCulture.Ru) + " В";
 }
 
 /// <summary>Ёмкость аккумуляторной батареи, А·ч.</summary>
 public readonly record struct Charge(double AmpereHours)
 {
-    public override string ToString() => AmpereHours.ToString("0.###", CultureInfo.InvariantCulture) + " А·ч";
+    public override string ToString() => AmpereHours.ToString("0.###", UnitCulture.Ru) + " А·ч";
 }

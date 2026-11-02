@@ -56,14 +56,19 @@ public static class GostFrame
 
             var form = type == HeaderFooterValues.First ? first : others;
             var footer = main.AddNewPart<FooterPart>();
-            var spacer = type == HeaderFooterValues.First && others != StampForm.None && Height(first) > Height(others);
+            // Графа 27 (заказчик) — над формами 3 и 5 первого листа, если задана; текст первого листа кончается над ней.
+            var customer = type == HeaderFooterValues.First && form is StampForm.Form3 or StampForm.Form5 && !string.IsNullOrWhiteSpace(block.Customer);
+            var firstHeight = Height(first) + (customer ? 10 : 0);
+            var spacer = type == HeaderFooterValues.First && others != StampForm.None && firstHeight > Height(others);
             footer.Footer = form == StampForm.None
                 ? new Footer(Additional(pageHeightMm), Tiny())
                 : new Footer(
                     Stamp(form, block, pageWidthMm, pageHeightMm, type == HeaderFooterValues.First),
                     Tiny(),
+                    customer ? Grid([120], [10], [new Box(0, 0, 1, 1, Text(block.Customer!))], pageWidthMm - 5 - 120, pageHeightMm - 5 - Height(form) - 10) : Tiny(),
+                    Tiny(),
                     Additional(pageHeightMm),
-                    spacer ? Spacer(5 + Height(first)) : Tiny());
+                    spacer ? Spacer(5 + firstHeight) : Tiny());
             section.InsertAfter(new FooterReference { Type = type, Id = main.GetIdOfPart(footer) }, section.Elements<HeaderReference>().Last());
         }
 
@@ -120,7 +125,7 @@ public static class GostFrame
                 Signatures(boxes, 2, 6, b.Signatures);
                 boxes.Add(new(0, 6, 3, 4, Text(b.Designation, 12)));
                 boxes.Add(new(3, 6, 5, 1, Text(b.Name)));
-                boxes.Add(new(3, 7, 1, 1, Text("Стадия", 7)));
+                boxes.Add(new(3, 7, 1, 1, Text("Вид док.", 7)));
                 boxes.Add(new(3, 8, 1, 1, Text("Лист", 7)));
                 boxes.Add(new(3, 9, 1, 1, Text("Листов", 7)));
                 boxes.Add(new(4, 7, 1, 1, Text(b.Stage)));

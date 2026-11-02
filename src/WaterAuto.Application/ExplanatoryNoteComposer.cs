@@ -37,7 +37,12 @@ public sealed record NoteInputs(
     UserTank? Tank = null,
     ProjectJockey? Jockey = null,
     IReadOnlyList<string>? Groups = null,
-    AirFilledResult? Air = null);
+    AirFilledResult? Air = null,
+    IReadOnlyList<CurtainResult>? Curtains = null,
+    FoamConcentrateResult? Foam = null,
+    string? FoamName = null,
+    IReadOnlyList<ComplianceRow>? Compliance = null,
+    JockeyTankResult? JockeyTank = null);
 
 /// <summary>
 /// Собирает пояснительную записку из результатов расчёта: числа — только из данных норм и из расчёта.
@@ -62,16 +67,67 @@ public static class ExplanatoryNoteComposer
                 Placement(i),
                 Routing(i, norms),
                 Hydraulics(i, norms),
+                .. i.Curtains is { Count: > 0 } c ? new[] { Curtains(i, c, norms) } : [],
                 Pump(i, norms),
                 Water(i, norms),
-                Interfaces(),
+                .. i.Foam is { } foam ? new[] { FoamSection(i, foam, norms) } : [],
+                Interfaces(norms),
                 Operation(i, norms),
                 ControlValve(norms, i.Air is not null),
                 Installation(i, norms),
                 Maintenance(norms),
+                .. i.Compliance is { Count: > 0 } rows ? new[] { ComplianceSection(rows) } : [],
                 Conclusion(i),
             ],
             references);
+    }
+
+    // Соответствие требованиям норм — та же таблица, что compliance.xlsx, для экспертизы прямо в записке.
+    private static NoteSection ComplianceSection(IReadOnlyList<ComplianceRow> rows) => new("13", "Соответствие требованиям норм", [
+        new NoteParagraph("Основные параметры установки сопоставлены с требованиями СП 485: «принято по норме» — значение взято из таблицы или формулы нормы, «соответствует» — принятое в проекте значение проверено по требованию, «проверить» — вопрос, требующий решения проектировщика или подтверждения по технической документации изделий."),
+        new NoteTable("Соответствие требованиям норм", ["№", "Требование", "Документ, пункт", "Требуется", "Принято", "Вывод"],
+            [.. rows.Select((r, k) => (IReadOnlyList<string>)[(k + 1).ToString(Ru), r.Requirement, r.Clause, r.Required, r.Adopted, ComplianceXlsx.VerdictText(r.Verdict)])]),
+    ]);
+
+    // Пенообразователь (пп. 6.9.16–6.9.24).
+    private static NoteSection FoamSection(NoteInputs i, FoamConcentrateResult f, INormsProvider norms)
+    {
+        var reserve = norms.Find("sp485.p6_9_18.reserve")!.Values["reservePercent"]!.Value;
+        var d = i.Design;
+        return new NoteSection("7а", "Пенообразователь", [
+            new NoteParagraph($"Установка — пенная: интенсивность и расход приняты для раствора пенообразователя {(i.FoamName is { Length: > 0 } n ? $"«{n}» " : "")}по столбцам «раствор пенообразователя» таблиц 6.1–6.3 СП 485 (значения — для пенообразователя типа S; для другого типа — по огневым испытаниям, прим. к таблицам). Концентрация в растворе — {F(f.ConcentrationPercent, "0.#")} % по ТД пенообразователя."),
+            new NoteFormula($"*W*_{{р}} = *Q*·*t*·60 / 1000 + *V*_{{тр}} = {F(f.DosingMax.LitersPerSecond, "0.00")}·{F(d.Duration, "0")}·60 / 1000 + {F(f.PipesM3, "0.00")} = {F(f.SolutionM3, "0.0")} м³,", "7.4", [
+                "где *V*_{тр} — вместимость трубопроводов установки (п. 6.9.19).",
+            ]),
+            new NoteFormula($"*W*_{{по}} = *W*_{{р}}·*c* / 100 = {F(f.SolutionM3, "0.0")}·{F(f.ConcentrationPercent, "0.#")} / 100 = {F(f.ConcentrateM3, "0.00")} м³; с резервом {F(reserve, "0")} % (п. 6.9.18) — **{F(f.TotalM3, "0.00")} м³**.", "7.5", []),
+            new NoteParagraph($"Устройство дозирования обеспечивает заданную концентрацию в диапазоне расходов от {F(f.DosingMin.LitersPerSecond, "0.00")} л/с (один диктующий ороситель) до {F(f.DosingMax.LitersPerSecond, "0.00")} л/с (п. 6.9.23); бак-дозатор в дежурном режиме заполнен до номинального объёма (п. 6.9.22); хранить раствор в установке не допускается (п. 6.9.24); вода — из водопровода непитьевого назначения или с устройством разрыва струи (п. 6.9.16). Трубопроводы раствора маркируются коричневыми кольцами на зелёном фоне (код «9к»)."),
+        ]);
+    }
+
+    // Водяные завесы (пп. 6.3.6–6.3.14, Б.1.3.4–Б.1.3.6).
+    private static NoteSection Curtains(NoteInputs i, IReadOnlyList<CurtainResult> curtains, INormsProvider norms)
+    {
+        var one = norms.Find("sp485.p6_3_10.singleRow")!.Values;
+        var two = norms.Find("sp485.p6_3_11.twoRows")!.Values;
+        var zone = norms.Find("sp485.p6_3_13.freeZone")!.Values["freeZone"]!.Value;
+        var combined = curtains.Where(c => c.Input.CombinedWithSprinkler).Sum(c => c.TotalFlow.LitersPerSecond);
+        var qAup = i.Design.PumpFlow.LitersPerSecond;
+        var blocks = new List<NoteBlock>
+        {
+            new NoteParagraph($"Проёмы защищаются дренчерными водяными завесами. Проём шириной менее {F(two["fromWidth"]!.Value)} м — распределительный трубопровод в одну нитку с удельным расходом не менее {F(one["specificFlow"]!.Value)} л/(с·м) по всей ширине (п. 6.3.10); {F(two["fromWidth"]!.Value)} м и более — две нитки на расстоянии ({F(two["rowGap"]!.Value)} ± {F(two["rowGapTolerance"]!.Value)}) м с удельным расходом каждой не менее {F(two["rowFlow"]!.Value)} л/(с·м), оросители в шахматном порядке, крайние — не дальше {F(two["wallMax"]!.Value)} м от стены (п. 6.3.11). Шаг оросителей — из расхода диктующего оросителя *q* = 10·*K*·√*p*; расход завесы — сумма расходов оросителей по гидравлическому расчёту нитки (Б.1.3.4, Б.1.3.5, формула Б.27)."),
+            new NoteTable("Водяные завесы", ["Проём", "B, м", "Ниток", "Оросителей в нитке", "Шаг, м", "K", "p, МПа", "DN", "Q, л/с", "P пит., МПа", "t, мин"],
+                [.. curtains.Select(c => (IReadOnlyList<string>)[c.Input.Name, F(c.Input.WidthM, "0.##"), c.Rows.ToString(Ru), c.PerRow.ToString(Ru), F(c.SpacingM, "0.00"), F(c.Input.K, "0.###"),
+                    F(c.Input.DictatingPressureMpa, "0.000"), c.Input.Dn.ToString(Ru), F(c.TotalFlow.LitersPerSecond, "0.00"), F(c.FeedPressure.Mpa, "0.000"), double.IsNaN(c.Duration) ? "как АУП-С" : F(c.Duration, "0")])]),
+        };
+        if (combined > 0)
+        {
+            blocks.Add(new NoteFormula($"*Q* = *Q*_{{АУП}} + *Q*_{{з}} = {F(qAup - combined, "0.00")} + {F(combined, "0.00")} = {F(qAup, "0.00")} л/с,", "Б.28", [
+                "где *Q*_{з} — расход водяных завес, совмещённых с АУП-С (п. 6.3.9, Б.1.3.6); продолжительность их действия — как у АУП-С (п. 6.3.6).",
+            ]));
+        }
+
+        blocks.Add(new NoteParagraph($"Пуск завес — автоматически и вручную (п. 6.3.8); устройства пуска — непосредственно у проёмов с внешней стороны и (или) на ближайшем пути эвакуации (п. 6.3.14). При разделении помещений завесой зона без пожарной нагрузки — не менее {F(zone)} м в обе стороны от нитки (группы ниток) (п. 6.3.13)."));
+        return new NoteSection("5а", "Водяные завесы", blocks);
     }
 
     private static NoteSection Introduction(NoteInputs i) => new("", "Введение", [
@@ -82,14 +138,15 @@ public static class ExplanatoryNoteComposer
 
     private static NoteSection Initial(NoteInputs i)
     {
-        var rooms = i.Plan.Rooms.Select(r => string.Create(Ru, $"помещение «{r.Name}» — площадь {r.Contour.AreaMm2 / 1e6:0.0} м²")).ToList();
+        var rooms = i.Plan.Rooms.Select(r => string.Create(Ru, $"помещение «{r.Name.Trim()}» — площадь {r.Contour.AreaMm2 / 1e6:0.0} м²")).ToList();
         return new NoteSection("1", "Исходные данные", [
             new NoteList([
                 $"объект — {i.ObjectName}",
                 $"группа помещений по приложению А СП 485 — {i.RoomGroup}",
                 $"класс пожарной опасности перекрытий и стен — {Label(i.Construction)}",
                 .. rooms,
-                $"колонн на плане — {i.Plan.Columns.Count}, зон без оросителей — {i.Plan.NoSprinklerZones.Count}",
+                // Колонны и балки — из архитектурной подложки (АР, КР): в записке не перечисляются, учитываются раскладкой.
+                .. (i.Plan.NoSprinklerZones.Count > 0 ? [$"зон без оросителей — {i.Plan.NoSprinklerZones.Count}"] : Array.Empty<string>()),
                 $"точек подключения (вводов) — {i.Plan.Inlets.Count}",
             ]),
         ]);
@@ -127,11 +184,14 @@ public static class ExplanatoryNoteComposer
         if (Math.Abs(p.HeightFactor - 1) > 1e-12 && p.RoomHeight is { } h)
         {
             var baseI = p.Intensity / p.HeightFactor;
+            var note3 = norms.Find("sp485.t6_2.note3")!.Values;
+            var hRef = note3["hRef"]!.Value;
+            var k1 = note3["k1"]!.Value;
             var baseQ = p.Flow.LitersPerSecond / p.HeightFactor;
-            blocks.Add(new NoteParagraph("Высота помещения склада более 10 м — интенсивность и расход по примечанию 3 к таблице 6.2:"));
-            blocks.Add(new NoteFormula(string.Create(Ru, $"*i*_{{h}} = [1 + 0,05·(*H* − 10)]·*i* = [1 + 0,05·({h.Meters:0.##} − 10)]·{baseI:0.###} = {p.Intensity:0.###} л/(с·м^{{2}}),"), "2.1", []));
-            blocks.Add(new NoteFormula(string.Create(Ru, $"*Q*_{{h}} = [1 + 0,05·(*H* − 10)]·*Q* = {p.HeightFactor:0.###}·{baseQ:0.##} = {p.Flow.LitersPerSecond:0.##} л/с,"), "2.2", [
-                "где *i*, *Q* — по таблице 6.2 при высоте помещения не более 10 м; *H* — высота помещения, м.",
+            blocks.Add(new NoteParagraph(string.Create(Ru, $"Высота помещения склада более {hRef:0.#} м — интенсивность и расход по примечанию 3 к таблице 6.2:")));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*i*_{{h}} = [1 + {k1:0.0#}·(*H* − {hRef:0.#})]·*i* = [1 + {k1:0.0#}·({h.Meters:0.##} − {hRef:0.#})]·{baseI:0.###} = {p.Intensity:0.###} л/(с·м^{{2}}),"), "2.1", []));
+            blocks.Add(new NoteFormula(string.Create(Ru, $"*Q*_{{h}} = [1 + {k1:0.0#}·(*H* − {hRef:0.#})]·*Q* = {p.HeightFactor:0.###}·{baseQ:0.##} = {p.Flow.LitersPerSecond:0.##} л/с,"), "2.2", [
+                string.Create(Ru, $"где *i*, *Q* — по таблице 6.2 при высоте помещения не более {hRef:0.#} м; *H* — высота помещения, м."),
             ]));
         }
 
@@ -258,6 +318,7 @@ public static class ExplanatoryNoteComposer
         var s = i.DesignSettings;
         var intensity = d.Parameters.Intensity;
         var minArea = d.Parameters.MinArea;
+        var circle = norms.Find("sp485.b1_1_10.dictatingArea")!.Values["s"]!.Value;
         var blocks = new List<NoteBlock>
         {
             new NoteParagraph("Гидравлический расчёт выполнен по приложению Б СП 485.1311500.2020 (п. Б.1.1.12) последовательно от диктующего оросителя к узлу подключения."),
@@ -276,9 +337,9 @@ public static class ExplanatoryNoteComposer
             ]),
             new NoteParagraph("**5.1 Расход и давление у диктующего оросителя**"),
             new NoteParagraph("Расход диктующего оросителя определяется по формуле (Б.1):"),
-            new NoteFormula($"*q*_{{1}} = {F(d.DictatingFactor)}·*i*·*s* = {F(d.DictatingFactor)}·{F(intensity, "0.##")}·12 = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с,", "5.1", [
+            new NoteFormula($"*q*_{{1}} = {F(d.DictatingFactor)}·*i*·*s* = {F(d.DictatingFactor)}·{F(intensity, "0.##")}·{F(circle)} = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с,", "5.1", [
                 $"где *i* — нормативная интенсивность орошения ({d.Parameters.Source}), л/(с·м^{{2}});",
-                "*s* — круговая площадь, защищаемая диктующим оросителем, *s* = 12 м^{2} (п. Б.1.1.10).",
+                $"*s* — круговая площадь, защищаемая диктующим оросителем, *s* = {F(circle)} м^{{2}} (п. Б.1.1.10).",
             ]),
             new NoteParagraph("Давление у диктующего оросителя:"),
             new NoteFormula($"*p*_{{1}} = (*q*_{{1}} / 10*K*)^{{2}} = ({F(d.DictatingFlow.LitersPerSecond, "0.00")} / (10·{F(s.SprinklerK.Value)}))^{{2}} = {F(d.DictatingPressure.Mpa, "0.000")} МПа,", "5.2", [
@@ -298,10 +359,11 @@ public static class ExplanatoryNoteComposer
 
         if (s.DesignVelocity is { } velocity)
         {
+            var mu = norms.Find("sp485.b1_2_6.diameter")!.Values;
             blocks.Add(new NoteParagraph("**5.3 Диаметры трубопроводов**"));
             blocks.Add(new NoteParagraph("Диаметр участка определяется по формуле (Б.5); для участка 1–2:"));
             blocks.Add(new NoteFormula($"*d* = 1000·√(4·*q*_{{1}} / (π·μ·*V*)) = 1000·√(4·{F(d.DictatingFlow.LitersPerSecond / 1000, "0.00000")} / (3,14·{F(d.DischargeCoefficient, "0.00")}·{F(velocity)})) = {F(d.FirstSegmentDiameterMm, "0.0")} мм,", "5.5", [
-                "где μ — коэффициент расхода (0,90–0,95 при отсутствии данных, п. Б.1.2.6);",
+                $"где μ — коэффициент расхода ({F(mu["muMin"]!.Value, "0.00")}–{F(mu["muMax"]!.Value, "0.00")} при отсутствии данных, п. Б.1.2.6);",
                 $"*V* — скорость движения воды, м/с (не более {F(d.VelocityLimit)} м/с, п. Б.1.2.6, п. 6.7.1.37).",
             ]));
             blocks.Add(new NoteParagraph($"Принимается ближайшая большая труба сортамента; остальные участки подобраны так же по фактическому расходу, расчёт повторён до установления диаметров. Диаметры участков ближе к источнику не меньше, чем на участках за ними."));
@@ -347,8 +409,10 @@ public static class ExplanatoryNoteComposer
         blocks.Add(new NoteFormula($"*Q*_{{р}} = Σ*q*_{{n}} = **{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с**,", "5.7", [
             $"где *n* — количество оросителей в диктующей зоне, *n* = {d.ZoneSprinklers.Count}.",
         ]));
-        var qAup = d.PumpFlow.LitersPerSecond - (d.Hydrants?.TotalFlow.LitersPerSecond ?? 0);
-        var aupName = d.Hydrants is null ? "*Q*_{нас}" : "*Q*_{АУП}";
+        // Завесы, совмещённые с АУП-С, входят в расход насоса по Б.28 — здесь расход только спринклерной части.
+        var qCurtains = i.Curtains?.Where(c => c.Input.CombinedWithSprinkler).Sum(c => c.TotalFlow.LitersPerSecond) ?? 0;
+        var qAup = d.PumpFlow.LitersPerSecond - (d.Hydrants?.TotalFlow.LitersPerSecond ?? 0) - qCurtains;
+        var aupName = d.Hydrants is null && qCurtains <= 0 ? "*Q*_{нас}" : "*Q*_{АУП}";
         blocks.Add(new NoteParagraph(d.PumpFlowClause.StartsWith("Б.24", StringComparison.Ordinal)
             ? $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с ≤ *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.24), установка должна обеспечивать нормативный расход: {aupName} = **{F(qAup, "0.00")} л/с**."
             : $"Так как *Q*_{{р}} = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с > *Q*_{{н}} = {F(d.NormativeFlow.LitersPerSecond)} л/с (Б.25), расход принимается не менее расчётного (Б.26): {aupName} = **{F(qAup, "0.00")} л/с**."));
@@ -367,10 +431,11 @@ public static class ExplanatoryNoteComposer
 
         if (d.Hydrants is { } h)
         {
-            blocks.AddRange(HydrantBlocks(d, h, qAup));
+            blocks.AddRange(HydrantBlocks(d, h, qAup, norms));
             if (i.HydrantCount > 0 && i.HydrantReach is { } reach)
             {
-                blocks.Add(new NoteParagraph($"**Размещение пожарных кранов.** Краны размещены у стен так, чтобы каждая точка помещения орошалась {h.Demand.Jets} струями (п. 7.14 СН КР 40-04:2025); струя достаёт точку в пределах радиуса действия {F(reach.Meters, "0.#")} м по прямой внутри помещения — длина рукава {h.Settings.HoseLength} м плюс радиус компактной части струи {F(h.Demand.TableJetHeight.Meters, "0")} м (п. 7.9). Принято **{i.HydrantCount}** пожарных кранов; места кранов — на плане (слой ПТ_ПК); краны ближе {F(HydrantPlacement.RiserSeparationMm / 1000, "0")} м друг к другу считаются одним стояком (две струи — из двух разных стояков). Трубопроводы к кранам на плане не трассируются: в гидравлическом расчёте краны диктующей секции приняты присоединёнными в точке подключения (см. выше, с запасом). Клапаны — на высоте {F(norms.Find("snkr4004.p7_16.valveHeight")?.Values["height"] ?? 0, "0.00")} м от пола (п. 7.16)."));
+                var vpv = VpvNorms.For(h.Settings.Region);
+                blocks.Add(new NoteParagraph($"**Размещение пожарных кранов.** Краны размещены у стен так, чтобы каждая точка помещения орошалась {h.Demand.Jets} струями (п. {vpv.PlacementClause} {vpv.Doc}); струя достаёт точку в пределах радиуса действия {F(reach.Meters, "0.#")} м по прямой внутри помещения — длина рукава {h.Settings.HoseLength} м плюс радиус компактной части струи {F(h.Demand.TableJetHeight.Meters, "0")} м (п. {vpv.JetHeightClause}). Принято **{i.HydrantCount}** пожарных кранов; места кранов — на плане (слой ПТ_ПК); краны ближе {F(HydrantPlacement.RiserSeparationMm / 1000, "0")} м друг к другу считаются одним стояком (две струи — из двух разных стояков). Трубопроводы к кранам на плане не трассируются: в гидравлическом расчёте краны диктующей секции приняты присоединёнными в точке подключения (см. выше, с запасом).{(vpv.ValveHeightId is { } valveHeightId ? $" Клапаны — на высоте {F(norms.Find(valveHeightId)?.Values["height"] ?? 0, "0.00")} м от пола (п. {vpv.ValveHeightClause})." : "")}"));
             }
         }
 
@@ -382,20 +447,23 @@ public static class ExplanatoryNoteComposer
     }
 
     // ВПВ, совмещённый с АУП: Ж.2, Ж.3 и п. 7.9 СН КР 40-04:2025; включение ПК в сеть — Б.1.3.8, Б.1.3.16; расход — Б.29 (ADR 0010).
-    private static List<NoteBlock> HydrantBlocks(DesignResult d, HydrantResult h, double qAup)
+    private static List<NoteBlock> HydrantBlocks(DesignResult d, HydrantResult h, double qAup, INormsProvider norms)
     {
         var s = h.Settings;
         var v = h.Demand;
         var n = v.Jets;
+        var vpv = VpvNorms.For(s.Region);
         return
         [
-            new NoteParagraph("**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."),
+            new NoteParagraph(vpv.Region == NormsRegion.Kg
+                ? "**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Пункт Б.1.3.8 отсылает за минимальным расходом крана к СП 10.13130 (табл. 1–2); для объекта в Кыргызской Республике вместо них применены таблицы Ж.2, Ж.3 СН КР 40-04:2025 (решение по проекту, ADR 0010)."
+                : "**Внутренний противопожарный водопровод.** ВПВ совмещён с АУП; совмещение — по пп. Б.1.3.7, Б.1.3.8, Б.1.3.16 СП 485. Число струй и минимальный расход крана — по табл. 7.1, 7.2 СП 10.13130.2020, расход ствола и давление у крана — по табл. 7.3."),
             new NoteParagraph(s.IsParking || s.Zh1Row is not null
                 ? s.Zh1Row is not null && !s.IsParking
                     ? $"По {NoteDocx.Escape(v.Source)} принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
                     : $"Для отапливаемой автостоянки закрытого типа по {NoteDocx.Escape(v.Source)} (объём пожарного отсека {F(s.VolumeThousandM3, "0.#")} тыс. м³) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."
                 : $"По {NoteDocx.Escape(v.Source)} (степень огнестойкости {s.FireResistance}, категория {s.Category}, класс {s.HazardClass}, объём {F(s.VolumeThousandM3, "0.#")} тыс. м³, высота здания {F(s.BuildingHeight.Meters, "0.#")} м) принято **{n}** струи с расходом не менее *q*_{{min}} = {F(v.MinJetFlow.LitersPerSecond)} л/с каждая."),
-            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. 7.9: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По таблице Ж.3 (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м) принята первая строка с высотой струи не меньше требуемой и расходом ствола не меньше *q*_{{min}} — {F(v.TableJetHeight.Meters, "0")} м, без интерполяции: *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
+            new NoteParagraph($"Высота компактной части струи — не менее высоты помещения и не менее предела п. {vpv.JetHeightClause} {vpv.Doc}: *H*_{{к}} = {F(v.RequiredJetHeight.Meters, "0.##")} м. По {vpv.Table3} (клапан DN{s.ValveDn}, спрыск {s.NozzleMm} мм, рукав {s.HoseLength} м) принята первая строка с высотой струи не меньше требуемой и расходом ствола не меньше *q*_{{min}} — {F(v.TableJetHeight.Meters, "0")} м, без интерполяции: *q*_{{ПК}} = {F(v.JetFlow.LitersPerSecond)} л/с, *H*_{{ПК}} = {F(v.Head.Meters)} м."),
             new NoteParagraph("Пожарные краны включены в расчётную сеть АУП как потребители с характеристикой:"),
             new NoteFormula($"*K*_{{ПК}} = *q*_{{ПК}} / √(*H*_{{ПК}}/100) = {F(v.JetFlow.LitersPerSecond)} / √{F(v.Head.Meters / 100, "0.000")} = {F(h.K, "0.000")} л/(с·МПа^{{0,5}}).", "5.9", []),
             new NoteParagraph($"*Принято:* {n} крана диктующей секции присоединены в точке подключения трубопроводом DN{h.Pipe.Dn} длиной {F(s.PipeLength.Meters, "0.0")} м (*K*_{{т}} = {F(h.Pipe.Kt.Kt, "0.##")}), по которому идёт весь расход кранов; местные потери — {F(d.LocalLossFactor * 100, "0")} % (п. Б.1.3.13). Клапан диктующего ПК — на {F(s.AboveAxis.Meters, "0.00")} м над осью насоса."),
@@ -408,9 +476,9 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph("Расход насосов совмещённого водопровода (Б.29):"),
             new NoteFormula($"*Q*_{{нас}} = *Q*_{{АУП}} + *n*·*q*_{{ПК}} = {F(qAup, "0.00")} + {n}·{F(h.JetFlowActual.LitersPerSecond, "0.00")} = **{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с**.", "5.11", []),
             .. (d.Issues.Any(x => x.Code == "vpv.diaphragm")
-                ? [new NoteParagraph($"Давление у пожарного крана *P*_{{ПК}} = (*q*_{{ПК}} / *K*_{{ПК}})^{{2}} = {F(h.ValvePressure.Mpa, "0.000")} МПа больше 0,4 МПа, поэтому между краном и соединительной головкой предусматриваются диафрагмы или регуляторы давления (примечание к п. 7.11 СН КР 40-04:2025). Расход кранов в расчёте принят без учёта диафрагм — с запасом.")]
+                ? [new NoteParagraph($"Давление у пожарного крана *P*_{{ПК}} = (*q*_{{ПК}} / *K*_{{ПК}})^{{2}} = {F(h.ValvePressure.Mpa, "0.000")} МПа больше {F(norms.Find(vpv.DiaphragmId)!.Values["diaphragmAbove"]!.Value)} МПа, поэтому между краном и соединительной головкой предусматриваются диафрагмы или регуляторы давления ({vpv.DiaphragmClause} {vpv.Doc}). Расход кранов в расчёте принят без учёта диафрагм — с запасом.")]
                 : Array.Empty<NoteBlock>()),
-            new NoteParagraph("Продолжительность работы ВПВ, совмещённого с АУП, равна времени работы АУП (п. Б.1.3.15 СП 485; п. 7.13 СН КР 40-04:2025)."),
+            new NoteParagraph($"Продолжительность работы ВПВ, совмещённого с АУП, равна времени работы АУП (п. Б.1.3.15 СП 485; п. {vpv.DurationClause} {vpv.Doc})."),
         ];
     }
 
@@ -434,6 +502,11 @@ public static class ExplanatoryNoteComposer
     // данные, без выдуманных уставок; ёмкость мембранного бака — из данных норм (п. 6.9.4).
     private static IEnumerable<NoteBlock> JockeyBlocks(NoteInputs i, NormRecord jockeyRule)
     {
+        foreach (var b in JockeyTankBlocks(i, jockeyRule))
+        {
+            yield return b;
+        }
+
         if (i.Jockey is not { } jockey
             || (jockey.FlowLitersPerSecond is null && jockey.StartPressureMpa is null && jockey.StopPressureMpa is null))
         {
@@ -456,7 +529,30 @@ public static class ExplanatoryNoteComposer
             parts.Add($"отключение при *P*_{{откл}} = {F(stop, "0.###")} МПа");
         }
 
-        yield return new NoteParagraph($"**Жокей-насос.** Принято решением проектировщика: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
+        var basis = jockey.AssignedBy is null
+            ? "Принято решением проектировщика"
+            : $"Принято по практике проектирования ({jockey.AssignedBy})";
+        yield return new NoteParagraph($"**Жокей-насос.** {basis}: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
+    }
+
+    // Мембранный бак (п. 6.9.4): подбор по каталогу и давление воздуха по закону Бойля — Мариотта.
+    private static IEnumerable<NoteBlock> JockeyTankBlocks(NoteInputs i, NormRecord rule)
+    {
+        if (i.JockeyTank is not { } t)
+        {
+            yield break;
+        }
+
+        var min = F(rule.Values["minVolume"]!.Value, "0");
+        var share = $"{F(rule.Values["waterShareMin"]!.Value, "0")}–{F(rule.Values["waterShareMax"]!.Value, "0")} %";
+        yield return new NoteParagraph(t.Tank is { } tank
+            ? $"**Мембранный бак жокей-насоса.** По п. 6.9.4 СП 485 вместимость — не менее {min} л, объём воды — {share} вместимости. Принят {NoteDocx.Escape(char.ToLower(tank.Designation[0], Ru) + tank.Designation[1..])} ({NoteDocx.Escape(tank.Document)}): наименьший бак каталога не менее {min} л с рабочим давлением PN {F(tank.PnBar, "0")} бар не ниже давления в системе."
+            : $"**Мембранный бак жокей-насоса.** По п. 6.9.4 СП 485 вместимость — не менее {min} л, объём воды — {share} вместимости; в каталоге подходящего по давлению бака нет — подбирается по каталогу изготовителя.");
+        if (t.Precharge is { } p0 && t.WaterShare is { } f && i.Jockey?.StopPressureMpa is { } stop)
+        {
+            yield return new NoteParagraph("Давление воздуха в баке принято так, чтобы при отключении жокей-насоса вода занимала середину нормируемой доли (сжатие воздуха изотермическое, давления абсолютные, *p*_{а} = 0,101 МПа):");
+            yield return new NoteFormula($"*p*_{{0}} = (1 − *f*)·(*P*_{{откл}} + *p*_{{а}}) − *p*_{{а}} = (1 − {F(f, "0.00")})·({F(stop, "0.000")} + 0,101) − 0,101 = **{F(p0.Mpa, "0.00")} МПа**.", "6.8", []);
+        }
     }
 
     private static List<NoteBlock> PumpHeadBlocks(NoteInputs i, int supplyDn, double kt, double m3h, NormRecord jockey)
@@ -476,11 +572,18 @@ public static class ExplanatoryNoteComposer
             new NoteParagraph($"*Принято:* потери в местных сопротивлениях и в узле управления — {F(d.LocalLossFactor * 100, "0")} % линейных потерь (п. Б.1.3.13); потери распределительной сети от диктующего оросителя до точки подключения учтены в *P*_{{вв}} (формула 5.8)."),
             new NoteParagraph($"Потери в подводящем трубопроводе от насоса до точки подключения (DN{supplyDn}, *L* = {F(s.SupplyLength.Meters, "0.0")} м, *K*_{{т}} = {F(kt, "0.##")}) при расходе насоса:"),
             new NoteFormula($"Δ*P*_{{подв}} = *Q*_{{нас}}^{{2}}·*L* / (100·*K*_{{т}}) = {F(d.PumpFlow.LitersPerSecond, "0.00")}^{{2}}·{F(s.SupplyLength.Meters, "0.0")} / (100·{F(kt, "0.##")}) = {F(d.SupplyLinearLoss.Mpa, "0.0000")} МПа.", "6.2", []),
+            .. d.RiserPipe is { } rp
+                ? new NoteBlock[]
+                {
+                    new NoteParagraph($"Потери в стояке этажа (DN{rp.Dn}, *L* = {F(s.RiserLength.Meters, "0.0")} м, *K*_{{т}} = {F(rp.Kt.Kt, "0.##")}) — отдельным участком, в формуле 6.4 добавляются к Δ*P*_{{подв}}:"),
+                    new NoteFormula($"Δ*P*_{{ст}} = *Q*_{{нас}}^{{2}}·*L* / (100·*K*_{{т}}) = {F(d.PumpFlow.LitersPerSecond, "0.00")}^{{2}}·{F(s.RiserLength.Meters, "0.0")} / (100·{F(rp.Kt.Kt, "0.##")}) = {F(d.RiserLinearLoss.Mpa, "0.0000")} МПа.", "6.2а", []),
+                }
+                : [],
             new NoteFormula($"*Z* = *H* / 100 = {F(s.DictatingAboveAxis.Meters, "0.00")} / 100 = {F(d.Elevation.Mpa, "0.000")} МПа.", "6.3", [
                 "где *H* — высота диктующего оросителя над осью насоса, м.",
             ]),
             new NoteParagraph("Требуемое давление насоса:"),
-            new NoteFormula($"*P*_{{н}} = *P*_{{вв}} + (1 + {F(d.LocalLossFactor, "0.0")})·Δ*P*_{{подв}} + *Z* − *P*_{{вх}} = {F(d.InletNodePressure.Mpa, "0.000")} + {F((1 + d.LocalLossFactor) * d.SupplyLinearLoss.Mpa, "0.000")} + {F(d.Elevation.Mpa, "0.000")} − {F(s.InletPressure.Mpa, "0.000")} = **{F(d.PumpPressure.Mpa, "0.000")} МПа**,", "6.4", [
+            new NoteFormula($"*P*_{{н}} = *P*_{{вв}} + (1 + {F(d.LocalLossFactor, "0.0")})·Δ*P*_{{подв}} + *Z* − *P*_{{вх}} = {F(d.InletNodePressure.Mpa, "0.000")} + {F((1 + d.LocalLossFactor) * (d.SupplyLinearLoss.Mpa + d.RiserLinearLoss.Mpa), "0.000")} + {F(d.Elevation.Mpa, "0.000")} − {F(s.InletPressure.Mpa, "0.000")} = **{F(d.PumpPressure.Mpa, "0.000")} МПа**,", "6.4", [
                 $"где *P*_{{вх}} — гарантированное давление в наружной сети на входе насоса, *P*_{{вх}} = {F(s.InletPressure.Mpa, "0.000")} МПа (по техническим условиям).",
             ]),
             new NoteFormula($"*H*_{{н}} = 100·*P*_{{н}} = **{F(d.PumpHead.Meters, "0.0")} м**.", "6.5", []),
@@ -607,10 +710,10 @@ public static class ExplanatoryNoteComposer
     }
 
     // Требования смежных норм, которые касаются АУПТ (СП 7.13130.2013), — своими словами, со ссылками на пункты.
-    private static NoteSection Interfaces() => new("8", "Взаимодействие со смежными системами", [
+    private static NoteSection Interfaces(INormsProvider norms) => new("8", "Взаимодействие со смежными системами", [
         new NoteList([
             "по сигналам о срабатывании АУП (сигнализаторы давления узлов управления, сигнализаторы потока жидкости) через систему пожарной сигнализации автоматически отключаются системы общеобменной вентиляции, кондиционирования и воздушного отопления и закрываются нормально открытые противопожарные клапаны (СП 7.13130.2013, п. 6.24);",
-            "водяная АУП не освобождает от удаления продуктов горения закрытые автостоянки с парковкой при участии водителей, а также помещения категорий А и Б: исключение п. 7.3 «а» СП 7.13130.2013 для помещений площадью до 200 м² с водяной или пенной АУП на них не распространяется;",
+            $"водяная АУП не освобождает от удаления продуктов горения закрытые автостоянки с парковкой при участии водителей, а также помещения категорий А и Б: исключение п. 7.3 «а» СП 7.13130.2013 для помещений площадью до {F(norms.Find("sp7.p7_3.exemptions")!.Values["maxAreaWithAup"]!.Value)} м² с водяной или пенной АУП на них не распространяется;",
             "состав и адреса сигналов, порядок включения противодымной вентиляции — в задании разделам ПС и ОВ.",
         ]),
     ]);
@@ -751,7 +854,7 @@ public static class ExplanatoryNoteComposer
         }
 
         yield return new NoteParagraph("Вопросы, требующие решения проектировщика:");
-        yield return new NoteList(issues.Select(x => x.Clause is null ? x.Message : $"{x.Message} ({ClauseRef(x.Clause)})").ToList());
+        yield return new NoteList(issues.Select(x => x.Clause is null ? x.DocumentText() : $"{x.DocumentText()} ({ClauseRef(x.Clause)})").Distinct().ToList());
     }
 
     private static string Role(RouteSegmentRole role) => role switch

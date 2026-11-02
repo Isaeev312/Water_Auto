@@ -59,7 +59,7 @@ public static class AlarmSpecification
         if (speech is { Amplifiers: > 0 } && amplifier is not null)
         {
             items.Add(new("Блок речевого оповещения (усилитель линий 100 В)", amplifier.Name, amplifier.Manufacturer, "шт.", speech.Amplifiers, amplifier.Certificate,
-                string.Create(ru, $"нагрузка {speech.TotalConsumedW:0.#} Вт из {amplifier.MaxConsumedW:0} Вт на блок; {speech.Lines.Count} линий; питание 220 В до {amplifier.MainsW:0} Вт")));
+                string.Create(ru, $"общая нагрузка линий {speech.TotalConsumedW:0.#} Вт на {speech.Amplifiers} бл. (не более {amplifier.MaxConsumedW:0} Вт на блок); линий оповещения: {speech.Lines.Count}; питание 220 В до {amplifier.MainsW:0} Вт")));
             if (amplifier.Batteries > 0)
             {
                 items.Add(new("Аккумуляторная батарея блока речевого оповещения", amplifier.BatteryName, amplifier.Manufacturer, "шт.", speech.Amplifiers * amplifier.Batteries, null,

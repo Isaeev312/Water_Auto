@@ -49,6 +49,20 @@ public class PlanDxfWriterTests
     private static List<Entity> On(CadDocument doc, string layer) => doc.Entities.Where(e => e.Layer.Name == layer).ToList();
 
     [Fact]
+    public void Axis_bubbles_stand_outside_the_network_even_when_rows_reach_past_the_columns()
+    {
+        // Оси колонн 3000 × 1500 внутри помещения; оросители и ввод — от 500 до 5000 по X: марки не должны попасть на сеть.
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), axes: [new PlanAxis("1", true, 3000), new PlanAxis("А", false, 1500)]);
+        var bubbles = On(doc, PlanDxfWriter.AxisLayer).OfType<Circle>().ToList();
+        bubbles.Count.ShouldBe(4);
+        foreach (var c in bubbles)
+        {
+            var outside = c.Center.X + c.Radius < 500 || c.Center.X - c.Radius > 5000 || c.Center.Y + c.Radius < 500 || c.Center.Y - c.Radius > 1500;
+            outside.ShouldBeTrue($"марка оси в ({c.Center.X:0}, {c.Center.Y:0}) лежит на сети");
+        }
+    }
+
+    [Fact]
     public void Dwg_extension_writes_a_dwg_for_AutoCAD_insert()
     {
         var path = Path.Combine(Path.GetTempPath(), $"wa-{Guid.NewGuid():N}.dwg");
@@ -67,7 +81,7 @@ public class PlanDxfWriterTests
 
     private static readonly PlanCalcSummary Summary = new(
         "Сводка гидравлического расчёта",
-        [("Расход насоса Q_нас", "33,77 л/с (Б.26)"), ("Требуемый напор H_н", "35,4 м (Б.30)")],
+        [("Расход насоса Qнас", "33,77 л/с (Б.26)"), ("Требуемый напор Hн", "35,4 м (Б.30)")],
         ["R1.S1", "R1.S2"],
         "Диктующая зона: S = 120 м², N = 2",
         ZoneMarginMm: 500);
@@ -98,8 +112,8 @@ public class PlanDxfWriterTests
         File.Delete(path);
         var text = On(doc, PlanDxfWriter.SummaryLayer).OfType<MText>().ShouldHaveSingleItem().Value;
         text.ShouldContain("Сводка гидравлического расчёта");
-        text.ShouldContain("Расход насоса Q_нас — 33,77 л/с (Б.26)");
-        text.ShouldContain("Требуемый напор H_н — 35,4 м (Б.30)");
+        text.ShouldContain("Расход насоса Qнас — 33,77 л/с (Б.26)");
+        text.ShouldContain("Требуемый напор Hн — 35,4 м (Б.30)");
     }
 
     [Fact]
@@ -239,5 +253,31 @@ public class PlanDxfWriterTests
         {
             File.Delete(path);
         }
+    }
+    [Fact]
+    public void Plan_with_a_stamp_gets_a_sheet_frame_around_everything_the_program_drew()
+    {
+        // Лист для тома (ADR 0015): рамка охватывает изображение программы, сводка — под планом.
+        var stamp = new TitleBlock("1-ПТ", "Объект", "Здание", "План этажа", "Р", "Орг.", [new("Разраб.", "Иванов")], Sheet: "4");
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), summary: Summary, stamp: stamp);
+        var frame = On(doc, GostSheet.Layer).Select(e => e.GetBoundingBox()).ToList();
+        frame.ShouldNotBeEmpty();
+        var (fx0, fy0) = (frame.Min(b => b.Min.X), frame.Min(b => b.Min.Y));
+        var summary = On(doc, PlanDxfWriter.SummaryLayer).OfType<MText>().Single(m => m.Value.StartsWith(Summary.Title, StringComparison.Ordinal));
+        summary.InsertPoint.Y.ShouldBeLessThan(Layout.Sprinklers.Min(x => x.Location.YMm));
+        summary.InsertPoint.X.ShouldBeGreaterThan(fx0);
+        summary.InsertPoint.Y.ShouldBeGreaterThan(fy0);
+    }
+    [Fact]
+    public void Axis_lines_are_thin_dash_dot_by_GOST_2_303()
+    {
+        var doc = PlanDxfWriter.Build(Layout, [Route], [], new PlanDxfStyle(), axes: [new PlanAxis("1", true, 3000)]);
+        var line = On(doc, PlanDxfWriter.AxisLayer).OfType<Line>().Single();
+        var type = line.LineType.Name == "ByLayer" ? line.Layer.LineType : line.LineType;
+        type.Name.ShouldBe("WA_ОСЕВАЯ");
+        type.Segments.Count().ShouldBe(4);
+
+        // Длины штрихов — в мм бумаги, масштаб типа линии — масштаб листа (текст 2,5 мм бумаги).
+        line.LineTypeScale.ShouldBe(new PlanDxfStyle().TextHeightMm / 2.5, 1e-9);
     }
 }

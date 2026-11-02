@@ -133,7 +133,7 @@ public static class DetectorLayouter
         }
 
         issues.Add(new Issue("aps.layout.beams", IssueLevel.Info,
-            $"Помещение «{zone.RoomName}»: {spanning.Count} балок высотой до {new Length(tallest)} при H = {zone.CeilingHeight} — ИП в полях между балками, поперёк балок не дальше {row.Value.Across} друг от друга и {row.Value.ToWall} от грани (строка {row.Value.RecordId}).",
+            $"Помещение «{zone.RoomName}»: балки высотой до {new Length(tallest)} (количество — {spanning.Count}) при H = {zone.CeilingHeight} — ИП в полях между балками, поперёк балок не дальше {row.Value.Across} друг от друга и {row.Value.ToWall} от грани (табл. 6.2).",
             zone.RoomId, "СП 484.1311500.2020, табл. 6.2", zone.Outline.Centroid));
 
         var cuts = spanning.Select(x => alongX ? (x.Box.Y0, x.Box.Y1) : (x.Box.X0, x.Box.X1)).OrderBy(c => c.Item1).ToList();
@@ -193,7 +193,7 @@ public static class DetectorLayouter
         var minCell = Math.Min(xs.Min(s => s.Item2 - s.Item1), ys.Min(s => s.Item2 - s.Item1)) / 1000;
         var onBeams = minCell <= 4 * tallest;
         issues.Add(new Issue("aps.layout.coffers", IssueLevel.Info,
-            string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"Помещение «{zone.RoomName}»: кессоны {xs.Count} × {ys.Count} ячеек при балках до {new Length(tallest)}, H = {zone.CeilingHeight} — в каждой ячейке ИП не дальше {row.Value.Distance} от любой её точки (строка {row.Value.RecordId}); установка — {(onBeams ? "на нижней плоскости балок (W ≤ 4D)" : "на потолке (W > 4D)")}."),
+            string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"), $"Помещение «{zone.RoomName}»: кессоны {xs.Count} × {ys.Count} ячеек при балках до {new Length(tallest)}, H = {zone.CeilingHeight} — в каждой ячейке ИП не дальше {row.Value.Distance} от любой её точки (табл. 6.3); установка — {(onBeams ? "на нижней плоскости балок (W ≤ 4D)" : "на потолке (W > 4D)")}."),
             zone.RoomId, "СП 484.1311500.2020, табл. 6.3", zone.Outline.Centroid));
         return fields;
     }

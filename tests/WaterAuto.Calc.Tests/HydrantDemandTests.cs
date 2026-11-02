@@ -24,6 +24,51 @@ public class HydrantDemandTests
         PipeDn: 65);
 
     [Fact]
+    public void Russian_norms_use_tables_7_2_and_7_3_of_SP10_with_pressure_in_MPa()
+    {
+        // ADR 0014: II, В, С0, 40 тыс. м³ → табл. 7.2: 2 × 2,5 л/с; струя 6 м (п. 7.15); табл. 7.3 DN50, ствол 16, рукав 20 м: 2,6 л/с, 0,100 МПа = 10 м.
+        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru }).Demand!;
+        d.Jets.ShouldBe(2);
+        d.MinJetFlow.LitersPerSecond.ShouldBe(2.5);
+        d.RequiredJetHeight.Meters.ShouldBe(6);
+        d.JetFlow.LitersPerSecond.ShouldBe(2.6);
+        d.Head.Meters.ShouldBe(10.0, 1e-9);
+        d.Source.ShouldContain("СП 10.13130.2020");
+        d.NormIds.ShouldAllBe(id => id.StartsWith("sp10."));
+    }
+
+    [Fact]
+    public void Russian_production_building_above_50_m_takes_jets_of_5_lps_by_7_13()
+    {
+        // Изм. № 1: табл. 7.2 — до 50 м; выше — п. 7.13: 2 × 5 л/с до 150 тыс. м³ включительно, 4 × 5 л/с — больше.
+        var tall = Parking with { Region = NormsRegion.Ru, BuildingHeight = new Length(55), ValveDn = 65, NozzleMm = 19 };
+        var big = HydrantDemand.Resolve(Norms, tall with { VolumeThousandM3 = 200 }).Demand!;
+        big.Jets.ShouldBe(4);
+        big.MinJetFlow.LitersPerSecond.ShouldBe(5);
+        big.NormIds.ShouldContain("sp10.p7_13.highRise");
+        var small = HydrantDemand.Resolve(Norms, tall with { VolumeThousandM3 = 100 }).Demand!;
+        small.Jets.ShouldBe(2);
+        small.MinJetFlow.LitersPerSecond.ShouldBe(5);
+    }
+
+    [Fact]
+    public void Russian_public_building_takes_row_of_table_7_1()
+    {
+        // Изм. № 1: зал Ф2.1 более 300 мест — 4 струи (в первоначальной редакции было 2).
+        var d = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, Zh1Row = "g5.seats_over300" }).Demand!;
+        d.Jets.ShouldBe(4);
+        d.NormIds.ShouldContain("sp10.t7_1.g5.seats_over300");
+    }
+
+    [Fact]
+    public void Russian_parking_stops_with_an_issue_instead_of_using_SNiP_21_02()
+    {
+        var r = HydrantDemand.Resolve(Norms, Parking with { Region = NormsRegion.Ru, IsParking = true });
+        r.Demand.ShouldBeNull();
+        r.Issues.ShouldContain(i => i.Code == "vpv.noNormsRu" && i.Level == IssueLevel.Error);
+    }
+
+    [Fact]
     public void Jets_and_minimum_flow_follow_table_Zh2()
     {
         var r = HydrantDemand.Resolve(Norms, Parking);

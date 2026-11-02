@@ -124,7 +124,7 @@ public class NoteDocxTests
         defaults.RunFonts!.Ascii!.Value.ShouldBe("GOST Common");
         defaults.FontSize!.Val!.Value.ShouldBe("28"); // 14 пт
         var footers = doc.MainDocumentPart.FooterParts.Select(f => f.Footer.InnerText).ToList();
-        footers.ShouldContain(f => f.Contains("Стадия", StringComparison.Ordinal)); // форма 5 — на листе содержания
-        footers.ShouldContain(f => f.Contains("Лист", StringComparison.Ordinal) && !f.Contains("Стадия", StringComparison.Ordinal)); // форма 6
+        footers.ShouldContain(f => f.Contains("Вид док.", StringComparison.Ordinal)); // форма 5 (ГОСТ Р 21.101-2026: графа 6 — «Вид док.») — на листе содержания
+        footers.ShouldContain(f => f.Contains("Лист", StringComparison.Ordinal) && !f.Contains("Вид док.", StringComparison.Ordinal)); // форма 6
     }
 }

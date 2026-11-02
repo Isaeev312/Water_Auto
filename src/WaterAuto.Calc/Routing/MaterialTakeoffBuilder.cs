@@ -10,6 +10,13 @@ public sealed record SprinklerSpec(string Name, string Designation, string? Supp
 public sealed record CoatingSpec(string Name, string? Designation);
 
 /// <summary>
+/// Соединения сети для спецификации: вид по DN (<see cref="PipeJoints"/>), мерная длина труб, стандарты резьбовых соединительных
+/// частей по началу наименования и стандарт разъёмных муфт.
+/// </summary>
+/// <param name="Catalog">Муфты и фасонные части изготовителя (графа «Тип, марка»); null — «по каталогу изготовителя муфт».</param>
+public sealed record JointSpec(IReadOnlyDictionary<int, JointKind> ByDn, double StockLengthM, IReadOnlyDictionary<string, string> ThreadedStandards, string CouplingStandard, GroovedCatalog? Catalog = null);
+
+/// <summary>
 /// Ведомость материалов по трассе: оросители и запас (п. 6.1.15), трубы по DN сортамента с длинами,
 /// фасонные части по геометрии трассы (отводы, тройники, крестовины, переходы, подключения оросителей),
 /// площадь наружной поверхности труб под антикоррозионное покрытие.
@@ -35,7 +42,7 @@ public static class MaterialTakeoffBuilder
     /// «Переход» → ГОСТ 17378-2001); null — не указываются.</param>
     /// <param name="steelDensity">Плотность стали для теоретической массы 1 м трубы, т/м³; null — масса не указывается.</param>
     /// <param name="coating">Покрытие труб; null — строка покрытия не добавляется.</param>
-    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, IReadOnlyDictionary<string, string>? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null, CoatingSpec? coating = null)
+    public static MaterialTakeoff Build(IReadOnlyList<PipeRoute> routes, int installedSprinklers, INormsProvider norms, string pipeStandard, SprinklerSpec sprinkler, IReadOnlyDictionary<string, string>? fittingStandard = null, double? steelDensity = null, IReadOnlyList<PipeSize>? sizes = null, CoatingSpec? coating = null, JointSpec? joints = null)
     {
         ArgumentNullException.ThrowIfNull(routes);
         ArgumentNullException.ThrowIfNull(sprinkler);
@@ -48,7 +55,44 @@ public static class MaterialTakeoffBuilder
 
         var pipes = new Dictionary<int, (SeriesPipe Pipe, double Meters)>();
         var fittings = new Dictionary<string, int>(StringComparer.Ordinal);
-        void Fitting(string name) => fittings[name] = fittings.GetValueOrDefault(name) + 1;
+        var couplings = new SortedDictionary<int, int>();
+        var straightCouplings = new SortedDictionary<int, int>();
+        JointKind Kind(int dn) => joints?.ByDn.GetValueOrDefault(dn, JointKind.Welded) ?? JointKind.Welded;
+
+        // Наименование фасонной части по виду соединения её концов: один вид — приварная как есть, под муфту — с пометкой,
+        // на резьбе — соединительная часть из ковкого чугуна; концы разного вида (граница муфт и резьбы, сварки и муфт) —
+        // с перечнем концов, чтобы деталь заказывалась переходной.
+        static string KindText(JointKind k) => k switch
+        {
+            JointKind.Grooved => "под муфту",
+            JointKind.Threaded => "резьба",
+            _ => "под приварку",
+        };
+        string Named(string name, IReadOnlyList<int> dns)
+        {
+            var ends = dns.Distinct().OrderByDescending(d => d).ToList();
+            if (ends.Select(Kind).Distinct().Count() > 1)
+            {
+                return $"{name} (концы: {string.Join(", ", ends.Select(d => $"DN{d} — {KindText(Kind(d))}"))})";
+            }
+
+            return Single(name, ends[0]);
+        }
+
+        string Single(string name, int dn) => Kind(dn) switch
+        {
+            JointKind.Grooved => name + " (под разъёмную муфту)",
+            JointKind.Threaded => name.StartsWith("Отвод 90° ", StringComparison.Ordinal) ? "Угольник 90° " + name["Отвод 90° ".Length..]
+                : name.StartsWith("Отвод под ороситель", StringComparison.Ordinal) ? "Угольник под ороситель" + name["Отвод под ороситель".Length..]
+                : name.StartsWith("Переход ", StringComparison.Ordinal) ? "Муфта переходная " + name["Переход ".Length..]
+                : name,
+            _ => name,
+        };
+        void Fitting(string name, params int[] dns)
+        {
+            var n = Named(name, dns);
+            fittings[n] = fittings.GetValueOrDefault(n) + 1;
+        }
 
         foreach (var route in routes)
         {
@@ -63,6 +107,18 @@ public static class MaterialTakeoffBuilder
                 if (series.Pick(s.Dn) is { } pipe)
                 {
                     pipes[pipe.Dn] = (pipe, pipes.GetValueOrDefault(pipe.Dn).Meters + s.Length.Meters);
+
+                    // Стыки труб по мерной длине; на муфтах — ещё по муфте на каждом конце участка (у фасонной части или ввода);
+                    // в узле прямого прохода без фасонной части два конца соединяет одна муфта — учтено в цикле по узлам.
+                    var pieces = joints is { StockLengthM: > 0 } j ? Math.Max(1, (int)Math.Ceiling((s.Length.Meters / j.StockLengthM) - 1e-9)) : 1;
+                    if (Kind(pipe.Dn) == JointKind.Grooved)
+                    {
+                        couplings[pipe.Dn] = couplings.GetValueOrDefault(pipe.Dn) + 2 + (pieces - 1);
+                    }
+                    else if (Kind(pipe.Dn) == JointKind.Threaded && pieces > 1)
+                    {
+                        straightCouplings[pipe.Dn] = straightCouplings.GetValueOrDefault(pipe.Dn) + (pieces - 1);
+                    }
                 }
             }
 
@@ -74,27 +130,47 @@ public static class MaterialTakeoffBuilder
                 var outs = outgoing[node.Id].Concat(closureAt[node.Id]).ToList();
                 var straight = outgoing[node.Id].FirstOrDefault(o => Collinear(nodes, inSeg, o));
 
+                // Концы фасонной части: приходящий DN (он же проход — переход на меньший DN ставится отдельно) и DN ответвлений.
+                var branchDns = outs.Where(o => o != straight).Select(Dn).ToArray();
                 if (node.Kind == RouteNodeKind.Sprinkler)
                 {
-                    Fitting(outs.Count == 0 ? $"Отвод под ороситель DN{inDn}" : $"Тройник под ороситель DN{inDn}");
+                    Fitting(outs.Count == 0 ? $"Отвод под ороситель DN{inDn}" : $"Тройник под ороситель DN{inDn}", [inDn, .. branchDns]);
                 }
                 else if (outs.Count == 1 && straight is null)
                 {
-                    Fitting($"Отвод 90° DN{inDn}");
+                    // Поворот со сменой DN (в любую сторону) — отвод большего DN и переход между DN.
+                    var (big, small) = (Math.Max(inDn, Dn(outs[0])), Math.Min(inDn, Dn(outs[0])));
+                    Fitting($"Отвод 90° DN{big}", big);
+                    if (small < big)
+                    {
+                        Fitting($"Переход DN{big}×{small}", big, small);
+                    }
                 }
                 else if (outs.Count == 2)
                 {
                     // Равнопроходный тройник обозначается одним DN.
-                    Fitting(outs.Min(Dn) == inDn ? $"Тройник DN{inDn}" : $"Тройник DN{inDn}×{outs.Min(Dn)}");
+                    Fitting(outs.Min(Dn) == inDn ? $"Тройник DN{inDn}" : $"Тройник DN{inDn}×{outs.Min(Dn)}", [inDn, .. branchDns]);
                 }
                 else if (outs.Count >= 3)
                 {
-                    Fitting($"Крестовина DN{inDn}×{outs.Min(Dn)}");
+                    Fitting($"Крестовина DN{inDn}×{outs.Min(Dn)}", [inDn, .. branchDns]);
+                }
+                else if (outs.Count == 1 && straight is not null && Dn(straight) == inDn && series.Pick(inSeg.Dn) is not null)
+                {
+                    // Прямой проход без фасонной части: на муфтах — одна муфта на стык вместо двух концевых, на резьбе — прямая муфта.
+                    if (Kind(inDn) == JointKind.Grooved)
+                    {
+                        couplings[inDn] = couplings.GetValueOrDefault(inDn) - 1;
+                    }
+                    else if (Kind(inDn) == JointKind.Threaded)
+                    {
+                        straightCouplings[inDn] = straightCouplings.GetValueOrDefault(inDn) + 1;
+                    }
                 }
 
                 if (straight is not null && Dn(straight) < inDn)
                 {
-                    Fitting($"Переход DN{inDn}×{Dn(straight)}");
+                    Fitting($"Переход DN{inDn}×{Dn(straight)}", inDn, Dn(straight));
                 }
             }
         }
@@ -116,25 +192,79 @@ public static class MaterialTakeoffBuilder
             items.Add(new TakeoffItem(TakeoffGroup.Materials, coating.Name, coating.Designation, Math.Round(area, 1), "м²", "по наружной поверхности труб"));
         }
 
+        foreach (var (dn, n) in couplings)
+        {
+            fittings[$"Муфта трубопроводная разъёмная DN{dn}"] = n;
+        }
+
+        foreach (var (dn, n) in straightCouplings)
+        {
+            fittings[$"Муфта прямая DN{dn}"] = n;
+        }
+
+        // Обозначение изготовителя по наружному диаметру трубы каждого DN (из сортамента сети).
+        string? Maker(string kind, int dn, int dn2) =>
+            joints?.Catalog is { } catalog && series.Pick(dn) is { } p1
+                ? catalog.Find(kind, p1.OuterDiameterMm, dn2 > 0 && series.Pick(dn2) is { } p2 ? p2.OuterDiameterMm : null)
+                : null;
+
+        // Стандарт: муфты — ГОСТ Р 51737; резьбовые части — по своим стандартам; под муфту — по каталогу изготовителя муфт; приварные — как раньше.
+        TakeoffItem Row(string name, int count)
+        {
+            if (joints is not null && name.StartsWith("Муфта трубопроводная разъёмная", StringComparison.Ordinal))
+            {
+                var maker = Maker("coupling", Diameters(name).First, 0);
+                return new TakeoffItem(TakeoffGroup.Fittings, name, maker is null ? joints.CouplingStandard : $"{maker}; {joints.CouplingStandard}", count, "шт.");
+            }
+
+            if (joints is not null && name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal))
+            {
+                var (a, b) = Diameters(name);
+                var kind = name.StartsWith("Отвод 90° DN", StringComparison.Ordinal) ? "elbow90"
+                    : name.StartsWith("Тройник DN", StringComparison.Ordinal) ? (b == 0 ? "tee" : "teeReducing")
+                    : name.StartsWith("Крестовина DN", StringComparison.Ordinal) ? (b == 0 || b == a ? "cross" : "crossReducing")
+                    : name.StartsWith("Переход DN", StringComparison.Ordinal) ? "reducer"
+                    : null;
+                if (kind is not null && Maker(kind, a, kind is "teeReducing" or "crossReducing" or "reducer" ? b : 0) is { } designation)
+                {
+                    return new TakeoffItem(TakeoffGroup.Fittings, name, designation, count, "шт.");
+                }
+            }
+
+            if (joints is not null && (name.EndsWith(" (под разъёмную муфту)", StringComparison.Ordinal) || (name.Contains(" (концы: ", StringComparison.Ordinal) && name.Contains("под муфту", StringComparison.Ordinal))))
+            {
+                return new TakeoffItem(TakeoffGroup.Fittings, name, null, count, "шт.", "по каталогу изготовителя муфт");
+            }
+
+            var threaded = joints?.ThreadedStandards.FirstOrDefault(x => name.StartsWith(x.Key, StringComparison.Ordinal)).Value;
+            if (threaded is not null && Kind(Diameters(name).First) == JointKind.Threaded)
+            {
+                return new TakeoffItem(TakeoffGroup.Fittings, name, threaded, count, "шт.");
+            }
+
+            return fittingStandard?.FirstOrDefault(x => name.StartsWith(x.Key, StringComparison.Ordinal)).Value is { } standard
+                ? new TakeoffItem(TakeoffGroup.Fittings, name, standard, count, "шт.")
+                : new TakeoffItem(TakeoffGroup.Fittings, name, null, count, "шт.", "уточняется при оформлении узлов");
+        }
+
         items.AddRange(fittings
             .OrderBy(f => FittingOrder(f.Key))
             .ThenBy(f => Diameters(f.Key).First)
             .ThenBy(f => Diameters(f.Key).Second)
-            .Select(f => fittingStandard?.FirstOrDefault(s => f.Key.StartsWith(s.Key, StringComparison.Ordinal)).Value is { } standard
-                ? new TakeoffItem(TakeoffGroup.Fittings, f.Key, standard, f.Value, "шт.")
-                : new TakeoffItem(TakeoffGroup.Fittings, f.Key, null, f.Value, "шт.", "уточняется при оформлении узлов")));
+            .Select(f => Row(f.Key, f.Value)));
         return new MaterialTakeoff(items, series.Issues.ToList());
     }
 
     // Группы фасонных частей (ГОСТ 21.110, п. 4.5): отводы, тройники, крестовины, переходы; подключения оросителей — в конце своей группы.
     private static int FittingOrder(string name) =>
-        name.StartsWith("Отвод 90", StringComparison.Ordinal) ? 0
-        : name.StartsWith("Отвод под ороситель", StringComparison.Ordinal) ? 1
+        name.StartsWith("Отвод 90", StringComparison.Ordinal) || name.StartsWith("Угольник 90", StringComparison.Ordinal) ? 0
+        : name.StartsWith("Отвод под ороситель", StringComparison.Ordinal) || name.StartsWith("Угольник под ороситель", StringComparison.Ordinal) ? 1
         : name.StartsWith("Тройник DN", StringComparison.Ordinal) ? 2
         : name.StartsWith("Тройник под ороситель", StringComparison.Ordinal) ? 3
         : name.StartsWith("Крестовина", StringComparison.Ordinal) ? 4
-        : name.StartsWith("Переход", StringComparison.Ordinal) ? 5
-        : 6;
+        : name.StartsWith("Переход", StringComparison.Ordinal) || name.StartsWith("Муфта переходная", StringComparison.Ordinal) ? 5
+        : name.StartsWith("Муфта", StringComparison.Ordinal) ? 6
+        : 7;
 
     // DN в названии фасонной части: «Переход DN100×80» → (100, 80) — для сортировки по размеру, а не по тексту.
     private static (int First, int Second) Diameters(string name)

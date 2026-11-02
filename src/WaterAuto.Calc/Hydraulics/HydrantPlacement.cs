@@ -22,7 +22,7 @@ public static class HydrantPlacement
     /// <summary>Краны ближе этого расстояния считаются одним стояком: две струи в точку — от двух разных стояков (п. 7.14).</summary>
     public const double RiserSeparationMm = 3000;
 
-    public static HydrantPlacementResult Place(FloorPlan plan, Room room, Length reach, int jets)
+    public static HydrantPlacementResult Place(FloorPlan plan, Room room, Length reach, int jets, string clause = "7.14")
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(room);
@@ -130,7 +130,7 @@ public static class HydrantPlacement
                 IssueLevel.Warning,
                 $"Помещение «{room.Name}»: {uncovered} проверочных точек не достаются {jets} струями при радиусе {reach} — нужны краны у колонн или больший радиус.",
                 room.Id,
-                "7.14",
+                clause,
                 tests[Array.FindIndex(need, n => n > 0)]));
         }
 

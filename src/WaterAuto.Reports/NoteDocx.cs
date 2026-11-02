@@ -248,8 +248,9 @@ public static class NoteDocx
     private static void WriteTitlePage(Body body, NoteTitle t)
     {
         body.Append(Line(JustificationValues.Center, 0, R(t.Organization, caps: true)));
-        body.Append(Line(JustificationValues.Center, 60, R(t.Title, bold: true, size: "32", caps: true)));
-        body.Append(Line(JustificationValues.Center, 4, R(t.Subtitle, size: "32")));
+        // Наименование — шрифт 5 по ГОСТ 2.304 (20 пт: прописные ≈ 5 мм), остальное — 3,5 (14 пт).
+        body.Append(Line(JustificationValues.Center, 60, R(t.Title, bold: true, size: "40", caps: true)));
+        body.Append(Line(JustificationValues.Center, 4, R(t.Subtitle, size: "40")));
         if (t.ObjectName.Length > 0)
         {
             body.Append(Line(JustificationValues.Center, 4, R($"Объект: {t.ObjectName}")));
@@ -269,7 +270,20 @@ public static class NoteDocx
 
         body.Append(Line(JustificationValues.Center, 50));
         body.Append(signatures);
-        body.Append(Line(JustificationValues.Center, 30, R(t.CityYear)));
+        // Город и год — внизу листа (ГОСТ 7.32, 5.1.4): рамка абзаца, привязанная к странице, над нижним краем рамки листа.
+        body.Append(new Paragraph(
+            new ParagraphProperties(
+                new FrameProperties
+                {
+                    Width = Twips(185),
+                    X = Twips(20),
+                    Y = Twips(275),
+                    HorizontalPosition = HorizontalAnchorValues.Page,
+                    VerticalPosition = VerticalAnchorValues.Page,
+                    Wrap = TextWrappingValues.Around,
+                },
+                new Justification { Val = JustificationValues.Center }),
+            R(t.CityYear)));
     }
 
     private static void WriteContents(Body body)
@@ -504,7 +518,30 @@ public static class NoteDocx
             new TableCellLeftMargin { Width = (short)Mm(1.5), Type = TableWidthValues.Dxa },
             new BottomMargin { Width = Twips(0.5), Type = TableWidthUnitValues.Dxa },
             new TableCellRightMargin { Width = (short)Mm(1.5), Type = TableWidthValues.Dxa });
-        var table = new Table(new TableProperties(border, new TableWidth { Type = TableWidthUnitValues.Pct, Width = "5000" }, new TableLayout { Type = TableLayoutValues.Autofit }, margins));
+        // Ширины колонок — по содержимому (самое длинное слово не рвётся, длинный текст переносится), в сумме — ширина
+        // текстового поля: таблица не выходит за рамку листа, как бывает при автоподборе Word по неразрывным словам.
+        // Сначала каждой колонке — ширина её самого длинного слова (≈ 2,5 мм на знак шрифта таблицы и поля ячейки),
+        // остаток поля — пропорционально объёму текста колонки. Не хватает поля — сужаются самые широкие колонки
+        // (в них переносится длинное слово), короткие слова узких колонок («соответствует», «№») не рвутся.
+        const double charMm = 2.5;
+        var columns = Enumerable.Range(0, t.Header.Count).Select(c =>
+        {
+            var cells = t.Rows.Select(r => c < r.Count ? r[c] : "").Prepend(t.Header[c]).ToList();
+            var word = cells.SelectMany(x => x.Split(' ', '-', '—')).Select(w => w.Length).DefaultIfEmpty(1).Max();
+            return (Min: (word * charMm) + 4, Text: (double)Math.Min(cells.Max(x => x.Length), 60));
+        }).ToList();
+        while (columns.Sum(x => x.Min) > TextWidthMm && columns.Max(x => x.Min) > 12)
+        {
+            var widest = columns.IndexOf(columns.MaxBy(x => x.Min));
+            columns[widest] = columns[widest] with { Min = columns[widest].Min - 1 };
+        }
+
+        var free = Math.Max(0, TextWidthMm - columns.Sum(x => x.Min));
+        var text = Math.Max(1, columns.Sum(x => x.Text));
+        var widths = columns.Select(x => x.Min + (free * x.Text / text)).ToList();
+        var scale = TextWidthMm / widths.Sum();
+        var grid = new TableGrid(widths.Select(w => new GridColumn { Width = Mm(w * scale).ToString(CultureInfo.InvariantCulture) }));
+        var table = new Table(new TableProperties(border, new TableWidth { Type = TableWidthUnitValues.Dxa, Width = Mm(TextWidthMm).ToString(CultureInfo.InvariantCulture) }, new TableLayout { Type = TableLayoutValues.Fixed }, margins), grid);
 
         TableCell Cell(string text, bool header)
         {

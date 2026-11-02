@@ -2,6 +2,8 @@
 //   calc <проект.waproj> --out <папка> [--data <папка data>]  — сквозной расчёт: план, аксонометрия, спецификация, записка
 //   new <проект.waproj> --drawing <чертёж.dwg|dxf>              — заготовка файла проекта с исходными данными
 //   template <файл.dwt|dwg|dxf>                                 — шаблон чертежа: слои ПТ_, мм, блок ввода, памятка
+//   check <проект.waproj> [--data <папка data>]                 — проверка чертежа без расчёта: помещения, вводы, замечания с координатами
+//   pdf <папка выпуска>                                          — чертежи DXF в PDF; docx — через Word с обновлённым оглавлением (Windows)
 using System.Text;
 using WaterAuto.Application;
 
@@ -11,6 +13,8 @@ const string Usage = """
       WaterAuto.Cli calc <проект.waproj> --out <папка> [--data <папка data>]
       WaterAuto.Cli new <проект.waproj> --drawing <чертёж.dwg|dxf>
       WaterAuto.Cli template <файл.dwt|dwg|dxf>
+      WaterAuto.Cli check <проект.waproj> [--data <папка data>]
+      WaterAuto.Cli pdf <папка выпуска>
     """;
 
 if (args.Length < 2 || args[0] is "-h" or "--help")
@@ -76,6 +80,65 @@ switch (args[0])
             File.WriteAllText(path, ProjectFile.ToJson(new ProjectFile { Name = Path.GetFileNameWithoutExtension(path), Drawing = relative }), new UTF8Encoding(false));
             Console.WriteLine($"Создан {path}. Заполните design: sprinklerK (по паспорту оросителя), dictatingAboveAxis, supplyLength, supplyDn, inletPressure (по ТУ), designVelocity.");
             return 0;
+        }
+
+    case "check":
+        {
+            var project = Path.GetFullPath(args[1]);
+            var root = Option("--data") is { } data ? Path.GetDirectoryName(Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar))! : DataLocator.FindRoot(Path.GetDirectoryName(project)!, AppContext.BaseDirectory);
+            var preview = DrawingPreview.Analyze(project, root is null ? null : DataLocator.Norms(root));
+            var ru = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+            if (!preview.DrawingFound)
+            {
+                Console.Error.WriteLine($"Чертёж не найден: {preview.DrawingPath}");
+                return 2;
+            }
+
+            Console.WriteLine($"Чертёж: {preview.DrawingPath}");
+            Console.WriteLine(string.Create(ru, $"Помещений: {preview.Rooms.Count}, площадь {preview.TotalProtectedAreaM2:0.0} м²; точек ПТ_ВВОД: {preview.Inlets}; колонн {preview.Columns}, балок {preview.Beams}, коробов {preview.Ducts}, зон без оросителей {preview.NoSprinklerZones}."));
+            foreach (var room in preview.Rooms)
+            {
+                Console.WriteLine(string.Create(ru, $"  {(room.Name.Length > 0 ? room.Name : "(без имени)")} — {room.AreaM2:0.0} м²"));
+            }
+
+            foreach (var s in preview.Suggestions)
+            {
+                Console.WriteLine(string.Create(ru, $"Предложение: {s.Label} = {s.Value:0.###} {s.Unit} ({s.Basis})"));
+            }
+
+            foreach (var issue in preview.Issues.OrderByDescending(i => i.Level))
+            {
+                var at = issue.Location is { } p ? string.Create(ru, $" — X {p.XMm:0}, Y {p.YMm:0} мм") : "";
+                Console.WriteLine($"[{WaterAuto.Core.IssueLevels.Ru(issue.Level)}] {issue.Message}{at}");
+            }
+
+            Console.WriteLine(preview.HasErrors ? "Чертёж к расчёту не готов." : "Чертёж готов к расчёту.");
+            return preview.HasErrors ? 1 : 0;
+        }
+
+    case "pdf":
+        {
+            var folder = Path.GetFullPath(args[1]);
+            if (!Directory.Exists(folder))
+            {
+                Console.Error.WriteLine($"Папка не найдена: {folder}");
+                return 2;
+            }
+
+            // Чертежи — сами (ADR 0015), без AutoCAD; текстовые документы — через Word.
+            DrawingPdf.Export(folder, WaterAuto.Core.DocumentStyle.DefaultFont, line => Console.WriteLine($"  {line}"));
+
+            if (!OperatingSystem.IsWindows())
+            {
+                Console.Error.WriteLine("Выгрузка docx в PDF через Word доступна только в Windows.");
+                return 2;
+            }
+
+            var word = WordPdf.Export(folder, line => Console.WriteLine($"  {line}"));
+
+            // Тома и ИУЛ — по описям tome.json, когда PDF всех документов тома готовы.
+            Tome.Assemble(folder, line => Console.WriteLine($"  {line}"));
+            return word is null ? 2 : 0;
         }
 
     case "template":

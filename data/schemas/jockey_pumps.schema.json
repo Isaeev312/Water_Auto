@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/jockey_pumps.schema.json",
+  "title": "Серия жокей-насосов изготовителя: шаблон обозначения и рабочий диапазон",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "maker", "verified", "source", "designation", "document", "flowLpsMin", "flowLpsMax", "pressureMpaMin", "pressureMpaMax", "includesTank"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "maker": { "type": "string" },
+    "verified": { "type": "boolean" },
+    "source": { "type": "string", "description": "Документ изготовителя, откуда взяты числа." },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "designation": { "type": "string", "description": "Шаблон обозначения: {q} — подача, м³/ч; {h} — напор, м; {v} — вместимость мембранной ёмкости, л." },
+    "document": { "type": "string", "description": "Обозначение документа для графы 3 спецификации." },
+    "flowLpsMin": { "type": "number", "exclusiveMinimum": 0 },
+    "flowLpsMax": { "type": "number", "exclusiveMinimum": 0 },
+    "pressureMpaMin": { "type": "number", "exclusiveMinimum": 0 },
+    "pressureMpaMax": { "type": "number", "exclusiveMinimum": 0 },
+    "includesTank": { "type": "boolean", "description": "Мембранная ёмкость входит в комплект — отдельной строкой не записывается." }
+  }
+}

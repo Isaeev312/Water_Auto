@@ -15,6 +15,7 @@ public enum TakeoffGroup
     Hydrants,
     Supports,
     Materials,
+    Alarm,
 }
 
 /// <summary>

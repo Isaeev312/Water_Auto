@@ -60,6 +60,32 @@ public class SoueLayouterTests
     }
 
     [Fact]
+    public void Light_notifiers_bunched_on_a_wall_in_a_30_m_wide_hall_are_flagged_for_the_designer()
+    {
+        // 60 × 30 м: середина зала ровно в 15 м от стен — покрытие только на пределе, табло на стене сбиваются через 1 м (А-19).
+        var wide = SoueLayouter.Layout([Zone(Rect(60000, 30000))], Sounder, Light, Norms);
+        wide.Issues.ShouldContain(i => i.Code == "soue.lightsDense" && i.Level == IssueLevel.Warning);
+
+        // 60 × 20 м покрывается без скучивания — замечания нет.
+        SoueLayouter.Layout([Zone(Rect(60000, 20000))], Sounder, Light, Norms).Issues.ShouldNotContain(i => i.Code == "soue.lightsDense");
+    }
+
+    [Fact]
+    public void Large_open_space_gets_lights_along_perimeter_with_step_up_to_30_m()
+    {
+        // Решение проектировщика (А-19): помещение — большое открытое пространство → п. 6.16.2, шаг по периметру ≤ 30 м.
+        // 60 × 30 м: периметр 180 м → 6 табло через 30 м; замечания о скучивании нет.
+        var zone = Zone(Rect(60000, 30000)) with { LargeOpenSpace = true };
+        var result = SoueLayouter.Layout([zone], Sounder, Light, Norms);
+
+        result.Lights.Count.ShouldBe(6);
+        result.Lights.ShouldAllBe(l => zone.Outline.DistanceTo(l.Location) <= 1);
+        result.Issues.ShouldNotContain(i => i.Code == "soue.lightsDense");
+        result.Issues.ShouldContain(i => i.Code == "soue.lightsPerimeter" && i.Level == IssueLevel.Info && i.Clause!.Contains("6.16.2") && i.Message.Contains("30 м"));
+        result.Zones.Single().Lights.ShouldBe(6);
+    }
+
+    [Fact]
     public void Light_notifiers_cover_every_point_within_15_m_from_walls()
     {
         var zone = Zone(Rect(60000, 20000));

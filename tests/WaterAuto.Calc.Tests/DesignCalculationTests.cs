@@ -72,7 +72,7 @@ public class DesignCalculationTests
 
         // Напор у ПК 40,6 м = 0,406 МПа > 0,4 МПа — диафрагма или регулятор давления (примечание к 7.11).
         h.ValvePressure.Mpa.ShouldBe(0.406, 1e-6);
-        r.Issues.ShouldContain(i => i.Code == "vpv.diaphragm" && i.Clause == "7.11");
+        r.Issues.ShouldContain(i => i.Code == "vpv.diaphragm" && i.Clause == "примечание к п. 7.11 СН КР 40-04:2025");
     }
 
     private static DesignResult CalculateRing(bool valvesClosed)

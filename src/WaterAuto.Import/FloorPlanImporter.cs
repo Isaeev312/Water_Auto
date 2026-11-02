@@ -93,6 +93,8 @@ public static class FloorPlanImporter
         WarnAboutLookalikeLayers(doc, issues);
 
         var contours = new List<(string Id, Polygon Polygon)>();
+        // Отрезки (LINE) на слоях контуров — помещения, зоны без оросителей, насосная; собираются после обхода чертежа.
+        var layerLines = new Dictionary<string, List<(string Id, PlanPoint A, PlanPoint B)>>(StringComparer.Ordinal);
         var texts = new List<(PlanPoint Point, string Text)>();
         var columns = new List<Column>();
         var beams = new List<Beam>();
@@ -186,6 +188,15 @@ public static class FloorPlanImporter
                 case (_, TextEntity or MText or Dimension):
                     issues.Add(new Issue("import.annotationSkipped", IssueLevel.Warning, $"Надпись или размер на слое {layer} пропущены: имя помещения пишется на слое {ContourLayer}.", id, null, Anchor(entity)));
                     break;
+                case (ContourLayer or NoSprinklerLayer or PumpRoomLayer, Line l):
+                    if (!layerLines.TryGetValue(layer, out var lines))
+                    {
+                        lines = [];
+                        layerLines[layer] = lines;
+                    }
+
+                    lines.Add((id, W(P(l.StartPoint), mirror), W(P(l.EndPoint), mirror)));
+                    break;
                 case (ContourLayer, LwPolyline pl):
                     if (Closed(pl, id, layer, mirror, issues) is { } contour)
                     {
@@ -251,6 +262,26 @@ public static class FloorPlanImporter
                         $"Объект {entity.ObjectName} на слое {layer} не поддерживается: на этом слое нужна {Expected(layer)}.",
                         id, null, Anchor(entity)));
                     break;
+            }
+        }
+
+        // Контур, обведённый отдельными отрезками (LINE), собирается в замкнутый многоугольник по совпадающим концам.
+        foreach (var (lineLayer, lines) in layerLines)
+        {
+            foreach (var (loopId, loop) in AssembleLoops(lineLayer, lines, issues))
+            {
+                switch (lineLayer)
+                {
+                    case ContourLayer:
+                        contours.Add((loopId, loop));
+                        break;
+                    case NoSprinklerLayer:
+                        zones.Add(new NoSprinklerZone(loopId, loop));
+                        break;
+                    default:
+                        pumpRooms.Add((loopId, loop));
+                        break;
+                }
             }
         }
 
@@ -603,6 +634,57 @@ public static class FloorPlanImporter
         MText t => P(t.InsertPoint),
         _ => null,
     };
+
+    // Отрезки собираются в замкнутые цепочки: конец одного совпадает (в пределах допуска) с началом или концом другого.
+    // Замкнутая цепочка из трёх и более отрезков — контур (Info); незамкнутая — ошибка с координатой свободного конца.
+    private static List<(string Id, Polygon Loop)> AssembleLoops(string layer, List<(string Id, PlanPoint A, PlanPoint B)> lines, List<Issue> issues)
+    {
+        var result = new List<(string Id, Polygon Loop)>();
+        var left = new List<(string Id, PlanPoint A, PlanPoint B)>(lines);
+        while (left.Count > 0)
+        {
+            var first = left[0];
+            left.RemoveAt(0);
+            var chain = new List<PlanPoint> { first.A, first.B };
+            var ids = new List<string> { first.Id };
+            while (Distance(chain[0], chain[^1]) > Polygon.ToleranceMm)
+            {
+                var end = chain[^1];
+                var next = left.FindIndex(x => Distance(x.A, end) <= Polygon.ToleranceMm || Distance(x.B, end) <= Polygon.ToleranceMm);
+                if (next < 0)
+                {
+                    break;
+                }
+
+                var seg = left[next];
+                left.RemoveAt(next);
+                ids.Add(seg.Id);
+                chain.Add(Distance(seg.A, end) <= Polygon.ToleranceMm ? seg.B : seg.A);
+            }
+
+            if (Distance(chain[0], chain[^1]) <= Polygon.ToleranceMm && ids.Count >= 3)
+            {
+                chain.RemoveAt(chain.Count - 1);
+                var polygon = new Polygon(chain);
+                if (polygon.IsSelfIntersecting())
+                {
+                    issues.Add(new Issue("import.selfIntersecting", IssueLevel.Error, $"Контур на слое {layer} самопересекается.", ids[0], null, chain[0]));
+                    continue;
+                }
+
+                result.Add((ids[0], polygon));
+                issues.Add(new Issue("import.contourFromLines", IssueLevel.Info,
+                    $"Контур собран из {ids.Count} отрезков на слое {layer}; удобнее — одна замкнутая полилиния.", ids[0], null, chain[0]));
+            }
+            else
+            {
+                issues.Add(new Issue("import.contourLinesOpen", IssueLevel.Error,
+                    $"Отрезки на слое {layer} ({ids.Count} шт.) не замыкаются: свободный конец здесь. Замкните контур или обведите его полилинией.", ids[0], null, chain[^1]));
+            }
+        }
+
+        return result;
+    }
 
     private static double Distance(PlanPoint a, PlanPoint b) => Math.Sqrt(Math.Pow(a.XMm - b.XMm, 2) + Math.Pow(a.YMm - b.YMm, 2));
 }

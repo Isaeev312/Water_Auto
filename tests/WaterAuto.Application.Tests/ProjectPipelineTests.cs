@@ -297,6 +297,8 @@ public sealed class ProjectPipelineTests : IDisposable
             Drawing = "floor.dxf",
             Design = new ProjectDesign
             {
+                // Эталонные числа теста посчитаны на сварной сети (сортамент ГОСТ 10704 с DN50).
+                Joints = Core.JointKind.Welded,
                 RoomGroup = "2",
                 SprinklerK = 0.47,
                 SprinklerModel = "по каталогу",
@@ -325,6 +327,103 @@ public sealed class ProjectPipelineTests : IDisposable
         envelope.Message.ShouldContain("группа 5 (табл. 6.2)");
         result.Design!.PumpFlow.LitersPerSecond.ShouldBe(48.5, 0.05);
         result.Design.PumpHead.Meters.ShouldBe(95.6, 0.05);
+        // Таблица соответствия — строки по каждой группе, без замечаний АПС.
+        var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.ComplianceFile, StringComparison.Ordinal)));
+        rows.ShouldContain(r => r.Count > 1 && r[1] == "Шаг оросителей (группа 2)");
+        rows.ShouldContain(r => r.Count > 1 && r[1] == "Шаг оросителей (группа 5)");
+        rows.ShouldContain(r => r.Count > 2 && r[1] == "Интенсивность орошения (группа 5)" && r[2].Contains("табл. 6.2", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Compliance_table_for_the_expert_review_lists_requirements_with_clauses_and_verdicts()
+    {
+        // Таблица соответствия: требование, пункт, нормативное и принятое значение, вывод — по расчёту, без чисел в коде.
+        Drawing();
+        var result = Run(Project());
+
+        result.Success.ShouldBeTrue();
+        var rows = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.ComplianceFile, StringComparison.Ordinal)));
+        IReadOnlyList<string> Row(string requirement) => rows.Single(r => r.Count > 1 && r[1].StartsWith(requirement, StringComparison.Ordinal));
+        Row("Интенсивность орошения")[5].ShouldBe("принято по норме");
+        Row("Площадь для расчёта расхода")[5].ShouldBe("соответствует");
+        Row("Расход АУП")[5].ShouldBe("принято по норме");
+        Row("Шаг оросителей")[2].ShouldContain("табл. 6.1");
+        Row("Скорость в подводящем")[2].ShouldContain("6.7.1.37");
+        Row("Напор насосной установки")[5].ShouldBe("соответствует");
+        // Замечания расчёта уровня «предупреждение» тоже попадают в таблицу — с пунктом и выводом «проверить».
+        rows.ShouldContain(r => r.Count > 5 && r[5] == "проверить" && r[1].Contains("температур", StringComparison.Ordinal));
+        rows.ShouldNotContain(r => r.Any(c => c.Contains("(design.", StringComparison.Ordinal)));
+
+        // Все предупреждения и ошибки АУПТ всего выпуска (не только до записки) — в таблице: по строке на замечание.
+        string[] other = ["aps.", "soue.", "gas.", "powder.", "alarm."];
+        var aupt = result.Issues.Where(i => i.Level >= IssueLevel.Warning && !other.Any(p => i.Code.StartsWith(p, StringComparison.Ordinal)))
+            .Select(i => (i.Code, i.Message)).Distinct().Count();
+        rows.Count(r => r.Count > 5 && r[3] == "—" && r[4] == "—").ShouldBe(aupt);
+
+        // Та же таблица — разделом 13 записки.
+        var note = WaterAuto.Reports.DocxPreview.ReadParagraphs(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)));
+        note.ShouldContain(p => p.Contains("Соответствие требованиям норм", StringComparison.Ordinal));
+        note.ShouldContain(p => p.Contains("принято по норме", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Auto_inlets_place_a_connection_point_in_a_room_without_one()
+    {
+        // Чертёж без ПТ_ВВОД: с design.autoInlets программа ставит точку у стены помещения (замечание с координатами) и считает;
+        // без флага — прежняя ошибка импорта.
+        Drawing(withInlet: false);
+        Run(Project()).Issues.ShouldContain(i => i.Code == "import.noInlet");
+
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("auto.waproj", ProjectFile.ToJson(project with { Design = project.Design with { AutoInlets = true } })));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        var placed = result.Issues.Single(i => i.Code == "design.autoInlet");
+        placed.Level.ShouldBe(IssueLevel.Warning);
+        placed.Location.ShouldNotBeNull();
+        // Трасса считается от поставленной точки, и точка лежит внутри контура помещения (не на стене).
+        result.Design!.Route.InletId.ShouldStartWith("AUTO.");
+        var room = WaterAuto.Import.FloorPlanImporter.Import(Path.Combine(_dir, "floor.dxf"), requireInlet: false).Plan!.Rooms.Single(r => r.Id == placed.ElementId);
+        room.Contour.Contains(placed.Location!.Value).ShouldBeTrue();
+        room.Contour.DistanceTo(placed.Location.Value).ShouldBeGreaterThan(1);
+    }
+
+    [Fact]
+    public void Section_feed_of_its_own_shortens_the_supply_and_lowers_the_pump_head()
+    {
+        // Склад группы 5 задаёт напор при общем подводящем 30 м DN125; свой подвод к секции склада 5 м DN150 — напор ниже,
+        // расход прежний (подвод на расход не влияет). Запись для помещения, которого нет на чертеже, — замечание.
+        Drawing(storeWidth: 15000);
+        ProjectFile Project(IReadOnlyList<ProjectFeed> feeds) => new()
+        {
+            Name = "Подводы секций",
+            Drawing = "floor.dxf",
+            Design = new ProjectDesign
+            {
+                RoomGroup = "2",
+                SprinklerK = 0.47,
+                SprinklerModel = "по каталогу",
+                PipeElevation = -1.5,
+                DictatingAboveAxis = 3.5,
+                SupplyLength = 30,
+                SupplyDn = 125,
+                InletPressure = 0.1,
+                DesignVelocity = 5,
+                Rooms = [new ProjectRoomGroup { Room = "Склад", Group = "5", StorageHeight = 3 }],
+                Feeds = feeds,
+            },
+        };
+        var common = Run(Write("common.waproj", ProjectFile.ToJson(Project([]))));
+        var commonHead = common.Design!.PumpHead.Meters;
+        var commonFlow = common.Design.PumpFlow.LitersPerSecond;
+
+        var result = Run(Write("feeds.waproj", ProjectFile.ToJson(Project(
+            [new ProjectFeed { Room = "Склад", SupplyLength = 5, SupplyDn = 150 }, new ProjectFeed { Room = "Нет такого", SupplyLength = 1 }]))));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level >= IssueLevel.Warning).Select(i => i.Code + " " + i.Message)));
+        result.Design!.PumpHead.Meters.ShouldBeLessThan(commonHead - 1);
+        result.Design.PumpFlow.LitersPerSecond.ShouldBe(commonFlow, 0.05);
+        result.Issues.ShouldContain(i => i.Code == "design.feeds.noRoom" && i.Message.Contains("Нет такого"));
     }
 
     [Fact]
@@ -356,6 +455,21 @@ public sealed class ProjectPipelineTests : IDisposable
         Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.PlanDxfFile, StringComparison.Ordinal))).ShouldBe(singlePlan);
         Count(result.Files.Single(f => f.EndsWith(ProjectPipeline.LevelPlanFile(1), StringComparison.Ordinal))).ShouldBe(singlePlan);
         Installed(result).ShouldBe(2 * singleInstalled);
+
+        // Стояк DN50 вместо подводящего DN125 и разводка 20 м до стояка: потери стояка — отдельным участком, напор выше (В-28).
+        var riserJson = ProjectFile.ToJson(project with
+        {
+            Design = project.Design with { Levels = [new ProjectAuptLevel { Name = "2 этаж", Drawing = "floor.dxf", Elevation = 3.3, RiserDn = 50, RiserRun = 20 }] },
+        });
+        var headNoRiser = result.Design.PumpHead.Meters;
+        var riser = Run(Write("riser.waproj", riserJson));
+        riser.Success.ShouldBeTrue();
+        riser.Design!.RiserPipe!.Dn.ShouldBe(50);
+        riser.Design.RiserLinearLoss.Mpa.ShouldBeGreaterThan(0);
+        riser.Design.PumpHead.Meters.ShouldBeGreaterThan(headNoRiser);
+        using var riserNote = WordprocessingDocument.Open(riser.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        riserNote.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("стояк");
+        result.Issues.ShouldContain(i => i.Code == "design.level.noRiserDn");
     }
 
     [Fact]
@@ -409,6 +523,31 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Design_stage_alarm_volume_has_cover_contents_note_scheme_plans_and_specification()
+    {
+        // Стадия «П» для АПС: том «шифр-ПБ2» — записка, структурная схема (лист 1), планы, спецификация по форме 1.
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, "tests", "Samples", "parking60x30", "sample.waproj")))!;
+        json["title"]!["stage"] = "П";
+        var dir = Path.Combine(_dir, "pd");
+        Directory.CreateDirectory(dir);
+        foreach (var f in Directory.EnumerateFiles(Path.Combine(RepoPaths.Root, "tests", "Samples", "parking60x30")))
+        {
+            File.Copy(f, Path.Combine(dir, Path.GetFileName(f)));
+        }
+
+        File.WriteAllText(Path.Combine(dir, "sample.waproj"), json.ToJsonString());
+        var result = ProjectPipeline.Run(Path.Combine(dir, "sample.waproj"), Path.Combine(dir, "out"), RepoPaths.Norms, RepoPaths.Registry);
+        var manifest = Tome.ReadManifest(Path.Combine(dir, "out", "АПС"))!;
+        var tome = manifest.Tomes.Single();
+        tome.Designation.ShouldEndWith("-ПБ2");
+        tome.Cover.ShouldNotBeNull();
+        tome.Contents!.Select(g => g.Designation).ShouldBe([tome.Designation + ".ПЗ", tome.Designation, tome.Designation, tome.Designation, tome.Designation + ".СО", tome.Designation + ".СО"]);
+        tome.Documents.Select(Path.GetFileName).ShouldBe([ProjectPipeline.AlarmNoteFile, ProjectPipeline.AlarmSchemeFile, "aps_plan_1.dxf", "aps_plan_2.dxf", ProjectPipeline.AlarmSpecDocxFile, ProjectPipeline.AlarmCertificatesFile]);
+        using var note = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmNoteFile, StringComparison.Ordinal)), false);
+        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("подп. п)");
+    }
+
+    [Fact]
     public void Alarm_only_project_without_water_suppression_produces_the_whole_alarm_volume()
     {
         // Объект только с АПС (как садик): на чертеже нет ПТ_ВВОД и не будет трубопроводов; "aupt": false — том АПС целиком,
@@ -429,6 +568,7 @@ public sealed class ProjectPipelineTests : IDisposable
         var result = Run(Write("ops.waproj", json));
 
         result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         result.Files.ShouldNotContain(f => Path.GetFileName(Path.GetDirectoryName(f)) == ProjectPipeline.AuptVolume);
         var names = result.Files.Select(Path.GetFileName).ToList();
         names.ShouldContain(ProjectPipeline.AlarmPlanFile);
@@ -469,12 +609,13 @@ public sealed class ProjectPipelineTests : IDisposable
             Powder = new ProjectPowder
             {
                 Module = "epotos.buran_8u",
-                Rooms = [new ProjectPowderRoom { Room = "Автостоянка", Method = PowderMethod.Area, FireClass = "B", Substance = "sp485.tI_1.petrol", CeilingHeight = 4, ShadedArea = 0 }],
+                Rooms = [new ProjectPowderRoom { Room = "Автостоянка", Method = PowderMethod.Area, FireClass = "B", Substance = "sp485.tI_1.petrol", CeilingHeight = 4, ShadedArea = 0, Doors = 2 }],
             },
         });
         var result = Run(Write("powder.waproj", json));
 
         result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         var names = result.Files.Select(Path.GetFileName).ToList();
         names.ShouldContain(ProjectPipeline.PowderNoteFile);
         names.ShouldContain(ProjectPipeline.PowderSpecFile);
@@ -487,6 +628,12 @@ public sealed class ProjectPipelineTests : IDisposable
         spec.Single(r => r[2] == "Буран-8У")[5].ShouldBe("48");
         // Пуск: ток пуска Буран-8У 0,7 А, выход С2000-КПБ до 2,5 А → 3 модуля на выход; 24 модуля → 8 выходов → 2 блока по 6 выходов.
         spec.Single(r => r[2] == "С2000-КПБ")[5].ShouldBe("2");
+        // Сигнализация режимов (пп. 7.6.3, 7.6.5 СП 484): две двери — по табло каждого вида и датчику положения на дверь, звуковой — на зону.
+        spec.Single(r => r[1].Contains("«Порошок — уходи!»", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("«Порошок — не входить!»", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("«Автоматика отключена»", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("датчик положения двери", StringComparison.Ordinal))[5].ShouldBe("2");
+        spec.Single(r => r[1].Contains("звуковой", StringComparison.Ordinal))[5].ShouldBe("1");
         // Блоки пуска питаются от РИП — расчёт АКБ выпускается и без раздела alarm.
         names.ShouldContain(ProjectPipeline.BatteryFile);
         var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.BatteryFile, StringComparison.Ordinal)));
@@ -502,15 +649,143 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Combined_curtain_adds_its_flow_to_the_pump_by_B28()
+    {
+        // Ворота 4 м, K = 0,35, p = 0,1 МПа, DN25: одна нитка, 4 оросителя; расход завесы — к расходу насоса (Б.28).
+        Drawing();
+        var single = Run(Project());
+        var q0 = single.Design!.PumpFlow.LitersPerSecond;
+        var w0 = single.Design.WaterVolume;
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("curtain.waproj", ProjectFile.ToJson(project with
+        {
+            Design = project.Design with { Curtains = [new ProjectCurtain { Name = "Ворота", Width = 4, K = 0.35, Pressure = 0.1, Dn = 25 }] },
+        })));
+
+        result.Success.ShouldBeTrue(string.Join(" | ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        var qc = result.Design!.PumpFlow.LitersPerSecond - q0;
+        qc.ShouldBeGreaterThan(4 * 10 * 0.35 * Math.Sqrt(0.1));
+        result.Design.PumpFlowClause.ShouldContain("Б.28");
+        result.Design.WaterVolume.ShouldBe(w0 + (qc * result.Design.Duration * 60 / 1000), 1e-6);
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.StartsWith("Ороситель дренчерный", StringComparison.Ordinal)) && r.Contains("4"));
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("Водяные завесы");
+        text.ShouldContain("п. 6.3.10");
+    }
+
+    [Fact]
+    public void Pp87_section_9_lists_protected_rooms_and_systems_by_clause_26()
+    {
+        Drawing();
+        Run(Project());
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var result = Run(Write("pp87.waproj", ProjectFile.ToJson(project with { Pp87 = true })));
+
+        result.Success.ShouldBeTrue();
+        using var doc = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.Pp87File, StringComparison.Ordinal)), false);
+        var text = doc.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("№ 87");
+        text.ShouldContain("Автостоянка");
+        text.ShouldContain("спринклерная водозаполненная");
+        text.ShouldContain("Заполняется проектировщиком");
+        text.ShouldContain(result.Design!.PumpHead.Meters.ToString("0.0", System.Globalization.CultureInfo.GetCultureInfo("ru-RU")));
+    }
+
+    [Fact]
+    public void Gas_section_produces_the_gas_volume_with_mass_by_appendix_D()
+    {
+        // Помещение 30 × 20 м, h = 3 м (1800 м³), хладон 227еа, н-гептан 7,2 %, 0,5 м² проёмов, Tм = 20 °С, 800 м:
+        // δ = 2,8e-4 ≤ 0,0023 (табл. Г.16, 1500–2000 м³); K2 = 0,4·δ·10·√3 = 0,0019; Mр = 1800·7,28·1,0019·7,2/92,8 = 1018,6 кг; Mг = 1,05·Mр = 1069,6 → 1070 кг.
+        Drawing(withInlet: false);
+        var json = ProjectFile.ToJson(new ProjectFile
+        {
+            Name = "Архив (пример)",
+            Drawing = "floor.dxf",
+            Aupt = false,
+            Gas = new ProjectGas
+            {
+                Altitude = 800,
+                Rooms = [new ProjectGasRoom { Room = "Автостоянка", Agent = "hfc227ea", Material = "heptane", CeilingHeight = 3, OpenArea = 0.5, MinTemperature = 20, MaxOverpressure = 0.002 }],
+            },
+        });
+        var result = Run(Write("gas.waproj", json));
+
+        result.Success.ShouldBeTrue(string.Join("; ", result.Issues.Where(i => i.Level == IssueLevel.Error).Select(i => i.Code + " " + i.Message)));
+        OutputText.ShouldBeClean(result.Files);
+        // Модули из каталога: наименьшее число 6 дают 180 и 187 л, берётся меньший: МПА-КД (50-180-50), 180 кг; 1,05·(1018,6 + 6·0,3) = 1071,4 кг → 6; запас 6.
+        var gasSpec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.GasSpecFile, StringComparison.Ordinal))).Skip(WaterAuto.Reports.AlarmSpecXlsx.HeaderRow).ToList();
+        gasSpec.Single(r => r[2] == "МПА-КД (50-180-50)")[5].ShouldBe("12");
+        var note = result.Files.Single(f => f.EndsWith(ProjectPipeline.GasNoteFile, StringComparison.Ordinal));
+        // Числа общих требований разд. 9 — из данных норм (пп. 9.8.1, 9.9.4, 9.9.5).
+        var gasText = string.Join(" ", WaterAuto.Reports.DocxPreview.ReadParagraphs(note));
+        gasText.ShouldContain("не ближе 1 м от источников тепла");
+        gasText.ShouldContain("1,25·Pраб");
+        gasText.ShouldContain("не менее 2 см");
+        Path.GetFileName(Path.GetDirectoryName(note)).ShouldBe(ProjectPipeline.GasVolume);
+        using (var doc = WordprocessingDocument.Open(note, false))
+        {
+            var text = doc.MainDocumentPart!.Document.Body!.InnerText;
+            text.ShouldContain("хладон 227еа");
+            text.ShouldContain("Mг = 1,05");
+            text.ShouldContain("= 1071 кг"); // с остатком 6 × 0,3 кг в модулях
+            text.ShouldContain("Г.17");
+        }
+
+        result.Issues.ShouldContain(i => i.Code == "gas.pipeResidue");
+        result.Issues.ShouldContain(i => i.Code == "gas.relief");
+
+        // CO₂ в помещении более чем на 50 человек — ошибка 9.1.2.
+        var co2 = Run(Write("co2.waproj", json.Replace("\"hfc227ea\"", "\"co2\"", StringComparison.Ordinal).Replace("\"people\": 0", "\"people\": 60", StringComparison.Ordinal)));
+        co2.Issues.ShouldContain(i => i.Code == "gas.co2.people" && i.Level == IssueLevel.Error);
+    }
+
+    [Fact]
+    public void Flammable_liquid_store_needs_foam_and_gets_concentrate_with_reserve()
+    {
+        // Склад ЛВЖ (группа 7, складирование 3 м): водой не тушится — ошибка с подсказкой design.foam;
+        // пеной 6 % — 0,3 л/(с·м²), 54 л/с (табл. 6.2), пенообразователь с резервом 100 % и бак-дозатор в спецификации.
+        Drawing();
+        Run(Project());
+        var project = ProjectFile.FromJson(File.ReadAllText(Path.Combine(_dir, "project.waproj")));
+        var store = project.Design with { RoomGroup = "7", StorageHeight = 3, RoomHeight = 6 };
+        var water = Run(Write("lvzh.waproj", ProjectFile.ToJson(project with { Design = store })));
+        water.Issues.ShouldContain(i => i.Code == "params.noWater" && i.Message.Contains("design.foam", StringComparison.Ordinal));
+
+        // Сквозной расчёт пеной — склад группы 5 (22,5 л/с раствора): сеть стоянки для 54 л/с группы 7 мала.
+        var foam = new ProjectFoam { Name = "ПО-6ЦТ", Concentration = 6 };
+        // Группа 7 пеной: трубы до DN200 (Б.8) подбираются; насосной установки на 217 м³/ч и 149 м в каталоге нет — ограничение каталога.
+        var g7 = Run(Write("foam7.waproj", ProjectFile.ToJson(project with { Design = store with { Foam = foam } })));
+        g7.Issues.ShouldNotContain(i => i.Code == "design.noDiameter");
+        g7.Issues.Where(i => i.Level == IssueLevel.Error && i.Code != "pump.noSet").ShouldBeEmpty();
+
+        // Выпуск документов — склад группы 5 пеной (22,5 л/с): 0,12 л/(с·м²) против 0,24 водой.
+        var result = Run(Write("foam.waproj", ProjectFile.ToJson(project with { Design = store with { RoomGroup = "5", Foam = foam } })));
+        result.Issues.Where(i => i.Level == IssueLevel.Error).ShouldBeEmpty();
+        result.Design!.Parameters.Intensity.ShouldBe(0.12);
+        result.Design.Parameters.Foam.ShouldBeTrue();
+        result.Issues.ShouldContain(i => i.Code == "foam.amount");
+        var spec = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(result.Files.Single(f => f.EndsWith(ProjectPipeline.SpecificationFile, StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.StartsWith("Пенообразователь ПО-6ЦТ", StringComparison.Ordinal)));
+        spec.ShouldContain(r => r.Any(c => c.StartsWith("Бак-дозатор", StringComparison.Ordinal)));
+        using var note = WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.NoteFile, StringComparison.Ordinal)), false);
+        var text = note.MainDocumentPart!.Document.Body!.InnerText;
+        text.ShouldContain("п. 6.9.18");
+        text.ShouldContain("типа S");
+    }
+
+    [Fact]
     public void Drawing_project_produces_the_whole_package()
     {
         Drawing();
         var result = Run(Project());
         result.Success.ShouldBeTrue(string.Join("\n", result.Issues.Select(i => i.Message)));
+        OutputText.ShouldBeClean(result.Files);
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
-            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
-            ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.IssuesFile,
+            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.AlarmSpecDocxFile, ProjectPipeline.AlarmCertificatesFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
+            ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.ComplianceFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);
         result.Design!.PumpHead.Meters.ShouldBeGreaterThan(0);

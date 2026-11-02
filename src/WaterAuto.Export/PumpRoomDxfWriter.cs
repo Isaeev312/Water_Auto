@@ -86,6 +86,9 @@ public static class PumpRoomDxfWriter
         return t > 0.02 && t < 0.98 && u > 0.02 && u < 0.98 ? t : null;
     }
 
+    /// <summary>Полоса у левой и нижней стен плана, занятая цепочками размеров (вынос 10h и текст).</summary>
+    private static double DimBand(double h) => 12 * h;
+
     public static void Write(string path, PumpRoomDrawing data, TitleBlock stamp, string font = DocumentStyle.DefaultFont) =>
         DxfDrawing.Save(path, Build(data, stamp), font);
 
@@ -187,7 +190,9 @@ public static class PumpRoomDxfWriter
                 Rect(at.XMm - (dia / 2), Math.Min(at.YMm, at.YMm + (outward * t)), at.XMm + (dia / 2), Math.Max(at.YMm, at.YMm + (outward * t)), equipment);
             }
 
-            Text(at.XMm + (vertical ? outward * (t + h) - (outward < 0 ? 6 * h : 0) : h), at.YMm + (vertical ? h : outward * (t + h)), label, 0.6 * h);
+            var lw = 0.6 * h * 0.75 * label.Length;
+            var off = outward < 0 ? t + DimBand(h) : t + h;
+            Text(at.XMm + (vertical ? (outward * off) - (outward < 0 ? lw : 0) : h), at.YMm + (vertical ? h : (outward * off) + (outward < 0 ? -h : 0)), label, 0.6 * h);
         }
 
         // Дверь: проём 900 мм по стене и дуга открывания внутрь.
@@ -420,12 +425,22 @@ public static class PumpRoomDxfWriter
         if (data.Piping)
         {
             var ru = System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
-            foreach (var (at, zTop, zBottom) in data.Pipes.SelectMany(p => p.Risers))
+            // Одинаковые стояки разных труб — одна выноска; близкие выноски уходят ступенькой вниз, чтобы подписи не сливались.
+            var shelves = new List<XY>();
+            foreach (var (at, zTop, zBottom) in data.Pipes.SelectMany(p => p.Risers)
+                .DistinctBy(r => (Math.Round(r.At.XMm), Math.Round(r.At.YMm), Math.Round(r.Top, 3), Math.Round(r.Bottom, 3))))
             {
+                var drop = 2.5 * h;
+                while (shelves.Any(s => Math.Abs(s.X - at.XMm) < 10 * h && Math.Abs(s.Y - (at.YMm - drop)) < 1.2 * h))
+                {
+                    drop += 1.3 * h;
+                }
+
+                shelves.Add(new XY(at.XMm, at.YMm - drop));
                 doc.Entities.Add(new Circle { Center = P(at.XMm, at.YMm), Radius = 0.45 * h, Layer = equipment });
-                doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm - (2.5 * h), at.YMm - (2.5 * h))) { Layer = text });
-                doc.Entities.Add(new Line(P(at.XMm - (2.5 * h), at.YMm - (2.5 * h)), P(at.XMm - (9.5 * h), at.YMm - (2.5 * h))) { Layer = text });
-                Text(at.XMm - (9.3 * h), at.YMm - (2.3 * h), string.Create(ru, $"отм. {zTop:+0.000;−0.000} / {zBottom:+0.000;−0.000}"), 0.6 * h);
+                doc.Entities.Add(new Line(P(at.XMm, at.YMm), P(at.XMm - (2.5 * h), at.YMm - drop)) { Layer = text });
+                doc.Entities.Add(new Line(P(at.XMm - (2.5 * h), at.YMm - drop), P(at.XMm - (9.5 * h), at.YMm - drop)) { Layer = text });
+                Text(at.XMm - (9.3 * h), at.YMm - drop + (0.2 * h), string.Create(ru, $"отм. {zTop:+0.000;−0.000} / {zBottom:+0.000;−0.000}"), 0.6 * h);
             }
 
             // Привязки осей труб к стенам: у каждой стены — цепочка «стена — оси труб, идущих вдоль неё».
@@ -535,10 +550,17 @@ public static class PumpRoomDxfWriter
             var width = 0.8 * h * 0.75 * label.Length;
             var (dl, dr, db, dt) = (at.XMm - x0, x1 - at.XMm, at.YMm - y0, y1 - at.YMm);
             var m = new[] { dl, dr, db, dt }.Min();
-            var (tx, ty) = m == dl ? (at.XMm - width - h, at.YMm - (0.4 * h))
+            // У левой и нижней стен плана стоят цепочки размеров — подпись выносится за них, с выноской от отметки.
+            var band = data.Piping ? h : DimBand(h);
+            var (tx, ty) = m == dl ? (at.XMm - width - band, at.YMm - (0.4 * h))
                 : m == dr ? (at.XMm + h, at.YMm - (0.4 * h))
-                : m == db ? (at.XMm - (width / 2), at.YMm - (2 * h))
+                : m == db ? (at.XMm - (width / 2), at.YMm - band - h)
                 : (at.XMm - (width / 2), at.YMm + h);
+            if (band > h && (m == dl || m == db))
+            {
+                doc.Entities.Add(new Line(P(at.XMm, at.YMm), m == dl ? P(tx + width, at.YMm) : P(at.XMm, ty + h)) { Layer = text });
+            }
+
             Text(tx, ty, label, 0.8 * h);
         }
 
@@ -605,9 +627,9 @@ public static class PumpRoomDxfWriter
         var top = sheet.At(0, sheet.Format.HeightMm - 15);
         Text(sheet.At(30, 0).X, top.Y, data.Piping ? "План обвязки насосной станции" : "План насосной станции пожаротушения", 2 * h);
         var ny = sheet.At(0, 92).Y;
-        // Примечания — подряд; шаг — по числу строк переноса (≈ 0,6 высоты на знак).
+        // Примечания — подряд; шаг — по числу строк переноса (≈ 0,75 высоты на знак).
         var noteWidth = sheet.Format.WidthMm * s * 0.45;
-        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.75));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
             var lines = Math.Ceiling((note.Length + 4) / perLine);

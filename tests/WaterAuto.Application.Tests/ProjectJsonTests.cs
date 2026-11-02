@@ -68,4 +68,28 @@ public sealed class ProjectJsonTests : IDisposable
         File.WriteAllText(path, json);
         return path;
     }
+    [Fact]
+    public void Project_written_before_joint_choice_stays_welded_and_new_projects_default_to_grooved()
+    {
+        // Файл без design.joints считался на сварке (сортамент ГОСТ 10704 с DN50) — при загрузке он не переходит на муфты молча.
+        ProjectFile.FromJson("""{ "drawing": "a.dxf", "design": { "pipeStandardLargeFromDn": 50 } }""").Design.Joints.ShouldBe(Core.JointKind.Welded);
+        ProjectFile.FromJson("""{ "drawing": "a.dxf", "design": { "joints": "Grooved" } }""").Design.Joints.ShouldBe(Core.JointKind.Grooved);
+        ProjectFile.FromJson(ProjectFile.ToJson(new ProjectFile { Drawing = "a.dxf" })).Design.Joints.ShouldBe(Core.JointKind.Grooved);
+    }
+    [Fact]
+    public void Wizard_opens_a_project_without_joints_as_welded_so_saving_does_not_switch_it_to_couplings()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"wa-{Guid.NewGuid():N}.waproj");
+        File.WriteAllText(path, """{ "drawing": "a.dxf", "design": { "roomGroup": "2" } }""");
+        try
+        {
+            ProjectJson.LoadMerged(path)["design"]!["joints"]!.GetValue<string>().ShouldBe("Welded");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        Should.Throw<InvalidDataException>(() => ProjectFile.FromJson("""{ "drawing": "a.dxf", "design": null }"""));
+    }
 }

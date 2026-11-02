@@ -109,6 +109,29 @@ public static class GostSheet
                 return;
             }
 
+            // Перенос в несколько строк не должен выходить за графу: высота шрифта уменьшается до 2,5 мм, пока строки
+            // (перенос по словам, ширина знака ≈ 0,8 высоты, интервал 1,6 высоты) не поместятся по высоте графы.
+            if (wrap && !vertical)
+            {
+                static int Lines(string v, double hh, double width)
+                {
+                    var perLine = Math.Max(1, (int)(width / (0.8 * hh)));
+                    var (lines, used) = (1, 0);
+                    foreach (var word in v.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        var need = used == 0 ? word.Length : used + 1 + word.Length;
+                        (lines, used) = need <= perLine || used == 0 ? (lines, need) : (lines + 1, word.Length);
+                    }
+
+                    return lines;
+                }
+
+                while (height > 2.5 && Lines(value, height, x1 - x0 - 1) * 1.6 * height > (y1 - y0) - 0.5)
+                {
+                    height -= 0.25;
+                }
+            }
+
             doc.Entities.Add(new MText
             {
                 Value = value,
@@ -195,6 +218,16 @@ public static class GostSheet
         Text(block.SheetCount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "", x + 165, Row(8), x + 185, Row(6));
         Text(block.Name, x + 65, y, x + 135, Row(8));
         Text(block.Organization, x + 135, y, x + 185, Row(8));
+
+        // Графа 27 — краткое наименование заказчика (ГОСТ Р 21.101-2026): строка 10 мм над правой частью надписи;
+        // поле изображения начинается выше (Field), поэтому графа ничего не перекрывает.
+        if (!string.IsNullOrWhiteSpace(block.Customer))
+        {
+            Seg(x + 65, Row(0) + 10, x + 185, Row(0) + 10, false);
+            Seg(x + 65, Row(0), x + 65, Row(0) + 10, false);
+            Seg(x + 185, Row(0), x + 185, Row(0) + 10, false);
+            Text(block.Customer, x + 65, Row(0), x + 185, Row(0) + 10);
+        }
 
         // Дополнительные графы 20–22 на поле для подшивки: снизу вверх 25, 35, 25 мм.
         Rect(8, 5, 20, 90);

@@ -36,7 +36,12 @@ public sealed class PipeSeries
         _includeOutdoorOnly = includeOutdoorOnly;
         var parts = Parse(standard);
         _rows = norms.ByClause("табл. Б.2")
-            .Where(r => includeOutdoorOnly || r.Attributes.GetValueOrDefault("outdoorOnly") != "true")
+            // Строки «*» (трубы наружных сетей) — только для обвязки насосной; внутри — если для этого DN есть принятый размер проекта:
+            // его Kт считается по формуле Б.8 (п. Б.1.2.9), а не берётся из строки «*».
+            .Where(r => includeOutdoorOnly || r.Attributes.GetValueOrDefault("outdoorOnly") != "true"
+                || _sizes.Any(z => z.Dn == (int)r.Values["dn"]!.Value && Matches(z.Standard, r)
+                    && Hydraulics.PipeCharacteristics.Resolve(norms, z.Standard, z.Dn, new Length(z.OuterDiameterMm / 1000), new Length(z.WallMm / 1000)) is { } c
+                    && !c.NormId.Contains("tB_2", StringComparison.Ordinal)))
             .Where(r => parts.Any(p => Matches(p.Standard, r) && r.Values["dn"]!.Value >= p.FromDn && r.Values["dn"]!.Value < p.ToDn))
             .OrderBy(r => r.Values["dn"])
             .ToList();

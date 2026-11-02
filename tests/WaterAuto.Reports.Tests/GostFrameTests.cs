@@ -43,7 +43,7 @@ public class GostFrameTests
     [Fact]
     public void Specification_without_title_sheet_has_form_3_on_first_sheet_and_form_6_on_the_others()
     {
-        // ГОСТ Р 21.101-2020, п. 5.2.3: без титульного листа первый лист — по форме 3, последующие — по форме 6.
+        // ГОСТ Р 21.101-2026, п. 5.2.3: без титульного листа первый лист — по форме 3, последующие — по форме 6.
         var (first, others, frame, title, bottomMm) = Open(p => SpecificationDocx.Write(p, Takeoff, Stamp), d =>
         {
             var section = d.MainDocumentPart!.Document.Body!.GetFirstChild<SectionProperties>()!;
@@ -114,5 +114,18 @@ public class GostFrameTests
                 .Distinct()
                 .ToList());
         fonts.ShouldBe(["ISOCPEUR"]);
+    }
+    [Fact]
+    public void Customer_goes_to_graph_27_above_the_first_sheet_stamp_only_when_given()
+    {
+        // ГОСТ Р 21.101-2026: графа 27 — краткое наименование заказчика, строка 10 мм над основной надписью; вводится при необходимости.
+        string FirstFooter(TitleBlock stamp) => Open(p => SpecificationDocx.Write(p, Takeoff, stamp), d =>
+        {
+            var section = d.MainDocumentPart!.Document.Body!.GetFirstChild<SectionProperties>()!;
+            var id = section.Elements<FooterReference>().Single(f => f.Type! == HeaderFooterValues.First).Id!.Value!;
+            return ((FooterPart)d.MainDocumentPart.GetPartById(id)).Footer.InnerText;
+        });
+        FirstFooter(Stamp with { Customer = "ООО «Заказчик»" }).ShouldContain("ООО «Заказчик»");
+        FirstFooter(Stamp).ShouldNotContain("Заказчик");
     }
 }

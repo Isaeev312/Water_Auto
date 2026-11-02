@@ -18,7 +18,10 @@ public sealed record DesignSettings(
     double? DesignVelocity = null,
     bool RingValvesClosed = false,
     IReadOnlyList<PipeSize>? PipeSizes = null,
-    bool ResizeOverLimit = false);
+    bool ResizeOverLimit = false,
+    Length RiserLength = default,
+    int? RiserDn = null,
+    double CurtainFlowLps = 0);
 
 /// <summary>Участок расчётного пути от ввода к диктующему оросителю.</summary>
 public sealed record PathSegment(string Id, string From, string To, int Dn, Length Length, PipeCharacteristic Kt, Flow Flow, Pressure LinearLoss, Pressure LossWithLocal, double Velocity);
@@ -96,7 +99,14 @@ public sealed record DesignResult(
     IReadOnlyList<ZoneCandidate> Candidates,
     HydrantResult? Hydrants = null,
     RingCheck? Ring = null,
-    string? ZoneCenterId = null);
+    string? ZoneCenterId = null)
+{
+    /// <summary>Стояк этажа своим DN (null — стояка нет или он учтён в подводящем).</summary>
+    public SeriesPipe? RiserPipe { get; init; }
+
+    /// <summary>Линейные потери в стояке при расходе насоса.</summary>
+    public Pressure RiserLinearLoss { get; init; }
+}
 
 /// <summary>
 /// Проектный расчёт спринклерной АУП по приложению Б СП 485 (ADR 0008):
@@ -291,10 +301,11 @@ public static class DesignCalculation
         if (hydrants is { } hi)
         {
             (solution, hydrant) = WithHydrants(hi, solution, p => Solve(current, p), p1, k, settings, series, issues);
-            var limit = norms.Find("snkr4004.p7_10_11.pressure")!.Values["diaphragmAbove"]!.Value;
+            var vpv = VpvNorms.For(hi.Settings.Region);
+            var limit = norms.Find(vpv.DiaphragmId)!.Values["diaphragmAbove"]!.Value;
             if (hydrant is { } hr && hr.ValvePressure.Mpa > limit + 1e-9)
             {
-                issues.Add(new Issue("vpv.diaphragm", IssueLevel.Warning, $"Давление у пожарного крана {hr.ValvePressure.Mpa:0.000} МПа больше {limit} МПа — между краном и соединительной головкой предусмотреть диафрагму или регулятор давления; расход ПК в расчёте принят без диафрагмы (в запас).", Clause: "7.11"));
+                issues.Add(new Issue("vpv.diaphragm", IssueLevel.Warning, $"Давление у пожарного крана {hr.ValvePressure.Mpa:0.000} МПа больше {limit} МПа — между краном и соединительной головкой предусмотреть диафрагму или регулятор давления; расход ПК в расчёте принят без диафрагмы (в запас).", Clause: $"{vpv.DiaphragmClause} {vpv.Doc}"));
             }
         }
 
@@ -320,10 +331,25 @@ public static class DesignCalculation
             clause += ", Б.29";
         }
 
+        // Б.28: водяные завесы, совмещённые с АУП-С, — их расход прибавляется к расходу АУП (подводящий и запас воды — с ним).
+        if (settings.CurtainFlowLps > 0)
+        {
+            qPump += settings.CurtainFlowLps;
+            clause += ", Б.28";
+        }
+
         var supply = series.Pick(settings.SupplyDn);
         var supplyLinear = supply is null ? 0 : qPump * qPump * settings.SupplyLength.Meters / (100 * supply.Kt.Kt);
+        // Стояк этажа своим DN (design.levels[].riserDn): отдельный участок Q²·L/(100·Kт) с той же долей местных потерь.
+        var riser = settings.RiserDn is { } rdn && settings.RiserLength.Meters > 0 ? series.Pick(rdn) : null;
+        var riserLinear = riser is null ? 0 : qPump * qPump * settings.RiserLength.Meters / (100 * riser.Kt.Kt);
+        if (riser is not null && Velocity(qPump, riser) is var rv && rv > vMax + 1e-9)
+        {
+            issues.Add(new Issue("design.velocity", IssueLevel.Warning, $"Стояк DN{riser.Dn}: скорость {rv:0.00} м/с больше {vMax} м/с — увеличить диаметр.", Clause: "6.7.1.37"));
+        }
+
         var z = Pressure.FromHeight(settings.DictatingAboveAxis).Mpa;
-        var pump = solution.SourcePressure.Mpa + ((1 + k) * supplyLinear) + z - settings.InletPressure.Mpa;
+        var pump = solution.SourcePressure.Mpa + ((1 + k) * (supplyLinear + riserLinear)) + z - settings.InletPressure.Mpa;
         var supplyVelocity = supply is null ? 0 : Velocity(qPump, supply);
 
         foreach (var c in current.Loops)
@@ -386,7 +412,8 @@ public static class DesignCalculation
             issues,
             [],
             hydrant,
-            ringCheck);
+            ringCheck)
+        { RiserPipe = riser, RiserLinearLoss = new Pressure(riserLinear) };
     }
 
     // Трубы кольца: замыкающие участки и путь по дереву между их концами.

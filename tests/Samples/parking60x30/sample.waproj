@@ -3,6 +3,7 @@
   "name": "Подземная автостоянка (пример)",
   "drawing": "floor.dxf",
   "design": {
+    "joints": "Grooved",
     "roomGroup": "2",
     "sprinklerK": 0.47,
     "sprinklerModel": "по каталогу",
@@ -60,7 +61,8 @@
       "backgroundRow": "sp3.tB_1.parking",
       "backgroundDba": 60,
       "sounder": "bolid.opr_s103_1",
-      "speakerTap": 3
+      "speakerTap": 3,
+      "largeOpenSpaceArea": 1000
     },
     "hvac": {
       "generalVentilation": [

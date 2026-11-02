@@ -6,7 +6,7 @@ using WaterAuto.Import;
 namespace WaterAuto.Application;
 
 /// <summary>Этаж АУПТ: имя, превышение пола над основным этажом, м, план (ID с префиксом) и раскладка с трассами по группам.</summary>
-public sealed record AuptLevel(int Index, string Name, double Delta, string Prefix, FloorPlan Plan, AuptGroupsResult Groups);
+public sealed record AuptLevel(int Index, string Name, double Delta, string Prefix, FloorPlan Plan, AuptGroupsResult Groups, int? RiserDn = null, double RiserRun = 0);
 
 /// <summary>
 /// Этажи сети АУПТ (design.levels). Каждый этаж — свой чертёж; ввод этажа (слой ПТ_ВВОД) — место стояка. Сеть этажа считается от
@@ -49,7 +49,13 @@ public static class AuptLevels
                 continue;
             }
 
-            levels.Add(new AuptLevel(k, name, l.Elevation - baseFloor, prefix, tagged, groups));
+            if (l.RiserDn is null)
+            {
+                issues.Add(new Issue("design.level.noRiserDn", IssueLevel.Warning,
+                    $"Этаж «{name}»: DN стояка не задан (design.levels[].riserDn) — стояк посчитан по DN подводящего {design.SupplyDn}; при меньшем стояке потери занижены (В-28)."));
+            }
+
+            levels.Add(new AuptLevel(k, name, l.Elevation - baseFloor, prefix, tagged, groups, l.RiserDn, l.RiserRun));
         }
 
         return levels;
@@ -59,16 +65,32 @@ public static class AuptLevels
         levels.FirstOrDefault(l => roomId.StartsWith(l.Prefix, StringComparison.Ordinal));
 
     /// <summary>Параметры расчёта трассы этажа: диктующий выше на Δz, подводящий длиннее на стояк |Δz|; основной этаж — без изменений.</summary>
-    public static DesignSettings SettingsFor(string roomId, IReadOnlyList<AuptLevel> levels, DesignSettings settings, ProjectDesign design)
+    /// <remarks>Свой подвод секции (<paramref name="feed"/>) заменяет общие длину и DN подводящего; стояк этажа добавляется к нему.</remarks>
+    public static DesignSettings SettingsFor(string roomId, IReadOnlyList<AuptLevel> levels, DesignSettings settings, ProjectDesign design, ProjectFeed? feed = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(design);
+        var supply = feed?.SupplyLength ?? design.SupplyLength;
+        if (feed is not null)
+        {
+            settings = settings with { SupplyLength = new Length(supply), SupplyDn = feed.SupplyDn ?? settings.SupplyDn };
+        }
+
+        // Стояк своим DN — отдельный участок |Δz|, разводка до него — по DN подводящего; без DN — всё по подводящему (В-28).
         return Of(roomId, levels) is { } l
-            ? settings with
-            {
-                DictatingAboveAxis = new Length(design.DictatingAboveAxis + l.Delta),
-                SupplyLength = new Length(design.SupplyLength + Math.Abs(l.Delta)),
-            }
+            ? l.RiserDn is { } dn
+                ? settings with
+                {
+                    DictatingAboveAxis = new Length(design.DictatingAboveAxis + l.Delta),
+                    SupplyLength = new Length(supply + l.RiserRun),
+                    RiserLength = new Length(Math.Abs(l.Delta)),
+                    RiserDn = dn,
+                }
+                : settings with
+                {
+                    DictatingAboveAxis = new Length(design.DictatingAboveAxis + l.Delta),
+                    SupplyLength = new Length(supply + l.RiserRun + Math.Abs(l.Delta)),
+                }
             : settings;
     }
 }

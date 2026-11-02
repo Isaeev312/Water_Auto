@@ -231,4 +231,104 @@ public class MaterialTakeoffTests
         var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler with { Note = "или аналог" });
         t.Items.First(i => i.Group == TakeoffGroup.Sprinklers).Note.ShouldBe("или аналог");
     }
+    private static readonly JointSpec Grooved = new(
+        new Dictionary<int, JointKind> { [80] = JointKind.Grooved, [50] = JointKind.Grooved, [25] = JointKind.Threaded },
+        StockLengthM: 6,
+        ThreadedStandards: new Dictionary<string, string> { ["Угольник"] = "ГОСТ 8946-75", ["Тройник"] = "ГОСТ 8948-75", ["Муфта переходная"] = "ГОСТ 8957-75", ["Муфта прямая"] = "ГОСТ 8954-75" },
+        CouplingStandard: "ГОСТ Р 51737-2001");
+
+    [Fact]
+    public void Grooved_network_takes_couplings_per_pipe_end_and_threaded_fittings_below_the_threshold()
+    {
+        // DN80: два участка по 1 м — по муфте на каждом конце (4); DN50: один участок — 2; DN25 — резьба, муфт ГОСТ Р 51737 нет.
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
+        var couplings = t.Items.Where(i => i.Name.StartsWith("Муфта трубопроводная разъёмная", StringComparison.Ordinal)).ToList();
+        couplings.Single(c => c.Name.Contains("DN80")).Quantity.ShouldBe(4);
+        couplings.Single(c => c.Name.Contains("DN50")).Quantity.ShouldBe(2);
+        couplings.ShouldNotContain(c => c.Name.Contains("DN25"));
+        couplings.ShouldAllBe(c => c.Designation == "ГОСТ Р 51737-2001");
+
+        // Отвод DN80 — под муфту; подключение оросителя DN25 на конце рядка — угольник на резьбе по ГОСТ 8946.
+        t.Items.ShouldContain(i => i.Name == "Отвод 90° DN80 (под разъёмную муфту)");
+        t.Items.ShouldContain(i => i.Name == "Угольник под ороситель DN25" && i.Designation == "ГОСТ 8946-75");
+        t.Items.ShouldNotContain(i => i.Name.StartsWith("Отвод под ороситель DN25", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Long_threaded_run_takes_straight_couplings_by_stock_length()
+    {
+        // DN25 на резьбе, участок 13 м при мерной длине 6 м: три трубы — две прямые муфты.
+        var route = new PipeRoute("R", "I", [new RouteNode("I", RouteNodeKind.Inlet, new(0, 0)), new RouteNode("S", RouteNodeKind.Sprinkler, new(13000, 0), "S")],
+            [new RouteSegment("P", "I", "S", RouteSegmentRole.Row, new Length(13), 1, 25)]);
+        var t = MaterialTakeoffBuilder.Build([route], 1, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
+        t.Items.Single(i => i.Name == "Муфта прямая DN25").Quantity.ShouldBe(2);
+    }
+    [Fact]
+    public void Straight_pass_through_joins_pipes_with_one_coupling_not_two()
+    {
+        // DN65 на муфтах: три участка по 4 м по прямой — два узла прохода без фасонной части: 3·2 − 2 = 4 муфты.
+        // DN25 на резьбе: два участка по 4 м по прямой — одна прямая муфта в узле прохода.
+        RouteNode N(string id, double x, RouteNodeKind k = RouteNodeKind.Tee) => new(id, k, new(x, 0));
+        var g = new PipeRoute("G", "I", [N("I", 0, RouteNodeKind.Inlet), N("A", 4000), N("B", 8000), N("C", 12000, RouteNodeKind.Bend)],
+            [new RouteSegment("1", "I", "A", RouteSegmentRole.Main, new Length(4), 1, 65), new RouteSegment("2", "A", "B", RouteSegmentRole.Main, new Length(4), 1, 65), new RouteSegment("3", "B", "C", RouteSegmentRole.Main, new Length(4), 1, 65)]);
+        var t = MaterialTakeoffBuilder.Build([g], 0, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved with { ByDn = new Dictionary<int, JointKind> { [65] = JointKind.Grooved } });
+        t.Items.Single(i => i.Name == "Муфта трубопроводная разъёмная DN65").Quantity.ShouldBe(4);
+
+        var r = new PipeRoute("R", "I", [N("I", 0, RouteNodeKind.Inlet), N("A", 4000), N("B", 8000, RouteNodeKind.Bend)],
+            [new RouteSegment("1", "I", "A", RouteSegmentRole.Row, new Length(4), 1, 25), new RouteSegment("2", "A", "B", RouteSegmentRole.Row, new Length(4), 1, 25)]);
+        var tr = MaterialTakeoffBuilder.Build([r], 0, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
+        tr.Items.Single(i => i.Name == "Муфта прямая DN25").Quantity.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Fitting_with_ends_of_different_kinds_lists_its_ends()
+    {
+        // Тройник DN80 на муфтах с ответвлением DN25 на резьбе — переходный, концы перечислены; не «под муфту» целиком.
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved);
+        t.Items.ShouldContain(i => i.Name == "Тройник DN80×25 (концы: DN80 — под муфту, DN25 — резьба)" && i.Designation == null);
+        t.Items.ShouldContain(i => i.Name == "Переход DN50×25 (концы: DN50 — под муфту, DN25 — резьба)");
+    }
+    [Fact]
+    public void Bend_with_a_DN_change_is_an_elbow_of_the_larger_DN_and_a_reducer_either_way()
+    {
+        RouteNode N(string id, double x, double y, RouteNodeKind k = RouteNodeKind.Bend) => new(id, k, new(x, y));
+        foreach (var (a, b) in new[] { (65, 50), (50, 65) })
+        {
+            var r = new PipeRoute("R", "I", [N("I", 0, 0, RouteNodeKind.Inlet), N("B", 3000, 0), N("E", 3000, 3000)],
+                [new RouteSegment("1", "I", "B", RouteSegmentRole.Main, new Length(3), 1, a), new RouteSegment("2", "B", "E", RouteSegmentRole.Main, new Length(3), 1, b)]);
+            var t = MaterialTakeoffBuilder.Build([r], 0, Norms, "ГОСТ 3262", Sprinkler);
+            t.Items.ShouldContain(i => i.Name == "Отвод 90° DN65");
+            t.Items.ShouldContain(i => i.Name == "Переход DN65×50");
+        }
+    }
+
+    [Fact]
+    public void Coupling_catalog_note_only_for_parts_with_a_grooved_end()
+    {
+        // Сварка × резьба (DN200 приварной, ответвление DN25 на резьбе) — без «по каталогу изготовителя муфт».
+        RouteNode N(string id, double x, double y, RouteNodeKind k = RouteNodeKind.Tee) => new(id, k, new(x, y));
+        var r = new PipeRoute("R", "I", [N("I", 0, 0, RouteNodeKind.Inlet), N("T", 3000, 0), N("E", 6000, 0, RouteNodeKind.Bend), N("S", 3000, 3000, RouteNodeKind.Sprinkler)],
+            [new RouteSegment("1", "I", "T", RouteSegmentRole.Main, new Length(3), 1, 200), new RouteSegment("2", "T", "E", RouteSegmentRole.Main, new Length(3), 1, 200), new RouteSegment("3", "T", "S", RouteSegmentRole.Row, new Length(3), 1, 25)]);
+        var spec = Grooved with { ByDn = new Dictionary<int, JointKind> { [200] = JointKind.Welded, [25] = JointKind.Threaded } };
+        var t = MaterialTakeoffBuilder.Build([r], 1, Norms, "ГОСТ 10704", Sprinkler, joints: spec);
+        var tee = t.Items.Single(i => i.Name.StartsWith("Тройник DN200×25", StringComparison.Ordinal));
+        tee.Name.ShouldContain("концы");
+        (tee.Note ?? "").ShouldNotContain("муфт");
+    }
+    [Fact]
+    public void Grooved_parts_take_the_maker_designation_by_pipe_outer_diameter()
+    {
+        // ГОСТ 3262: DN80 — Ø88,5 мм → изделия 3" (89) в допуске 1,5 мм; DN50 — Ø60 → 2" (60); размера нет в каталоге — «по каталогу».
+        var catalog = new GroovedCatalog(1.5, new Dictionary<string, IReadOnlyList<GroovedItem>>
+        {
+            ["coupling"] = [new(60, null, "Муфта МГ03 2\" (60)"), new(89, null, "Муфта МГ03 3\" (89)")],
+            ["elbow90"] = [new(89, null, "Колено К902 3\" (89)")],
+        });
+        var t = MaterialTakeoffBuilder.Build([Route], 3, Norms, "ГОСТ 3262", Sprinkler, joints: Grooved with { Catalog = catalog });
+        t.Items.Single(i => i.Name == "Муфта трубопроводная разъёмная DN80").Designation.ShouldBe("Муфта МГ03 3\" (89); ГОСТ Р 51737-2001");
+        var elbow = t.Items.Single(i => i.Name == "Отвод 90° DN80 (под разъёмную муфту)");
+        elbow.Designation.ShouldBe("Колено К902 3\" (89)");
+        elbow.Note.ShouldBeNull();
+        t.Items.Single(i => i.Name == "Муфта трубопроводная разъёмная DN50").Designation.ShouldBe("Муфта МГ03 2\" (60); ГОСТ Р 51737-2001");
+    }
 }

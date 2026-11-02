@@ -32,7 +32,7 @@
         { "kind": "pumpFault", "clause": "ГОСТ Р 53325-2012, п. 7.4.5 (сверить)" },
         { "kind": "automaticsOff" }
       ],
-      "note": "с автоматическим включением резервного агрегата; сигналы сверх обобщённых (работа и авария насосов, вводы питания) — по паспорту шкафа, А-05"
+      "note": "с АВР; сигналы — по паспорту (А-05)"
     },
     {
       "name": "Узел управления спринклерный водозаполненный DN{dnC}",
@@ -44,19 +44,35 @@
       "role": "cu",
       "mark": "УУ",
       "signals": [ { "kind": "pressureSwitch" } ],
-      "note": "с сигнализатором давления и камерой задержки; или аналог"
+      "note": "с сигнализатором давления"
     },
     {
-      "name": "Насос жокей с мембранным баком вместимостью не менее {tank} л",
-      "designation": "марка — по каталогу",
+      "name": "{jockeyName}",
+      "designation": "{jockeyDoc}",
       "unit": "компл.",
       "per": 1,
       "group": "equipment",
       "role": "jockey",
-      "note": "автоматический водопитатель; обвязка — по каталогу; расход — В-07"
+      "mark": "ШУЖ",
+      "signals": [
+        { "kind": "pumpStart", "clause": "ДАЭ 500.027.000 РЭ, прил. Б: X5:5-6 «Установка запущена»" },
+        { "kind": "pumpFault", "clause": "ДАЭ 500.027.000 РЭ, прил. Б: X5:1-2 «Неисправность»" },
+        { "kind": "automaticsOff", "clause": "ДАЭ 500.027.000 РЭ, прил. Б: X5:3-4 «Автом. отключена»" }
+      ],
+      "note": "{jockeyNote}"
     },
     {
-      "name": "Задвижка DN{dnS}, PN 16, с датчиком положения",
+      "name": "{tankName}",
+      "designation": "{tankDoc}",
+      "unit": "шт.",
+      "per": 1,
+      "count": "jockeyTanks",
+      "group": "equipment",
+      "role": "jockeyTank",
+      "note": "{tankNote}"
+    },
+    {
+      "name": "Задвижка клиновая DN{dnS}, PN 16, с датчиком положения",
       "designation": "по ТУ изготовителя",
       "unit": "шт.",
       "per": 1,
@@ -64,8 +80,22 @@
       "role": "inletValve",
       "mark": "ЗД",
       "signals": [ { "kind": "valvePosition" } ],
-      "note": "на каждом вводе (входном всасывающем трубопроводе) в насосную; или аналог",
-      "count": "inlets"
+      "note": "на вводе в насосную",
+      "count": "inlets",
+      "catalog": "gateSensor",
+      "catalogDn": "dnS"
+    },
+    {
+      "name": "Задвижка клиновая DN{dnS}, PN 16",
+      "designation": "по ТУ изготовителя",
+      "unit": "шт.",
+      "per": 1,
+      "count": "ringValves",
+      "group": "valves",
+      "role": "ringValve",
+      "note": "секционная, кольцевой коллектор",
+      "catalog": "gateSensor",
+      "catalogDn": "dnS"
     },
     {
       "name": "Затвор дисковый поворотный DN{dnS}, PN 16, с датчиком положения",
@@ -77,7 +107,9 @@
       "role": "valveS",
       "mark": "ЗД",
       "signals": [ { "kind": "valvePosition" } ],
-      "note": "на всасывающей линии; или аналог"
+      "note": "на всасывающей линии",
+      "catalog": "butterflySensor",
+      "catalogDn": "dnS"
     },
     {
       "name": "Затвор дисковый поворотный DN{dnD}, PN 16, с датчиком положения",
@@ -89,7 +121,9 @@
       "role": "valveD",
       "mark": "ЗД",
       "signals": [ { "kind": "valvePosition" } ],
-      "note": "на напорной линии; или аналог"
+      "note": "на напорной линии",
+      "catalog": "butterflySensor",
+      "catalogDn": "dnD"
     },
     {
       "name": "Клапан обратный DN{dnD}, PN 16",
@@ -99,7 +133,9 @@
       "count": "pumps",
       "group": "valves",
       "role": "checkD",
-      "note": "на напорной линии; или аналог"
+      "note": "на напорной линии",
+      "catalog": "check",
+      "catalogDn": "dnD"
     },
     {
       "name": "Вставка виброизолирующая DN{dnS}, PN 16",
@@ -149,7 +185,7 @@
       "count": "pumps",
       "group": "valves",
       "role": "cock",
-      "note": "для снятия приборов на поверку; или аналог"
+      "note": "для поверки манометров"
     },
     {
       "name": "Затвор дисковый поворотный DN{dnC}, PN 16, с датчиком положения",
@@ -161,7 +197,9 @@
       "role": "cuValve",
       "mark": "ЗД",
       "signals": [ { "kind": "valvePosition", "clause": "СП 485.1311500.2020, п. 6.8.7" } ],
-      "note": "до и после узла управления (п. 6.8.7); или аналог"
+      "note": "до и после УУ (п. 6.8.7)",
+      "catalog": "butterflySensor",
+      "catalogDn": "dnC"
     },
     {
       "name": "Манометр показывающий, 0–1,6 МПа, с трёхходовым краном",
@@ -181,7 +219,7 @@
       "count": "truckInlets",
       "group": "valves",
       "role": "head",
-      "note": "патрубок для мобильной пожарной техники, выведен на фасад"
+      "note": "патрубок на фасаде"
     },
     {
       "name": "Клапан обратный DN{truckDn}, PN 16",
@@ -191,17 +229,21 @@
       "count": "truckInlets",
       "group": "valves",
       "role": "checkT",
-      "note": "на линии от патрубка; или аналог"
+      "note": "на линии от патрубка",
+      "catalog": "check",
+      "catalogDn": "truckDn"
     },
     {
-      "name": "Задвижка DN{truckDn}, PN 16",
+      "name": "Задвижка клиновая DN{truckDn}, PN 16, с датчиком положения",
       "designation": "по ТУ изготовителя",
       "unit": "шт.",
       "per": 1,
       "count": "truckInlets",
       "group": "valves",
       "role": "valveT",
-      "note": "опломбирована в открытом положении"
+      "note": "опломбирована «открыто»",
+      "catalog": "gateSensor",
+      "catalogDn": "truckDn"
     },
     {
       "name": "Тройник DN{dnS}",
@@ -211,7 +253,7 @@
       "count": "pumps",
       "group": "fittings",
       "role": "teeS",
-      "note": "всасывающий коллектор — ответвления к агрегатам"
+      "note": "всасывающий коллектор"
     },
     {
       "name": "Тройник DN{dnC}×{dnD}",
@@ -221,7 +263,7 @@
       "count": "pumps",
       "group": "fittings",
       "role": "teeD",
-      "note": "напорный коллектор — присоединение агрегатов"
+      "note": "напорный коллектор"
     },
     {
       "name": "Тройник DN{dnC}×{truckDn}",
@@ -231,7 +273,7 @@
       "count": "truckInlets",
       "group": "fittings",
       "role": "teeT",
-      "note": "напорный коллектор — присоединение патрубков"
+      "note": "к патрубкам ГМ"
     },
     {
       "name": "Переход эксцентрический DN{dnS} × DN всасывающего патрубка насоса",
@@ -241,7 +283,7 @@
       "count": "pumps",
       "group": "fittings",
       "role": "reducerS",
-      "note": "размер — по патрубку принятого насоса; эксцентриситет — вверх"
+      "note": "по патрубку насоса; эксцентриситет вверх"
     },
     {
       "name": "Переход концентрический DN напорного патрубка насоса × DN{dnD}",
@@ -251,7 +293,7 @@
       "count": "pumps",
       "group": "fittings",
       "role": "reducerD",
-      "note": "размер — по патрубку принятого насоса"
+      "note": "по патрубку насоса"
     },
     {
       "name": "Отвод 90° DN{truckDn}",
@@ -271,7 +313,7 @@
       "count": "extraSections",
       "group": "fittings",
       "role": "teeCU",
-      "note": "гребёнка — отвод к узлам управления секций"
+      "note": "гребёнка узлов управления"
     },
     {
       "name": "Заглушка эллиптическая DN{dnS}",
@@ -280,7 +322,8 @@
       "per": 1,
       "group": "fittings",
       "role": "capS",
-      "note": "торец всасывающего коллектора"
+      "count": "suctionCaps",
+      "note": "при одном вводе"
     },
     {
       "name": "Заглушка эллиптическая DN{dnC}",

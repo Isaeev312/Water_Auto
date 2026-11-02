@@ -481,6 +481,43 @@ public partial class MainWindow : Window
 
     private static void Open(string path) => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
 
+    // Выпуск → PDF: чертежи DXF — сами (ADR 0015), docx — через Word (оглавление и поля обновляются), затем тома с ИУЛ по описям;
+    // работа в фоне, окно не блокируется.
+    private async void OnExportPdf(object sender, RoutedEventArgs e)
+    {
+        var dir = OutBox.Text.Trim();
+        if (!Directory.Exists(dir))
+        {
+            Summary.Text = "Папка выпуска ещё не создана — выполните расчёт.";
+            return;
+        }
+
+        PdfButton.IsEnabled = false;
+        Summary.Text = "Выгрузка в PDF…";
+        try
+        {
+            var messages = new List<string>();
+            var (drawings, docs, tomes) = await Task.Run(() =>
+            {
+                var d = DrawingPdf.Export(dir, WaterAuto.Core.DocumentStyle.DefaultFont, messages.Add);
+                var w = WordPdf.Export(dir, messages.Add);
+                var t = Tome.Assemble(dir, messages.Add);
+                return (d.Count, w?.Count ?? 0, t.Count / 2);
+            });
+            var problems = messages.Where(m => !m.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && !m.Contains("-УЛ.pdf", StringComparison.Ordinal)).ToList();
+            Summary.Text = $"PDF: чертежей {drawings}, документов {docs}, томов с ИУЛ {tomes} — в папке выпуска."
+                + (problems.Count > 0 ? Environment.NewLine + string.Join(Environment.NewLine, problems) : "");
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or IOException or UnauthorizedAccessException)
+        {
+            Summary.Text = "Выгрузка в PDF не удалась: " + ex.Message;
+        }
+        finally
+        {
+            PdfButton.IsEnabled = true;
+        }
+    }
+
     // ---------- Расчёт ----------
 
     private async void OnRun(object sender, RoutedEventArgs e) => await RunCalculationAsync();
@@ -1052,7 +1089,7 @@ public partial class MainWindow : Window
         CheckDetails.Text = string.Join(Environment.NewLine, lines);
         CheckDetails.ToolTip = preview.Issues.Count == 0
             ? null
-            : string.Join(Environment.NewLine, preview.Issues.Select(i => $"{i.Level}: {i.Message}"));
+            : string.Join(Environment.NewLine, preview.Issues.Select(i => $"{i.Level.Ru()}: {i.Message}"));
         CheckDetails.Visibility = Visibility.Visible;
     }
 

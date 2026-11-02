@@ -22,6 +22,12 @@ public sealed record ProjectFile
     /// </summary>
     public bool Aupt { get; init; } = true;
 
+    /// <summary>Выпустить раздел 9 «Мероприятия по обеспечению пожарной безопасности» в части систем ППЗ по п. 26 ПП РФ № 87 (стадия П).</summary>
+    public bool Pp87 { get; init; }
+
+    /// <summary>Страна объекта (ADR 0014): Kg — нормы КР (по умолчанию, как во всех прежних проектах), Ru — нормы РФ.</summary>
+    public Core.NormsRegion Norms { get; init; } = Core.NormsRegion.Kg;
+
     public ProjectDesign Design { get; init; } = new();
 
     public ProjectTitle Title { get; init; } = new();
@@ -43,6 +49,9 @@ public sealed record ProjectFile
     /// <summary>ID реестра литературы для списка источников; пусто — действующие нормы реестра.</summary>
     public IReadOnlyList<string> Literature { get; init; } = [];
 
+    /// <summary>Газовое пожаротушение объёмным способом (СП 485, разд. 9); null — не проектируется.</summary>
+    public ProjectGas? Gas { get; init; }
+
     /// <summary>Порошковое пожаротушение модульного типа (СП 485, разд. 10, прил. И); null — не проектируется.</summary>
     public ProjectPowder? Powder { get; init; }
 
@@ -62,8 +71,7 @@ public sealed record ProjectFile
 
     public static ProjectFile Load(string path)
     {
-        var project = JsonSerializer.Deserialize<ProjectFile>(File.ReadAllText(path), Options)
-            ?? throw new InvalidDataException($"Пустой файл проекта: {path}");
+        var project = Parse(File.ReadAllText(path)) ?? throw new InvalidDataException($"Пустой файл проекта: {path}");
         if (project.Drawing.Length == 0)
         {
             throw new InvalidDataException("В проекте не задан чертёж (поле drawing).");
@@ -76,7 +84,26 @@ public sealed record ProjectFile
 
     /// <summary>Проект из строки JSON (тем же форматом, что и файл проекта) — для проверок без записи на диск.</summary>
     public static ProjectFile FromJson(string json) =>
-        JsonSerializer.Deserialize<ProjectFile>(json, Options) ?? throw new InvalidDataException("Пустой JSON проекта.");
+        Parse(json) ?? throw new InvalidDataException("Пустой JSON проекта.");
+
+    // Проект без поля design.joints записан до выбора соединений — он считался на сварке и остаётся на сварке.
+    private static ProjectFile? Parse(string json)
+    {
+        var project = JsonSerializer.Deserialize<ProjectFile>(json, Options);
+        if (project is null)
+        {
+            return null;
+        }
+
+        if (project.Design is null)
+        {
+            throw new InvalidDataException("В проекте раздел design пуст (null).");
+        }
+
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        var hasJoints = node?["design"] is System.Text.Json.Nodes.JsonObject d && d.ContainsKey("joints");
+        return hasJoints ? project : project with { Design = project.Design with { Joints = Core.JointKind.Welded } };
+    }
 }
 
 /// <summary>Исходные данные расчёта.</summary>
@@ -107,6 +134,12 @@ public sealed record ProjectDesign
     /// <summary>Установка спринклерная воздухозаполненная (п. 3.90): питающие и распределительные трубопроводы — под давлением воздуха.</summary>
     public bool AirFilled { get; init; }
 
+    /// <summary>Пенная установка (раствор пенообразователя, столбцы «пена» табл. 6.1–6.3); null — водяная.</summary>
+    public ProjectFoam? Foam { get; init; }
+
+    /// <summary>Дренчерные водяные завесы проёмов (пп. 6.3.6–6.3.14).</summary>
+    public IReadOnlyList<ProjectCurtain> Curtains { get; init; } = [];
+
     /// <summary>Положение розетки для автоподбора: up (вверх), down (вниз), horizontal, concealed.</summary>
     public string SprinklerDeflector { get; init; } = "up";
 
@@ -115,7 +148,33 @@ public sealed record ProjectDesign
     /// <summary>Стандарт труб, начиная с <see cref="PipeStandardLargeFromDn"/>; пусто — все трубы по <see cref="PipeStandard"/>.</summary>
     public string PipeStandardLarge { get; init; } = "ГОСТ 10704-91";
 
-    public int PipeStandardLargeFromDn { get; init; } = 50;
+    /// <summary>
+    /// DN, с которого трубы — по <see cref="PipeStandardLarge"/>; null — по виду соединений: на сварке — с DN50, на муфтах — с DN200
+    /// (электросварные по ГОСТ 10704 муфтами не соединяются, п. 6.7.2.1; ГОСТ 3262 — до DN150).
+    /// </summary>
+    public int? PipeStandardLargeFromDn { get; init; }
+
+    /// <summary>Вид соединений сети (решение проектировщика, п. 6.7.2.1): Grooved — разъёмные (грувлочные) муфты, Welded — сварка.</summary>
+    public Core.JointKind Joints { get; init; } = Core.JointKind.Grooved;
+
+    /// <summary>При муфтах: DN, начиная с которого ставятся муфты; меньшие — на резьбе (решение проектировщика, не норма).</summary>
+    public int GroovedMinDn { get; init; } = 50;
+
+    /// <summary>Мерная длина труб для счёта стыков (муфт), м.</summary>
+    public double PipeStockLength { get; init; } = 6;
+
+    /// <summary>Стандарт трубопроводных разъёмных муфт.</summary>
+    public string CouplingStandard { get; init; } = "ГОСТ Р 51737-2001";
+
+    /// <summary>Резьбовые соединительные части из ковкого чугуна по началу наименования.</summary>
+    public Dictionary<string, string> ThreadedFittingStandards { get; init; } = new()
+    {
+        ["Угольник"] = "ГОСТ 8946-75",
+        ["Тройник"] = "ГОСТ 8948-75",
+        ["Крестовина"] = "ГОСТ 8951-75",
+        ["Муфта переходная"] = "ГОСТ 8957-75",
+        ["Муфта прямая"] = "ГОСТ 8954-75",
+    };
 
     /// <summary>Стандарты приварных деталей трубопроводов по типу: начало наименования → обозначение.</summary>
     public Dictionary<string, string> FittingStandards { get; init; } = new()
@@ -134,10 +193,19 @@ public sealed record ProjectDesign
     /// <summary>Ссылка в выноске у точки ввода на лист насосной станции.</summary>
     public string InletReference { get; init; } = "см. раздел НС";
 
-    /// <summary>Сортамент для расчёта и спецификации.</summary>
+    /// <summary>
+    /// Сортамент для расчёта и спецификации. Граница стандартов — <see cref="PipeStandardLargeFromDn"/>; не задана — на сварке с DN50
+    /// (принято в проекте), на муфтах — с наибольшего DN муфт <paramref name="couplingMaxDn"/> (п. 6.7.2.6, из данных норм):
+    /// первый стандарт проекта (ГОСТ 3262) этого DN не имеет, сварка на нём — единственный вариант (сведение joints.welded).
+    /// </summary>
+    public string SeriesStandard(int couplingMaxDn) => PipeStandardLarge.Length > 0
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? (Joints == Core.JointKind.Grooved ? couplingMaxDn : 50))
+        : PipeStandard;
+
+    /// <summary>Сортамент насосной станции и вводов: на сварке с фланцами к арматуре (п. 6.7.2.4) — граница как у сварной сети.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public string PipeSeriesStandard => PipeStandardLarge.Length > 0
-        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn)
+    public string StationSeriesStandard => PipeStandardLarge.Length > 0
+        ? Calc.Routing.PipeSeries.Compose(PipeStandard, PipeStandardLarge, PipeStandardLargeFromDn ?? 50)
         : PipeStandard;
 
     /// <summary>Высота помещения, м — для табл. 6.3 и примечания 3 к табл. 6.2; null — до 10 м.</summary>
@@ -151,6 +219,12 @@ public sealed record ProjectDesign
 
     /// <summary>Другие этажи сети: чертёж (с вводом — местом стояка, слой ПТ_ВВОД) и отметка пола; основной этаж — Drawing проекта.</summary>
     public IReadOnlyList<ProjectAuptLevel> Levels { get; init; } = [];
+
+    /// <summary>Свои подводы секций: длина и DN подводящего от насоса до ввода помещения; остальные помещения — SupplyLength и SupplyDn.</summary>
+    public IReadOnlyList<ProjectFeed> Feeds { get; init; } = [];
+
+    /// <summary>Помещениям без точки ПТ_ВВОД ставить ввод у стены со стороны насосной (предупреждение с координатами).</summary>
+    public bool AutoInlets { get; init; }
 
     /// <summary>Отметка пола этажа, м — для условия п. 6.2.14 (короба на высоте от пола); null — условие считается выполненным.</summary>
     public double? FloorElevation { get; init; }
@@ -201,6 +275,37 @@ public sealed record ProjectDesign
 /// Комплектная насосная установка проекта: конкретная установка каталога вместо автоподбора по требуемым подаче и напору.
 /// Насосы, прибор управления, обвязка с арматурой и КИП входят в установку — количество насосов в выпуске берётся по ней.
 /// </summary>
+/// <summary>
+/// Водяная завеса проёма: имя, ширина, м; K и давление у диктующего оросителя, МПа (ТД оросителя); DN нитки; группа помещений
+/// (пусто — design.roomGroup); совмещена с АУП-С — расход складывается с АУП (Б.28), продолжительность — как АУП-С.
+/// </summary>
+public sealed record ProjectCurtain
+{
+    public string Name { get; init; } = "";
+
+    public double Width { get; init; }
+
+    public double K { get; init; }
+
+    public double Pressure { get; init; }
+
+    public int Dn { get; init; } = 32;
+
+    public string? Group { get; init; }
+
+    public bool Combined { get; init; } = true;
+
+    public string Model { get; init; } = "";
+}
+
+/// <summary>Пенообразователь: наименование и концентрация в растворе, % — по ТД пенообразователя (интенсивности табл. 6.1–6.3 — для типа S).</summary>
+public sealed record ProjectFoam
+{
+    public string Name { get; init; } = "";
+
+    public double Concentration { get; init; }
+}
+
 /// <summary>Этаж АУПТ: имя для листа, чертёж и отметка пола, м (основной этаж — design.floorElevation, по умолчанию 0).</summary>
 public sealed record ProjectAuptLevel
 {
@@ -209,6 +314,22 @@ public sealed record ProjectAuptLevel
     public string Drawing { get; init; } = "";
 
     public double Elevation { get; init; }
+
+    /// <summary>DN стояка этажа; null — стояк считается по DN подводящего (замечание, В-28).</summary>
+    public int? RiserDn { get; init; }
+
+    /// <summary>Разводка по основному этажу от подводящего до стояка, м (DN подводящего); 0 — стояк у точки подключения.</summary>
+    public double RiserRun { get; init; }
+}
+
+/// <summary>Подвод секции: помещение (текст внутри контура ПТ_КОНТУР), длина подводящего от насоса до его ввода, м, и DN (пусто — SupplyDn).</summary>
+public sealed record ProjectFeed
+{
+    public string Room { get; init; } = "";
+
+    public double SupplyLength { get; init; }
+
+    public int? SupplyDn { get; init; }
 }
 
 /// <summary>Помещение со своей группой по приложению А СП 485 (имя — текст внутри контура ПТ_КОНТУР) и высотами для табл. 6.2, 6.3.</summary>
@@ -248,7 +369,42 @@ public sealed record ProjectJockey
 
     /// <summary>Давление отключения жокей-насоса, МПа; норма уставку не задаёт (В-07).</summary>
     public double? StopPressureMpa { get; init; }
+
+    /// <summary>Не из проекта: незаданные проектировщиком значения назначены по правилу практики (его описание); null — всё задано вручную.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? AssignedBy { get; init; }
+
+    /// <summary>
+    /// Незаданные расход и уставки — по правилу практики (data/catalog/jockey_practice.json): доля расхода диктующего оросителя,
+    /// включение при расчётном давлении пожарного насоса, отключение выше на заданную величину. Заданное проектировщиком не меняется.
+    /// </summary>
+    public static ProjectJockey Assign(ProjectJockey? manual, JockeyPractice? practice, double dictatingFlowLps, double pumpPressureMpa)
+    {
+        var j = manual ?? new ProjectJockey();
+        if (practice is null)
+        {
+            return j;
+        }
+
+        var start = j.StartPressureMpa ?? (j.StopPressureMpa is { } stop ? stop - practice.StopAboveStartMpa : pumpPressureMpa);
+        var assigned = j with
+        {
+            FlowLitersPerSecond = j.FlowLitersPerSecond ?? Math.Round(practice.FlowShareOfDictating * dictatingFlowLps, 2),
+            StartPressureMpa = Math.Round(start, 3),
+            StopPressureMpa = j.StopPressureMpa ?? Math.Round(start + practice.StopAboveStartMpa, 3),
+        };
+        return j.FlowLitersPerSecond is not null && j.StartPressureMpa is not null && j.StopPressureMpa is not null
+            ? j
+            : assigned with
+            {
+                AssignedBy = string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"),
+                    $"расход — {practice.FlowShareOfDictating * 100:0.#} % расхода диктующего оросителя, включение — при расчётном давлении пожарного насоса, отключение — на {practice.StopAboveStartMpa:0.###} МПа выше"),
+            };
+    }
 }
+
+/// <summary>Правило практики для жокей-насоса (В-07): доля расхода диктующего оросителя и превышение уставки отключения, МПа.</summary>
+public sealed record JockeyPractice(double FlowShareOfDictating, double StopAboveStartMpa, string Source);
 
 /// <summary>Резервуар пожарного запаса: габариты и мёртвый слой, м (ARCHITECTURE §5).</summary>
 public sealed class ProjectTank
@@ -382,6 +538,38 @@ public sealed record ProjectTitle
     /// <summary>Стадия (графа 6 основной надписи): «П» — проектная документация, «Р» — рабочая.</summary>
     public string Stage { get; init; } = "Р";
 
+    /// <summary>
+    /// Стадия «П»: шифр раздела (части) проектной документации — марка документов тома: «ИОС2.2», «ИОС2.2.ПЗ», «ИОС2.2.СО», «ИОС2.2.С».
+    /// Где описывается АУП, решает проектировщик: подраздел «Система водоснабжения» раздела 5 (п. 17 ПП РФ № 87) или раздел 9 (п. 26).
+    /// </summary>
+    public string SectionMark { get; init; } = "ИОС2.2";
+
+    /// <summary>Стадия «П»: наименование раздела, подраздела и части для обложки и титульного листа (ПП РФ № 87 в ред. от 21.10.2025).</summary>
+    public string SectionTitle { get; init; } = "Раздел 5 «Сведения об инженерном оборудовании, о сетях и системах инженерно-технического обеспечения». Подраздел 2 «Система водоснабжения». Часть 2 «Системы пожаротушения»";
+
+    /// <summary>Стадия «П»: номер тома для обложки и титульного листа.</summary>
+    public string Volume { get; init; } = "5.2.2";
+
+    /// <summary>
+    /// Стадия «П»: шифр части с пожарной сигнализацией и СОУЭ — марка тома АПС («ПБ2», «ПБ2.ПЗ», «ПБ2.СО», «ПБ2.С»). По ПП РФ № 87
+    /// (п. 26, подп. з, и, к, п) их описание и структурные схемы — в разделе 9; иное деление (например, ИОС) — решение проектировщика.
+    /// </summary>
+    public string AlarmSectionMark { get; init; } = "ПБ2";
+
+    /// <summary>Стадия «П»: наименование раздела и части АПС для обложки и титульного листа.</summary>
+    public string AlarmSectionTitle { get; init; } = "Раздел 9 «Мероприятия по обеспечению пожарной безопасности». Часть 2 «Автоматическая пожарная сигнализация. Система оповещения и управления эвакуацией людей при пожаре»";
+
+    /// <summary>Стадия «П»: номер тома АПС.</summary>
+    public string AlarmVolume { get; init; } = "9.2";
+
+    /// <summary>Стадия «П»: заказчик для титульного листа.</summary>
+    public string Customer { get; init; } = "[Заказчик]";
+
+    /// <summary>Стадия «П»: подписи титульного листа (должность, фамилия); пусто — «Главный инженер проекта» с руководителем.</summary>
+    public IReadOnlyList<ProjectSignature> TitleSignatures { get; init; } = [];
+
+    public bool IsDesignStage => Stage.Trim().StartsWith('П');
+
     /// <summary>Наименование здания (сооружения) — графа 3 основной надписи.</summary>
     public string Building { get; init; } = "[Наименование здания]";
 
@@ -478,6 +666,12 @@ public sealed class ProjectWarning
 
     /// <summary>Речевое оповещение: ID усилителя (блока речевого оповещения) из каталога; null — первый.</summary>
     public string? Amplifier { get; init; }
+
+    /// <summary>
+    /// Площадь, м², от которой помещение принимается большим открытым пространством (решение проектировщика, А-19):
+    /// световые оповещатели — по периметру с шагом п. 6.16.2. null — везде правило «до самого удалённого места».
+    /// </summary>
+    public double? LargeOpenSpaceArea { get; init; }
 }
 
 /// <summary>Дымовая зона: вытяжная система, подпор (может отсутствовать), число клапанов дымоудаления.</summary>
@@ -561,4 +755,64 @@ public sealed class ProjectPowderRoom
 
     /// <summary>Затенённая площадь Sз, м², для k2 по формуле паспорта модуля; 0 — затенений нет (решение проектировщика), null — не задана.</summary>
     public double? ShadedArea { get; init; }
+
+    /// <summary>Дверей (проёмов) в помещение — табло и датчики положения по пп. 7.6.3, 7.6.5 СП 484.</summary>
+    public int Doors { get; init; } = 1;
+}
+
+/// <summary>Газовое пожаротушение объёмным способом (СП 485 разд. 9, прил. Г, Д, Ж): высота объекта над уровнем моря и помещения.</summary>
+public sealed class ProjectGas
+{
+    /// <summary>Высота объекта над уровнем моря, м — поправка K3 по табл. Г.17.</summary>
+    public double Altitude { get; init; }
+
+    /// <summary>Установка модульная (true) или централизованная (false) — нормативное время подачи по 9.7.4.</summary>
+    public bool Modular { get; init; } = true;
+
+    /// <summary>Модуль из data/catalog/gas_modules.json; null — по каждому помещению наименьшее число модулей из каталога.</summary>
+    public string? Module { get; init; }
+
+    public IReadOnlyList<ProjectGasRoom> Rooms { get; init; } = [];
+}
+
+/// <summary>Помещение АУГП — исходные данные проектировщика (СП 485, 9.5).</summary>
+public sealed class ProjectGasRoom
+{
+    /// <summary>Имя помещения с чертежа (слой ПТ_КОНТУР).</summary>
+    public string Room { get; init; } = "";
+
+    /// <summary>ГОТВ — ключ записи табл. Г (hfc227ea, hfc125, hfc23, co2, nitrogen, argon, inergen, argonite, fk5112, sf6, hfc218, hfc318c, tfm18i, hfc217j1).</summary>
+    public string Agent { get; init; } = "hfc227ea";
+
+    /// <summary>Горючий материал — ключ концентрации (heptane, ethanol, petrolA76, machineOil, acetone, toluene, …); не-ЛВЖ и А2 — heptane.</summary>
+    public string Material { get; init; } = "heptane";
+
+    public double CeilingHeight { get; init; }
+
+    /// <summary>Суммарная площадь постоянно открытых проёмов, м².</summary>
+    public double OpenArea { get; init; }
+
+    public Core.GasOpenings Openings { get; init; } = Core.GasOpenings.Other;
+
+    /// <summary>Минимальная температура воздуха в помещении, °С.</summary>
+    public double MinTemperature { get; init; } = 20;
+
+    public Core.GasClassA1 ClassA1 { get; init; } = Core.GasClassA1.None;
+
+    /// <summary>Время подачи по гидравлическому расчёту, с; null — нормативное (9.7.4).</summary>
+    public double? DischargeTime { get; init; }
+
+    /// <summary>Остаток ГОТВ в трубопроводах по гидравлическому расчёту, кг; null — не учтён (замечание).</summary>
+    public double? PipeResidue { get; init; }
+
+    /// <summary>Остаток в одном модуле по ТД, кг, и число модулей.</summary>
+    public double ModuleResidue { get; init; }
+
+    public int Modules { get; init; }
+
+    /// <summary>Предельно допустимое избыточное давление, МПа (ГОСТ Р 12.3.047); null — проём сброса не считается.</summary>
+    public double? MaxOverpressure { get; init; }
+
+    /// <summary>Наибольшее число людей в помещении (для CO₂ — 9.1.2).</summary>
+    public int People { get; init; }
 }

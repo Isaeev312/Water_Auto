@@ -99,6 +99,29 @@ public static class PumpRoomSectionDxfWriter
             Text(pit.X0, (-pit.Depth * 1000) - (1.3 * h), "приямок", 0.7 * h);
         }
 
+        // Подписи оборудования и труб не наезжают друг на друга и на горизонтальные трубы: занятая подпись поднимается
+        // ступенькой (ширина знака ≈ 0,75 высоты). Трубы — тонкие полосы на своей отметке.
+        var taken = data.Pipes.Where(p => p.X1 - p.X0 > 1).Select(p => (X0: p.X0, Y0: (p.Z * 1000) - (0.15 * h), X1: p.X1, Y1: (p.Z * 1000) + (0.15 * h))).ToList();
+        var written = new List<(double X, double Y, string Text)>();
+        void Label(double x, double y, string value, double height)
+        {
+            // Та же подпись рядом (две трубы одного DN на одной отметке) — одна.
+            if (written.Any(w => w.Text == value && Math.Abs(w.X - x) < 6 * h && Math.Abs(w.Y - y) < 3 * h))
+            {
+                return;
+            }
+
+            written.Add((x, y, value));
+            var width = value.Length * 0.75 * height;
+            while (taken.Any(t => x < t.X1 && x + width > t.X0 && y < t.Y1 && y + height > t.Y0))
+            {
+                y += 1.3 * height;
+            }
+
+            taken.Add((x, y, x + width, y + height));
+            Text(x, y, value, height);
+        }
+
         foreach (var b in data.Blocks)
         {
             doc.Entities.Add(new LwPolyline([new XY(b.X0, b.Bottom * 1000), new XY(b.X1, b.Bottom * 1000), new XY(b.X1, b.Top * 1000), new XY(b.X0, b.Top * 1000)]) { IsClosed = true, Layer = equipment });
@@ -112,7 +135,7 @@ public static class PumpRoomSectionDxfWriter
                 doc.Entities.Add(new LwPolyline([new XY(cx - (w * 0.4), bodyTop * 1000), new XY(cx + (w * 0.4), bodyTop * 1000), new XY(cx + (w * 0.4), b.Top * 1000), new XY(cx - (w * 0.4), b.Top * 1000)]) { IsClosed = true, Layer = equipment });
             }
 
-            Text(b.X0, (b.Top * 1000) + (0.5 * h), b.Position is { } n ? $"{n}. {b.Label}" : b.Label, 0.7 * h);
+            Label(b.X0, (b.Top * 1000) + (0.5 * h), b.Position is { } n ? $"{n}. {b.Label}" : b.Label, 0.7 * h);
         }
 
         foreach (var p in data.Pipes)
@@ -120,7 +143,7 @@ public static class PumpRoomSectionDxfWriter
             if (p.X1 - p.X0 > 1)
             {
                 L(p.X0, p.Z, p.X1, p.Z, pipes);
-                Text(((p.X0 + p.X1) / 2) - (3 * h), (p.Z * 1000) + (0.4 * h), p.Label, 0.7 * h);
+                Label(((p.X0 + p.X1) / 2) - (3 * h), (p.Z * 1000) + (0.4 * h), p.Label, 0.7 * h);
             }
 
             foreach (var (vx, za, zb) in p.Verticals)
@@ -142,7 +165,7 @@ public static class PumpRoomSectionDxfWriter
         Text(sheet.At(30, 0).X, sheet.At(0, sheet.Format.HeightMm - 15).Y, "Разрез 1-1 насосной станции", 2 * h);
         var ny = sheet.At(0, 92).Y;
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
-        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.75));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
             doc.Entities.Add(new MText { Value = $"{k + 1}. {note}", InsertPoint = new XYZ(sheet.At(25, 0).X, ny, 0), Height = 0.9 * h, RectangleWidth = noteWidth, Layer = text });

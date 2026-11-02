@@ -55,6 +55,9 @@ public static class AxonometryDxfWriter
 
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
+    /// <summary>Переходы диаметра: трапеция по ходу воды от большего DN к меньшему там, где труба продолжается прямо.</summary>
+    public const string ReducerLayer = "ПТ_ПЕРЕХОДЫ";
+
     // Выноски: вынос по горизонтали, мм листа, и направления (наклон 45°, 60° и 30°).
     private static readonly double[] LeaderReach = [6, 10, 14, 18, 24];
     private static readonly (int Dx, int Dy, double Slope)[] LeaderDirections =
@@ -209,6 +212,55 @@ public static class AxonometryDxfWriter
             }
         }
 
+        // Переходы: у узла, где участок продолжает приходящий по той же прямой с другим DN (ответвление вбок — тройник с переходом).
+        var reducers = DxfDrawing.AddLayer(doc, ReducerLayer, 4);
+        foreach (var route in routes)
+        {
+            var nodes = route.Nodes.ToDictionary(n => n.Id);
+            var incoming = route.Segments.ToDictionary(s => s.To);
+            foreach (var seg in route.Segments)
+            {
+                if (!incoming.TryGetValue(seg.From, out var parent) || parent.Dn == seg.Dn || seg.Dn == 0)
+                {
+                    continue;
+                }
+
+                var a = nodes[parent.From].Location;
+                var o = nodes[seg.From].Location;
+                var b = nodes[seg.To].Location;
+                var (ux, uy) = (o.XMm - a.XMm, o.YMm - a.YMm);
+                var (vx, vy) = (b.XMm - o.XMm, b.YMm - o.YMm);
+                var lu = Math.Sqrt((ux * ux) + (uy * uy));
+                var lv = Math.Sqrt((vx * vx) + (vy * vy));
+                if (lu < 1e-9 || lv < 1e-9 || Math.Abs((ux * vy) - (uy * vx)) / (lu * lv) > 1e-3 || ((ux * vx) + (uy * vy)) < 0)
+                {
+                    continue;
+                }
+
+                var q0 = Project(o, z, style);
+                var p1 = Project(b, z, style);
+                var dl = Math.Sqrt(Math.Pow(p1.X - q0.X, 2) + Math.Pow(p1.Y - q0.Y, 2));
+                var (dx, dy) = ((p1.X - q0.X) / dl, (p1.Y - q0.Y) / dl);
+
+                // Отступ от узла (отвода к оросителю, тройника): 3 мм листа, но не дальше 30 % участка — значок не сливается с отводом.
+                var gap = Math.Min(3 * unit, 0.3 * dl);
+                var p0 = new XY(q0.X + (dx * gap), q0.Y + (dy * gap));
+                var (nx, ny) = (-dy, dx);
+                var (big, small, len) = (1.2 * unit, 0.6 * unit, Math.Min(2.5 * unit, 0.4 * dl));
+                var wideFirst = parent.Dn > seg.Dn;
+                var (h0, h1) = wideFirst ? (big, small) : (small, big);
+                var shape = new List<XY>
+                {
+                    new(p0.X + (nx * h0), p0.Y + (ny * h0)),
+                    new(p0.X + (dx * len) + (nx * h1), p0.Y + (dy * len) + (ny * h1)),
+                    new(p0.X + (dx * len) - (nx * h1), p0.Y + (dy * len) - (ny * h1)),
+                    new(p0.X - (nx * h0), p0.Y - (ny * h0)),
+                };
+                doc.Entities.Add(new LwPolyline(shape) { IsClosed = true, Layer = reducers });
+                placed.Add(Quad.Around(new XY(p0.X + (dx * len / 2), p0.Y + (dy * len / 2)), len / 2));
+            }
+        }
+
         foreach (var route in routes)
         {
             var nodes = route.Nodes.ToDictionary(n => n.Id);
@@ -269,7 +321,7 @@ public static class AxonometryDxfWriter
             // Заголовок, условные обозначения и примечания — на слое листа; образцы линий и знаков — на своих слоях.
             var format = DxfDrawing.AddLayer(doc, GostSheet.Layer, 7);
             Title(doc, sheet, stamp!.Name, format);
-            Legend(doc, sheet, new LegendLayers(pipes, path, sprinklers, zone, marks, format), calc is not null, style.SprinklersUp);
+            Legend(doc, sheet, new LegendLayers(pipes, path, sprinklers, zone, marks, format, DxfDrawing.AddLayer(doc, ReducerLayer, 4)), calc is not null, style.SprinklersUp);
             Notes(doc, sheet, format, calc is not null);
         }
 
@@ -421,7 +473,7 @@ public static class AxonometryDxfWriter
             Layer = layer,
         });
 
-    private sealed record LegendLayers(Layer Pipes, Layer Path, Layer Sprinklers, Layer Zone, Layer Marks, Layer Labels);
+    private sealed record LegendLayers(Layer Pipes, Layer Path, Layer Sprinklers, Layer Zone, Layer Marks, Layer Labels, Layer Reducers);
 
     // Условные обозначения — таблица слева от основной надписи: изображение (25 мм) и наименование (95 мм), строки по 7 мм.
     private static void Legend(CadDocument doc, SheetPlacement sheet, LegendLayers l, bool withCalc, bool up)
@@ -454,6 +506,13 @@ public static class AxonometryDxfWriter
             Add(new Line(sheet.At(cx, y - 1), sheet.At(cx + 2, y + 1)) { Layer = l.Marks });
             Add(new Line(sheet.At(cx, y - 1), sheet.At(cx, y + 2)) { Layer = l.Marks });
             Add(new Line(sheet.At(cx, y + 2), sheet.At(cx + 9, y + 2)) { Layer = l.Marks });
+        }
+        ));
+        rows.Add(("Переход (по ходу воды — на меньший DN)", (cx, y) =>
+        {
+            Add(new Line(sheet.At(cx - 9, y), sheet.At(cx - 2, y)) { Layer = l.Pipes });
+            Add(new Line(sheet.At(cx + 2, y), sheet.At(cx + 9, y)) { Layer = l.Pipes });
+            Add(new LwPolyline([new XY(sheet.At(cx - 2, y + 1.2).X, sheet.At(cx - 2, y + 1.2).Y), new XY(sheet.At(cx + 2, y + 0.6).X, sheet.At(cx + 2, y + 0.6).Y), new XY(sheet.At(cx + 2, y - 0.6).X, sheet.At(cx + 2, y - 0.6).Y), new XY(sheet.At(cx - 2, y - 1.2).X, sheet.At(cx - 2, y - 1.2).Y)]) { IsClosed = true, Layer = l.Reducers });
         }
         ));
         rows.Add(("Условный проход трубопровода, мм", (cx, y) => Add(new MText { Value = "DN25", InsertPoint = sheet.At(cx, y), Height = 2.5 * sheet.Scale, AttachmentPoint = AttachmentPointType.MiddleCenter, Layer = l.Labels })));

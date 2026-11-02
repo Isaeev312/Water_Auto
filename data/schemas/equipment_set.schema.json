@@ -61,6 +61,9 @@
             "enum": [
               "pumps",
               "truckInlets",
+              "ringValves",
+              "suctionCaps",
+              "jockeyTanks",
               "sections",
               "extraSections",
               "inlets"
@@ -75,6 +78,14 @@
               "fittings"
             ],
             "description": "Раздел спецификации насосной: оборудование, арматура и приборы, фасонные части."
+          },
+          "catalog": {
+            "type": "string",
+            "description": "Вид арматуры в каталоге изготовителя (data/catalog/valves_*.json): графа «Тип, марка» берётся оттуда по DN."
+          },
+          "catalogDn": {
+            "type": "string",
+            "description": "Подстановка с DN для каталога (dnS, dnD, dnC, truckDn)."
           },
           "role": {
             "type": "string",

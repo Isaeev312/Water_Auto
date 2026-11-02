@@ -48,8 +48,8 @@ public static class PumpRoomAxonometryDxfWriter
 
         var pts = data.Pipes.SelectMany(p => p.Path).Concat(data.Blocks.SelectMany(b => new[] { new Point3(b.X0, b.Y0, b.Bottom), new Point3(b.X1, b.Y1, b.Top) })).Select(Pr).ToList();
         var (x0, y0, x1, y1) = (pts.Min(p => p.X), pts.Min(p => p.Y), pts.Max(p => p.X), pts.Max(p => p.Y));
-        var sheet = new[] { 50.0, 100 }
-            .Select(sc => GostSheet.FitAtScale(x0 - 3000, y0 - 2000 - (85 * sc), x1 + 3000, y1 + 2000, sc))
+        var sheet = new[] { 25.0, 50, 100 }
+            .Select(sc => GostSheet.FitAtScale(x0 - (40 * sc), y0 - (20 * sc) - (85 * sc), x1 + (40 * sc), y1 + (20 * sc), sc))
             .FirstOrDefault(f => f is not null) ?? GostSheet.Fit(x0 - 3000, y0 - 20000, x1 + 3000, y1 + 2000);
         var h = 2.5 * sheet.Scale;
         GostSheet.Draw(doc, sheet, stamp);
@@ -127,7 +127,7 @@ public static class PumpRoomAxonometryDxfWriter
         Text(new XY(sheet.At(30, 0).X, sheet.At(0, sheet.Format.HeightMm - 15).Y), "Аксонометрическая схема обвязки насосной станции", 2 * h);
         var ny = sheet.At(0, 92).Y;
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
-        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.75));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
             doc.Entities.Add(new MText { Value = $"{k + 1}. {note}", InsertPoint = new XYZ(sheet.At(25, 0).X, ny, 0), Height = 0.9 * h, RectangleWidth = noteWidth, Layer = text });

@@ -173,7 +173,7 @@ public static class InletRouteDxfWriter
         Text(lx + (7 * h), ly - (5.35 * h), "воздухоотводчик автоматический", 0.8 * h);
         var ny = ly - (8 * h);
         var noteWidth = sheet.Format.WidthMm * sheet.Scale * 0.45;
-        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.62));
+        var perLine = Math.Max(20, noteWidth / (0.9 * h * 0.75));
         foreach (var (note, k) in data.Notes.Select((n, k) => (n, k)))
         {
             doc.Entities.Add(new MText { Value = $"{k + 1}. {note}", InsertPoint = P(lx, ny), Height = 0.9 * h, RectangleWidth = noteWidth, Layer = text });

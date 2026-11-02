@@ -19,6 +19,21 @@ public class MixedPipeSeriesTests
     }
 
     [Fact]
+    public void Dn200_is_available_inside_through_an_accepted_size_by_formula_B8()
+    {
+        // Б.2: DN200 только в строке «*» (наружные сети). Принятый размер 219×6 в пределах Б.3 (DN 20–200) — Kт по Б.8
+        // по внутреннему диаметру 207 мм: 10⁻⁸·5,044·207^5,434. Без принятого размера внутренняя сеть кончается на DN150.
+        new PipeSeries(Norms, "ГОСТ 10704-91").WithInnerAtLeast(160, 0).ShouldBeNull();
+        var series = new PipeSeries(Norms, "ГОСТ 10704-91", [new PipeSize("ГОСТ 10704", 200, 219, 6)]);
+        var pipe = series.WithInnerAtLeast(160, 0)!;
+        pipe.Dn.ShouldBe(200);
+        pipe.Kt.Kt.ShouldBe(1e-8 * 5.044 * Math.Pow(207, 5.434), 1e-6 * pipe.Kt.Kt);
+        pipe.NormId.ShouldBe("sp485.tB_3.Kt.gost10704");
+        // DN250 вне формулы Б.8 (DN 20–200) — принятый размер не открывает строку «*» для внутренней сети.
+        new PipeSeries(Norms, "ГОСТ 10704-91", [new PipeSize("ГОСТ 10704", 250, 273, 6)]).WithInnerAtLeast(160, 0).ShouldBeNull();
+    }
+
+    [Fact]
     public void Designation_with_year_matches_the_table_standard()
     {
         new PipeSeries(Norms, "ГОСТ 3262-75").Pick(32)!.Standard.ShouldBe("ГОСТ 3262-75");

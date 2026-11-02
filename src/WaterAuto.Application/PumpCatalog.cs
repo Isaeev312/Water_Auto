@@ -42,6 +42,105 @@ public static class PumpCatalog
         return sets;
     }
 
+    /// <summary>Обозначение арматуры изготовителя по виду и DN (data/catalog/valves_*.json); null — в каталоге нет.</summary>
+    public static Func<string, int, string?> Valves(string normsDir)
+    {
+        var rows = new List<(string Kind, int[] Dn, string Designation)>();
+        foreach (var file in Directory.EnumerateFiles(Dir(normsDir), "valves_*.json").Order(StringComparer.Ordinal))
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
+            foreach (var kind in doc.RootElement.GetProperty("kinds").EnumerateObject())
+            {
+                foreach (var r in kind.Value.EnumerateArray())
+                {
+                    rows.Add((kind.Name, [.. r.GetProperty("dn").EnumerateArray().Select(x => x.GetInt32())], r.GetProperty("designation").GetString()!));
+                }
+            }
+        }
+
+        return (kind, dn) => rows.FirstOrDefault(r => r.Kind == kind && r.Dn.Contains(dn)) is { Designation: { } d }
+            ? d.Replace("{dn}", dn.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+            : null;
+    }
+
+    /// <summary>Муфты и фасонные части под муфту изготовителя (data/catalog/grooved_*.json); null — каталога нет.</summary>
+    public static GroovedCatalog? Grooved(string normsDir)
+    {
+        var file = Directory.EnumerateFiles(Dir(normsDir), "grooved_*.json").Order(StringComparer.Ordinal).FirstOrDefault();
+        if (file is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(file));
+        var items = new Dictionary<string, IReadOnlyList<GroovedItem>>(StringComparer.Ordinal);
+        foreach (var kind in doc.RootElement.GetProperty("items").EnumerateObject())
+        {
+            items[kind.Name] = [.. kind.Value.EnumerateArray().Select(i => new GroovedItem(
+                i.GetProperty("od").GetDouble(),
+                i.TryGetProperty("od2", out var o2) ? o2.GetDouble() : null,
+                i.GetProperty("designation").GetString()!))];
+        }
+
+        return new GroovedCatalog(doc.RootElement.GetProperty("toleranceMm").GetDouble(), items);
+    }
+
+    /// <summary>Правило назначения расхода и уставок жокей-насоса по практике (data/catalog/jockey_practice.json); null — нет файла.</summary>
+    public static JockeyPractice? JockeyRule(string normsDir)
+    {
+        var path = Path.Combine(Dir(normsDir), "jockey_practice.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var r = doc.RootElement;
+        return new JockeyPractice(r.GetProperty("flowShareOfDictating").GetDouble(), r.GetProperty("stopAboveStartMpa").GetDouble(), r.GetProperty("source").GetString()!);
+    }
+
+    /// <summary>Серия жокей-насосов изготовителя (data/catalog/jockey_pumps_*.json, первый по имени); null — каталога нет.</summary>
+    public static JockeyPumpSeries? JockeyPumps(string normsDir)
+    {
+        var file = Directory.EnumerateFiles(Dir(normsDir), "jockey_pumps_*.json").Order(StringComparer.Ordinal).FirstOrDefault();
+        if (file is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(file));
+        var r = doc.RootElement;
+        return new JockeyPumpSeries(
+            r.GetProperty("designation").GetString()!,
+            r.GetProperty("document").GetString()!,
+            new Flow(r.GetProperty("flowLpsMin").GetDouble()),
+            new Flow(r.GetProperty("flowLpsMax").GetDouble()),
+            new Pressure(r.GetProperty("pressureMpaMin").GetDouble()),
+            new Pressure(r.GetProperty("pressureMpaMax").GetDouble()),
+            r.GetProperty("includesTank").GetBoolean());
+    }
+
+    /// <summary>Мембранные баки для жокей-насоса (data/catalog/membrane_tanks_*.json).</summary>
+    public static IReadOnlyList<MembraneTank> Tanks(string normsDir)
+    {
+        var tanks = new List<MembraneTank>();
+        foreach (var file in Directory.EnumerateFiles(Dir(normsDir), "membrane_tanks_*.json").Order(StringComparer.Ordinal))
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
+            foreach (var t in doc.RootElement.GetProperty("tanks").EnumerateArray())
+            {
+                tanks.Add(new MembraneTank(
+                    t.GetProperty("designation").GetString()!,
+                    t.GetProperty("volumeL").GetDouble(),
+                    t.GetProperty("pnBar").GetDouble(),
+                    t.GetProperty("prechargeBar").GetDouble(),
+                    t.GetProperty("document").GetString()!));
+            }
+        }
+
+        return tanks;
+    }
+
     /// <summary>Правила прокладки обвязки из data/catalog/pump_room.json (рекомендации литературы); null — нет данных.</summary>
     public static (double WallOffset, double BracketHeight, double LevelGap, string Source, int JockeyDn)? Piping(string normsDir)
     {

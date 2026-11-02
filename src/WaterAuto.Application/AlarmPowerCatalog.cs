@@ -47,12 +47,14 @@ public static class AlarmPowerCatalog
         return new AlarmPowerSet(
             voltage,
             new LoopController(Text(c, "name"), A(c, "idle"), A(c, "loaded"), A(c, "loadOfLoaded"), A(c, "max"), A(c, "maxLoopLoad"),
-                c.GetProperty("maxAddresses").GetInt32(), Text(c, "source")) { Certificate = Cert(c) },
+                c.GetProperty("maxAddresses").GetInt32(), Text(c, "source"))
+            { Certificate = Cert(c) },
             new LoopModule(Text(m, "name"), m.GetProperty("inputs").GetInt32(), A(m, "loopCurrent"), m.GetProperty("maxPerLoop").GetInt32(), Text(m, "source")) { Certificate = Cert(m) },
             new PowerSupply(Text(s, "name"), A(s, "ownCurrent"), Text(s, "source")) { Certificate = Cert(s), MaxOutput = s.TryGetProperty("maxOutput", out var mo) ? new Current(mo.GetDouble()) : null },
             new BatteryModel(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
                 b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
-                Text(b, "source")) { Certificate = Cert(b) })
+                Text(b, "source"))
+            { Certificate = Cert(b) })
         { Detectors = detectors, Isolator = isolator, Options = Options(root) };
     }
 
@@ -62,7 +64,8 @@ public static class AlarmPowerCatalog
     private static BatteryModel Battery(JsonElement b) =>
         new(Text(b, "name"), new Charge(b.GetProperty("nominal").GetDouble()), b.GetProperty("endOfLifePercent").GetDouble(),
             b.GetProperty("discharge").EnumerateObject().ToDictionary(p => TimeSpan.FromHours(double.Parse(p.Name, CultureInfo.InvariantCulture)), p => new Current(p.Value.GetDouble())),
-            Text(b, "source")) { Certificate = Cert(b) };
+            Text(b, "source"))
+        { Certificate = Cert(b) };
 
     /// <summary>Варианты питания: РИП и батареи по ID из разделов supplies и batteries; неизвестный ID — ошибка каталога.</summary>
     private static IReadOnlyList<PowerOption> Options(JsonElement root)

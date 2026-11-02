@@ -37,6 +37,17 @@ public class GostSheetTests
     }
 
     [Fact]
+    public void Long_sheet_name_gets_a_smaller_font_so_it_stays_inside_graph_1()
+    {
+        // Графа 1 (наименование листа) — 70 × 15 мм: три строки по 3,5 мм с интервалом не входят, шрифт уменьшается.
+        var doc = new CadDocument();
+        GostSheet.Draw(doc, GostSheet.Fit(0, 0, 30000, 15000), Stamp with { Name = "Принципиальная схема насосной станции пожаротушения" });
+        var name = doc.Entities.OfType<MText>().Single(t => t.Value.StartsWith("Принципиальная", StringComparison.Ordinal));
+        var short_ = doc.Entities.OfType<MText>().Single(t => t.Value == "123-ПТ");
+        (name.Height / short_.Height).ShouldBeLessThan(3.5 / 5);
+    }
+
+    [Fact]
     public void Axonometry_with_a_stamp_has_frame_and_form_3()
     {
         var route = new PipeRoute(
@@ -72,5 +83,19 @@ public class GostSheetTests
 
         // 31 м с запасами на А3 — 1:100; подписи схемы — 2,5 мм на листе.
         doc.Entities.OfType<TextEntity>().Where(t => t.Layer.Name == AxonometryDxfWriter.LabelLayer).ShouldAllBe(t => Math.Abs(t.Height - 250) < 1e-6);
+    }
+    [Fact]
+    public void Customer_graph_27_sits_above_the_stamp_below_the_drawing_field()
+    {
+        var doc = new CadDocument();
+        var sheet = new SheetPlacement(SheetFormat.A3, 1, new CSMath.XY(0, 0));
+        GostSheet.Draw(doc, sheet, Stamp with { Customer = "ООО «Заказчик»" });
+        var text = doc.Entities.OfType<MText>().Single(t => t.Value == "ООО «Заказчик»");
+        text.InsertPoint.Y.ShouldBeInRange(60, 70); // над надписью (5 + 55 мм), ниже поля изображения (70 мм)
+        text.InsertPoint.X.ShouldBeGreaterThan(420 - 5 - 120);
+
+        var plain = new CadDocument();
+        GostSheet.Draw(plain, sheet, Stamp);
+        plain.Entities.OfType<MText>().ShouldNotContain(t => t.Value.Contains("Заказчик"));
     }
 }

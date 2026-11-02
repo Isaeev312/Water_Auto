@@ -180,7 +180,9 @@ public static class AlarmSchemeDxfWriter
         public void Box(double x, double y, double w, double h, string label, double textH)
         {
             doc.Entities.Add(new LwPolyline([new XY(x, y), new XY(x + w, y), new XY(x + w, y + h), new XY(x, y + h)]) { IsClosed = true, Layer = devices });
-            doc.Entities.Add(new TextEntity { Value = label, InsertPoint = P(x + 1.5, y + (h / 2) - (textH / 2)), Height = textH, Layer = text });
+            // Длинная марка уменьшается, чтобы уместиться в рамке (ширина знака ≈ 0,75 высоты).
+            var fit = Math.Min(textH, (w - 3) / Math.Max(1, label.Length * 0.75));
+            doc.Entities.Add(new TextEntity { Value = label, InsertPoint = P(x + 1.5, y + (h / 2) - (fit / 2)), Height = fit, Layer = text });
         }
 
         /// <summary>Условный знак устройства в рамке: ИП дымовой — круг, тепловой — круг с точкой, ИПР — квадрат, звуковой — треугольник, световой — прямоугольник; обозначение — под знаком.</summary>

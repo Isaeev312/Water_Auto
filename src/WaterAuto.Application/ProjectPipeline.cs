@@ -98,12 +98,20 @@ public static class ProjectPipeline
     public const string AlarmNoteFile = "aps_pz.docx";
     public const string AlarmSchemeFile = "aps_scheme.dxf";
     public const string AlarmSpecFile = "aps_spec.xlsx";
+    public const string AlarmSpecDocxFile = "aps_spec.docx";
+    public const string AlarmCertificatesFile = "aps_certificates.docx";
     public const string CableJournalFile = "aps_cables.xlsx";
     public const string CableJournalDocxFile = "aps_cables.docx";
     public const string AlarmGeneralDataFile = "aps_general_data.docx";
     public const string HvacSpecFile = "aps_hvac.docx";
     public const string SouePlanLayer = "СОУЭ_ОПОВЕЩАТЕЛИ";
     public const string IssuesFile = "issues.txt";
+
+    /// <summary>Раздел 9 по п. 26 ПП РФ № 87 (стадия П), в корне выпуска.</summary>
+    public const string Pp87File = "pb_razdel9.docx";
+
+    /// <summary>Таблица соответствия требованиям норм для экспертизы.</summary>
+    public const string ComplianceFile = "compliance.xlsx";
 
     /// <summary>План этажа АУПТ из design.levels (k = 1, 2, …; основной этаж — <see cref="PlanDxfFile"/>).</summary>
     public static string LevelPlanFile(int k) => string.Create(CultureInfo.InvariantCulture, $"plan_level{k}.dxf");
@@ -114,6 +122,11 @@ public static class ProjectPipeline
     /// <summary>Тома выпуска: каждый раздел — своей папкой с собственными обозначениями комплектов (ADR 0013).</summary>
     public const string AuptVolume = "АУПТ";
     public const string AlarmVolume = "АПС";
+
+    /// <summary>Том газового пожаротушения (АУГП, СП 485 разд. 9).</summary>
+    public const string GasVolume = "АГП";
+    public const string GasNoteFile = "agp_pz.docx";
+    public const string GasSpecFile = "agp_spec.xlsx";
 
     /// <summary>Том порошкового пожаротушения (АУПП, СП 485 разд. 10).</summary>
     public const string PowderVolume = "АПТ";
@@ -144,11 +157,17 @@ public static class ProjectPipeline
         }
 
         var drawing = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(projectPath))!, project.Drawing));
-        var import = FloorPlanImporter.Import(drawing, requireInlet: project.Aupt);
+        var import = FloorPlanImporter.Import(drawing, requireInlet: project.Aupt && !design.AutoInlets);
         issues.AddRange(import.Issues);
         if (import.Plan is not { } plan)
         {
             return Stop();
+        }
+
+        // Точки ввода по умолчанию (design.autoInlets): помещениям без ПТ_ВВОД — у стены со стороны насосной, с предупреждением.
+        if (project.Aupt && design.AutoInlets)
+        {
+            plan = AutoInlets.Apply(plan, issues);
         }
 
         var norms = JsonNormsProvider.Load(normsDir);
@@ -268,7 +287,10 @@ public static class ProjectPipeline
                     }
                     else
                     {
-                        var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)).ToList();
+                        var soueZones = detectorZones.Select(z => new SoueZone(z.RoomId, z.RoomName, z.Outline, background.Value, warning.Method)
+                        {
+                            LargeOpenSpace = warning.LargeOpenSpaceArea is { } open && z.Outline.AreaMm2 / 1e6 >= open,
+                        }).ToList();
                         soue = SoueLayouter.Layout(soueZones, sounderEntry.Model, lightEntry.Model, norms);
                         issues.AddRange(soue.Issues);
                         var speakersOnLine = sounderEntry.Speaker is not null;
@@ -294,7 +316,7 @@ public static class ProjectPipeline
 
                         if (soueRelayOutputs > 0)
                         {
-                            issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — {soueRelayOutputs} выходов реле на линии оповещения (по помещениям); учтены в релейных блоках и питании."));
+                            issues.Add(new Issue("soue.relayOutputs", IssueLevel.Info, $"СОУЭ: оповещатели неадресные — выходы реле на линии оповещения по помещениям (количество — {soueRelayOutputs}); учтены в релейных блоках и питании."));
                         }
                     }
                 }
@@ -467,51 +489,51 @@ public static class ProjectPipeline
                         schemeLoops = loops;
                         if (project.Alarm?.Panel is { } panelPoint && File.Exists(cablesPath))
                         {
-                        var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
-                            plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
-                        issues.AddRange(journal.Issues);
-                        var allLines = journal.Lines.ToList();
+                            var journal = CableJournal.Build(new PlanPoint(panelPoint.X, panelPoint.Y), loops, AlarmCableCatalog.Load(cablesPath),
+                                plan.PumpRooms.Count > 0 ? plan.PumpRooms[0].Outline : null, controlPoints.Count, alarmSet.Controller.Name, alarmSet.Supply.Name, alarmSet.Module.Name);
+                            issues.AddRange(journal.Issues);
+                            var allLines = journal.Lines.ToList();
 
-                        // Неадресные оповещатели (адресов 0) — не на ДПЛС: линия 12 В от выхода релейного блока на посту через
-                        // оповещатели помещения цепочкой (по уровню — со стояком), отдельно звуковые и световые.
-                        var relayName = relayModel?.Name ?? "релейный блок";
-                        var notifierLine = 0;
-                        foreach (var (entry, list, purpose) in new[] { (sounderEntry, soue?.Sounders, "линия звукового оповещения 12 В"), (lightEntry, soue?.Lights, "линия светового оповещения 12 В") })
-                        {
-                            if (entry is not { Speaker: null, Device.Addresses: 0 } || list is not { Count: > 0 })
+                            // Неадресные оповещатели (адресов 0) — не на ДПЛС: линия 12 В от выхода релейного блока на посту через
+                            // оповещатели помещения цепочкой (по уровню — со стояком), отдельно звуковые и световые.
+                            var relayName = relayModel?.Name ?? "релейный блок";
+                            var notifierLine = 0;
+                            foreach (var (entry, list, purpose) in new[] { (sounderEntry, soue?.Sounders, "линия звукового оповещения 12 В"), (lightEntry, soue?.Lights, "линия светового оповещения 12 В") })
                             {
-                                continue;
+                                if (entry is not { Speaker: null, Device.Addresses: 0 } || list is not { Count: > 0 })
+                                {
+                                    continue;
+                                }
+
+                                foreach (var room in list.GroupBy(x => x.RoomId))
+                                {
+                                    var pts = room.Select(x => x.Location).ToList();
+                                    var segs = CableJournal.Segments(new PlanPoint(panelPoint.X, panelPoint.Y), pts, [.. room.Select(x => LevelMm(x.Id))]);
+                                    var baseM = segs.Take(segs.Count - 1).Sum(x => x.Mm) / 1000;
+                                    notifierLine++;
+                                    var roomName = detectorZones.FirstOrDefault(z => z.RoomId == room.Key)?.RoomName ?? room.Key;
+                                    allLines.Add(new CableLine($"ЛОН{notifierLine}", $"{relayName} (выход)", $"{room.Count()} × {entry.Model.Name} — {roomName}", purpose, LoadCables(cablesPath).PowerName, Math.Round(baseM * LoadCables(cablesPath).Reserve, 0),
+                                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"цепочка от поста через оповещатели помещения, ток {room.Count() * entry.Device.Alarm.Amperes * 1000:0} мА; сечение — по падению напряжения, проектировщик"), Math.Round(baseM, 0)));
+                                }
+                            }
+                            if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
+                            {
+                                // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
+                                var speechCables = AlarmCableCatalog.Load(cablesPath);
+                                foreach (var line in sp.Lines)
+                                {
+                                    var mark = speechCables.SpeechName is { } sn ? sn.Replace("{section}", (line.SectionMm2 ?? speechCables.SpeechSections?.Max() ?? 0).ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")), StringComparison.Ordinal) : "по проекту";
+                                    allLines.Add(new CableLine($"ЛО{line.Number}", ampl.Name, $"{line.Speakers} громкоговорителей {sounderEntry?.Model.Name} ({line.Group}){(lineMonitor is not null ? $", {lineMonitor.Name} в конце" : "")}", "линия речевого оповещения 100 В (дерево)", mark, line.LengthM,
+                                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{line.ConsumedW:0.#} Вт от линии, I = {line.ConsumedW / ampl.LineVoltage:0.###} А; сечение по формуле РЭ при ΔU ≤ {norms.Find("sp3.pB_3_4.voltageDrop")!.Values["maxDrop"]:0} % (В.3.4); отдельно от ДПЛС")));
+                                }
+
+                                for (var k = 1; k <= sp.Amplifiers; k++)
+                                {
+                                    allLines.Add(new CableLine($"С{k + 2}", "ВРУ (ввод 1)", $"{ampl.Name} №{k}", "питание 220 В, I категория", speechCables.MainsName, 0, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"до {ampl.MainsW:0} Вт; встроенные АКБ {ampl.Batteries} × {ampl.BatteryName}; длина — по месту ВРУ")));
+                                }
                             }
 
-                            foreach (var room in list.GroupBy(x => x.RoomId))
-                            {
-                                var pts = room.Select(x => x.Location).ToList();
-                                var segs = CableJournal.Segments(new PlanPoint(panelPoint.X, panelPoint.Y), pts, [.. room.Select(x => LevelMm(x.Id))]);
-                                var baseM = segs.Take(segs.Count - 1).Sum(x => x.Mm) / 1000;
-                                notifierLine++;
-                                var roomName = detectorZones.FirstOrDefault(z => z.RoomId == room.Key)?.RoomName ?? room.Key;
-                                allLines.Add(new CableLine($"ЛОН{notifierLine}", $"{relayName} (выход)", $"{room.Count()} × {entry.Model.Name} — {roomName}", purpose, LoadCables(cablesPath).PowerName, Math.Round(baseM * LoadCables(cablesPath).Reserve, 0),
-                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"цепочка от поста через оповещатели помещения, ток {room.Count() * entry.Device.Alarm.Amperes * 1000:0} мА; сечение — по падению напряжения, проектировщик"), Math.Round(baseM, 0)));
-                            }
-                        }
-                        if (speechPlan is { Lines.Count: > 0 } sp && amplifier is { } ampl)
-                        {
-                            // Линии речевого оповещения 100 В от усилителя (на посту) и его питание 220 В — в тот же журнал.
-                            var speechCables = AlarmCableCatalog.Load(cablesPath);
-                            foreach (var line in sp.Lines)
-                            {
-                                var mark = speechCables.SpeechName is { } sn ? sn.Replace("{section}", (line.SectionMm2 ?? speechCables.SpeechSections?.Max() ?? 0).ToString("0.##", CultureInfo.GetCultureInfo("ru-RU")), StringComparison.Ordinal) : "по проекту";
-                                allLines.Add(new CableLine($"ЛО{line.Number}", ampl.Name, $"{line.Speakers} громкоговорителей {sounderEntry?.Model.Name} ({line.Group}){(lineMonitor is not null ? $", {lineMonitor.Name} в конце" : "")}", "линия речевого оповещения 100 В (дерево)", mark, line.LengthM,
-                                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{line.ConsumedW:0.#} Вт от линии, I = {line.ConsumedW / ampl.LineVoltage:0.###} А; сечение по формуле РЭ при ΔU ≤ 10 % (В.3.4); отдельно от ДПЛС")));
-                            }
-
-                            for (var k = 1; k <= sp.Amplifiers; k++)
-                            {
-                                allLines.Add(new CableLine($"С{k + 2}", "ВРУ (ввод 1)", $"{ampl.Name} №{k}", "питание 220 В, I категория", speechCables.MainsName, 0, string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"до {ampl.MainsW:0} Вт; встроенные АКБ {ampl.Batteries} × {ampl.BatteryName}; длина — по месту ВРУ")));
-                            }
-                        }
-
-                        cableLines = allLines;
+                            cableLines = allLines;
                         }
                     }
 
@@ -532,7 +554,7 @@ public static class ProjectPipeline
                         var scheme = new AlarmScheme(schemeLoopList, alarmSet.Supply.Name, powerBudget?.Supplies ?? 1, alarmSet.Battery.Label, amplifier?.Name, speechPlan?.Amplifiers ?? 0, speechLines,
                             "Порядок устройств на линии — по обходу кольца из кабельного журнала; изоляторы КЗ (БРИЗ) расставляются по линии проектировщиком (п. 6.3.5 СП 484). Пульт и линия RS-485 — по проекту.");
                         var schemeSheet = alarmSheets.FirstOrDefault(sh => sh.Name.StartsWith("Структурная", StringComparison.OrdinalIgnoreCase));
-                        Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = schemeSheet?.Sheet }, project.Font));
+                        Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = project.Title.IsDesignStage ? "1" : schemeSheet?.Sheet }, project.Font));
                     }
                 }
             }
@@ -548,7 +570,8 @@ public static class ProjectPipeline
                 {
                     var rooms = level.Zones.Select(z => z.RoomId).ToHashSet(StringComparer.Ordinal);
                     var planSheet = level.Index < planSheets.Count ? planSheets[level.Index] : planSheets.LastOrDefault();
-                    var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
+                    // Стадия «П»: лист 1 тома — структурная схема, планы — следом по уровням.
+                    var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = project.Title.IsDesignStage ? (level.Index + 2).ToString(CultureInfo.InvariantCulture) : planSheet?.Sheet };
                     var levelLayout = new DetectorLayout([.. detectorLayout.Detectors.Where(d => rooms.Contains(d.RoomId))], detectorLayout.CountByRoom.Where(kv => rooms.Contains(kv.Key)).ToDictionary(), []);
                     var levelIssues = planIssues.Where(i => i.ElementId is null || rooms.Contains(i.ElementId)).ToList();
                     var levelNotifiers = soue is null ? null : soue.Sounders.Concat(soue.Lights).Where(n => rooms.Contains(n.RoomId)).ToList();
@@ -579,6 +602,18 @@ public static class ProjectPipeline
             if (alarmSpec.Count > 0)
             {
                 Write(alarmDir, AlarmSpecFile, files, p => AlarmSpecXlsx.Write(p, alarmSpec, $"{project.Name}. Спецификация оборудования АПС", project.Font));
+
+                // Спецификация по форме 1 ГОСТ 21.110 для тома: изготовитель — графа «Поставщик»; сертификаты — не в примечании,
+                // а отдельным перечнем (позиции — те же, раздел один, нумерация с 1).
+                var alarmTakeoff = new MaterialTakeoff([.. alarmSpec.Select(a => new TakeoffItem(TakeoffGroup.Alarm, a.Name, a.Designation, a.Quantity, a.Unit,
+                    string.IsNullOrWhiteSpace(a.Note) ? null : a.Note, Supplier: a.Manufacturer))], []);
+                Write(alarmDir, AlarmSpecDocxFile, files, p => SpecificationDocx.Write(p, alarmTakeoff, Stamp(project, "АПС.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
+                var certificates = alarmSpec.Select((a, k) => (a, k)).Where(x => !string.IsNullOrWhiteSpace(x.a.Certificate))
+                    .Select(x => new CertificateRow((x.k + 1).ToString(CultureInfo.InvariantCulture), x.a.Name, x.a.Designation, x.a.Manufacturer, x.a.Certificate!)).ToList();
+                if (certificates.Count > 0)
+                {
+                    Write(alarmDir, AlarmCertificatesFile, files, p => CertificateListDocx.Write(p, certificates, Stamp(project, "АПС.СО", "Перечень документов о подтверждении соответствия"), project.Font));
+                }
             }
 
             if (controlPoints.Count > 0)
@@ -590,7 +625,7 @@ public static class ProjectPipeline
 
             if (detectorLayout is not null && project.Alarm is not null)
             {
-                var alarmGeneral = AlarmGeneralData.Build(project.Name, alarmSheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code);
+                var alarmGeneral = AlarmGeneralData.Build(project.Name, alarmSheets, detectorZones, detectorLayout, zoning, powerBudget, alarmSetForDocs, controlPoints, project.Title.Code, norms);
                 Write(alarmDir, AlarmGeneralDataFile, files, p => GeneralDataDocx.Write(p, alarmGeneral, Stamp(project, "АПС", "Общие данные") with { SheetCount = alarmSheets.Count, Sheet = alarmSheets.Count > 0 ? alarmSheets[0].Sheet : null }, project.Font));
             }
 
@@ -600,7 +635,10 @@ public static class ProjectPipeline
                 var tn = project.Title;
                 var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
                     detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning, soue,
-                    [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile], speechPlan, amplifier);
+                    // Стадия «П»: в составе тома — только документы тома (схема, планы, спецификация), без рабочих таблиц.
+                    [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)
+                        .Where(f => !tn.IsDesignStage || f == AlarmSchemeFile || f == AlarmSpecDocxFile || f == AlarmCertificatesFile || f!.StartsWith("aps_plan", StringComparison.Ordinal))!, AlarmNoteFile], speechPlan, amplifier,
+                    tn.IsDesignStage ? tn.AlarmSectionMark : null);
                 Write(alarmDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
             }
         }
@@ -663,7 +701,8 @@ public static class ProjectPipeline
             PowderStartPlan? start = null;
             PowderStartUnitEntry? unit = null;
             var notifierFile = EquipmentSet.PathFor(normsDir, AlarmNotifierCatalog.File);
-            if (File.Exists(notifierFile) && AlarmNotifierCatalog.Load(notifierFile).StartUnits is { Count: > 0 } startUnits)
+            var notifierCatalog = File.Exists(notifierFile) ? AlarmNotifierCatalog.Load(notifierFile) : null;
+            if (notifierCatalog?.StartUnits is { Count: > 0 } startUnits)
             {
                 unit = startUnits[0];
                 start = WaterAuto.Calc.Powder.PowderStart.Plan([.. result.Rooms.Select(r => (r.RoomId, r.Modules))], entry.StartCurrent, entry.MonitorCurrent, unit.Model);
@@ -679,7 +718,43 @@ public static class ProjectPipeline
                 issues.Add(new Issue("powder.start.noUnit", IssueLevel.Warning, "В каталоге нет блока пуска АУП (startUnits) — цепи пуска модулей не рассчитаны."));
             }
 
-            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, start, unit?.Model);
+            // Сигнализация режимов (СП 484 пп. 7.6.3, 7.6.5): табло над каждой дверью, датчик положения двери, звуковой оповещатель на зону.
+            var signItems = new List<AlarmSpecItem>();
+            var signs = norms.Find("sp484.p7_6_5.signs");
+            var doorNorm = norms.Find("sp484.p7_6_3.doorSensors");
+            if (signs is null || doorNorm is null)
+            {
+                issues.Add(new Issue("powder.signs.noNorm", IssueLevel.Warning, "В данных норм нет пп. 7.6.3, 7.6.5 СП 484 — табло и датчики положения дверей не подобраны."));
+            }
+            else
+            {
+                var doors = result.Rooms.Sum(rr => Math.Max(1, powder.Rooms.FirstOrDefault(x => string.Equals(x.Room, rooms.First(y => y.Id == rr.RoomId).Name, StringComparison.OrdinalIgnoreCase))?.Doors ?? 1));
+                var lights = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Light).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                var sounders = notifierCatalog?.Notifiers.Where(n => n.Model.Kind == NotifierKind.Sound).OrderBy(n => n.Device.Addresses).ToList() ?? [];
+                const string Rule = "СП 484.1311500.2020, п. 7.6.5";
+                foreach (var (text, key, side) in new[] { ("Автоматика отключена", "automaticOffOutside", "со стороны входа"), ("Порошок — не входить!", "keepOutOutside", "со стороны входа"), ("Порошок — уходи!", "leaveInside", "со стороны выхода") })
+                {
+                    var n = (int)Math.Ceiling(doors * signs.Values[key]!.Value - 1e-9);
+                    var light = lights.Count > 0 ? lights[0] : null;
+                    signItems.Add(new($"Оповещатель пожарный световой (табло) «{text}»", light?.Model.Name ?? "подобрать", light?.Manufacturer ?? "", "шт.", n, light?.Device.Certificate, $"над каждой дверью {side}; {Rule}"));
+                    if (light is not null)
+                    {
+                        poweredDevices.Add((light.Device, n));
+                    }
+                }
+
+                signItems.Add(new("Извещатель магнитоконтактный — датчик положения двери", "подобрать", "", "шт.", (int)Math.Ceiling(doors * doorNorm.Values["perDoor"]!.Value - 1e-9), null,
+                    "открытие двери переводит АУП в «Автоматика отключена»; СП 484.1311500.2020, п. 7.6.3"));
+                var zoneSounders = (int)Math.Ceiling(result.Rooms.Count * signs.Values["soundersPerZone"]!.Value - 1e-9);
+                var sounder = sounders.Count > 0 ? sounders[0] : null;
+                signItems.Add(new("Оповещатель пожарный звуковой", sounder?.Model.Name ?? "подобрать", sounder?.Manufacturer ?? "", "шт.", zoneSounders, sounder?.Device.Certificate, $"звуковая сигнализация режимов раздельно для каждой зоны пожаротушения; {Rule}"));
+                if (sounder is not null)
+                {
+                    poweredDevices.Add((sounder.Device, zoneSounders));
+                }
+            }
+
+            var note = PowderNote.Build(new NoteTitle(tt.Organization, tt.Subject, tt.Document, tt.Author, tt.Supervisor, tt.CityYear, project.Name), rooms, entry, result, issues, norms, start, unit?.Model);
             // План: модули сеткой по помещению, не меньше расчётного N (PowderLayout); если сетка дала больше — замечание.
             var planRooms = new List<PowderPlanRoom>();
             foreach (var rr in result.Rooms)
@@ -700,7 +775,7 @@ public static class ProjectPipeline
             Write(dir, PowderPlanFile, files, p => PowderPlanDxfWriter.Write(p, planRooms, entry.Model.Name, 1, [
                 "Расстановка — равномерной сеткой по габаритам помещения; уточнить по диаграмме распыла и затенениям по ТД на модуль (п. 10.2.13 СП 485).",
                 "Все модули помещения срабатывают в интервале не более 3 с (п. 10.2.4); пуск — от прибора управления АПС после задержки на эвакуацию (п. 10.4.3).",
-                "Крепление модулей — на пятикратный вес (п. 10.2.14); над модулями и у входов — табло «Порошок — уходи!», «Порошок — не входи!» (п. 10.3.1).",
+                "Крепление модулей — на пятикратный вес (п. 10.2.14); над каждой дверью — табло «Автоматика отключена», «Порошок — не входить!» снаружи и «Порошок — уходи!» изнутри, датчик положения двери (пп. 7.6.3, 7.6.5 СП 484).",
             ], Stamp(project, "АПТ", "План расстановки модулей порошкового пожаротушения"), project.Font));
             Write(dir, PowderNoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "АПТ.ПЗ", "Порошковое пожаротушение. Пояснительная записка"), project.Font));
             var total = result.Rooms.Sum(x => x.Modules);
@@ -711,17 +786,111 @@ public static class ProjectPipeline
                 .. start is { Units: > 0 } && unit is not null
                     ? new AlarmSpecItem[] { new($"Блок пуска модулей ({unit.Designation})", unit.Model.Name, unit.Manufacturer, "шт.", start.Units, unit.Device.Certificate, $"{start.OutputsByRoom.Values.Sum()} выходов, до {start.ModulesPerOutput} модулей на выход; питание 12 В от РИП (в расчёте АКБ)") }
                     : [],
+                .. signItems,
             ];
             Write(dir, PowderSpecFile, files, p => AlarmSpecXlsx.Write(p, items, $"{project.Name}. Спецификация оборудования АУПП", project.Font));
         }
 
+        // Газовое пожаротушение (СП 485 разд. 9, прил. Г, Д, Ж): масса ГОТВ и проём сброса по помещениям, том АГП.
+        void BuildGas()
+        {
+            if (project.Gas is not { } gas)
+            {
+                return;
+            }
+
+            var results = new List<(GasRoom Room, string Agent, GasMassResult Result)>();
+            var chosen = new List<(GasRoom Room, GasModuleEntry Entry, GasModulesResult Result)>();
+            var gasCatalogFile = EquipmentSet.PathFor(normsDir, GasCatalog.File);
+            var gasCatalog = gas.Modular && File.Exists(gasCatalogFile) ? GasCatalog.Load(gasCatalogFile) : [];
+            if (gas.Modular && gasCatalog.Count == 0)
+            {
+                issues.Add(new Issue("gas.noCatalog", IssueLevel.Warning, $"Нет каталога модулей {GasCatalog.File}: число модулей не подобрано."));
+            }
+
+            foreach (var r in gas.Rooms)
+            {
+                var found = plan.Rooms.FirstOrDefault(x => string.Equals(x.Name, r.Room, StringComparison.OrdinalIgnoreCase));
+                if (found is null)
+                {
+                    issues.Add(new Issue("gas.noRoom", IssueLevel.Warning, $"АУГП: помещение «{r.Room}» на чертеже не найдено (слой ПТ_КОНТУР)."));
+                    continue;
+                }
+
+                var agentId = $"sp485.tG.{r.Agent}";
+                var agentName = norms.Find(agentId)?.Attributes.GetValueOrDefault("agent") ?? r.Agent;
+                if (r.Agent == "co2" && norms.Find("sp485.p9_1_2.co2People") is { } co2 && r.People > co2.Values["maxPeople"]!.Value)
+                {
+                    issues.Add(new Issue("gas.co2.people", IssueLevel.Error,
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"«{found.Name}»: объёмное углекислотное тушение запрещено в помещениях с пребыванием более {co2.Values["maxPeople"]:0} человек (задано {r.People}) — выбрать другое ГОТВ."),
+                        found.Id, "СП 485.1311500.2020, п. 9.1.2"));
+                }
+
+                var room = new GasRoom(found.Id, found.Name, found.Contour.AreaMm2 / 1e6 * r.CeilingHeight, r.CeilingHeight, agentId, r.Material, r.OpenArea, r.Openings, r.MinTemperature, gas.Altitude,
+                    gas.Modular, r.ClassA1, r.DischargeTime, r.ModuleResidue, r.Modules, r.PipeResidue, r.MaxOverpressure);
+                var result = WaterAuto.Calc.Gas.GasMass.Calculate(room, norms);
+                // Модули: заданный или из каталога — наименьшее число без ошибок наполнения, при равенстве меньшая вместимость.
+                var candidates = gas.Module is { } mid ? gasCatalog.Where(e => e.Model.Id == mid).ToList() : [.. gasCatalog.Where(e => e.Model.Charges.ContainsKey(r.Agent))];
+                if (gas.Module is not null && candidates.Count == 0)
+                {
+                    issues.Add(new Issue("gas.module.unknown", IssueLevel.Error, $"Модуля «{gas.Module}» нет в каталоге {GasCatalog.File}."));
+                }
+
+                var pick = candidates.Select(e => (Entry: e, Result: WaterAuto.Calc.Gas.GasModules.Select(room, e.Model, norms)))
+                    .OrderBy(x => x.Result.Issues.Any(i => i.Level == IssueLevel.Error && i.Code.StartsWith("gas.module.", StringComparison.Ordinal)) ? 1 : 0)
+                    .ThenBy(x => x.Result.Modules).ThenBy(x => x.Entry.Model.VolumeL).FirstOrDefault();
+                if (pick.Entry is not null && pick.Result.Modules > 0)
+                {
+                    result = pick.Result.Mass;
+                    room = room with { Modules = pick.Result.Modules, ModuleResidueKg = pick.Entry.Model.Charges.GetValueOrDefault(r.Agent)?.ResidueKg ?? 0 };
+                    issues.AddRange(pick.Result.Issues.Where(i => i.Code.StartsWith("gas.module.", StringComparison.Ordinal)));
+                    chosen.Add((room, pick.Entry, pick.Result));
+                }
+                else if (gas.Modular && gasCatalog.Count > 0 && gas.Module is null)
+                {
+                    issues.Add(new Issue("gas.module.none", IssueLevel.Warning, $"«{found.Name}»: в каталоге нет модуля под {agentName} — число модулей не подобрано.", found.Id));
+                }
+
+                issues.AddRange(result.Issues);
+                if (result.TotalMass > 0)
+                {
+                    results.Add((room, agentName, result));
+                }
+            }
+
+            if (results.Count == 0)
+            {
+                return;
+            }
+
+            var tg = project.Title;
+            var gasNote = GasNote.Build(new NoteTitle(tg.Organization, tg.Subject, tg.Document, tg.Author, tg.Supervisor, tg.CityYear, project.Name), results, gas.Altitude, issues,
+                norms, [.. chosen.Select(c => (c.Room.Name, c.Entry.Model.Name, c.Result))]);
+            Write(Path.Combine(outDir, GasVolume), GasNoteFile, files, p => NoteDocx.Write(p, gasNote, Stamp(project, "АГП.ПЗ", "Газовое пожаротушение. Пояснительная записка"), project.Font));
+            if (chosen.Count > 0)
+            {
+                // Запас 100 % (п. 9.6.2) — по помещению с наибольшим числом модулей каждой модели.
+                var ru = CultureInfo.GetCultureInfo("ru-RU");
+                AlarmSpecItem[] gasItems = [.. chosen.GroupBy(c => c.Entry.Model.Id).Select(g =>
+                {
+                    var e = g.First().Entry;
+                    var inUse = g.Sum(c => c.Result.Modules);
+                    var reserve = g.Max(c => c.Result.Modules);
+                    return new AlarmSpecItem($"Модуль газового пожаротушения {e.Designation}", e.Model.Name, e.Manufacturer, "шт.", inUse + reserve, e.Certificate,
+                        string.Create(ru, $"в установке {inUse} ({string.Join(", ", g.Select(c => $"{c.Room.Name} — {c.Result.Modules} × {c.Result.MassPerModule:0.#} кг"))}), запас {reserve} (п. 9.6.2 СП 485){(e.StartCurrent is { } sc ? $"; ток пуска не более {sc:0.##} А" : "")}"));
+                })];
+                Write(Path.Combine(outDir, GasVolume), GasSpecFile, files, p => AlarmSpecXlsx.Write(p, gasItems, $"{project.Name}. Спецификация оборудования АУГП", project.Font));
+            }
+        }
+
         // Порошок считается до питания АПС: блоки пуска модулей входят в расчёт АКБ.
         BuildPowder();
+        BuildGas();
 
         // Проект без водяной АУПТ: только том АПС и (или) АПТ, раздел design не нужен.
         if (!project.Aupt)
         {
-            if (detectorLayout is null && project.Powder is null)
+            if (detectorLayout is null && project.Powder is null && project.Gas is null)
             {
                 issues.Add(new Issue("project.nothingToDo", IssueLevel.Error, "В проекте нет водяной АУПТ (aupt: false) и нет разделов alarm или powder с помещениями — выпускать нечего."));
                 return Stop();
@@ -731,7 +900,8 @@ public static class ProjectPipeline
             WriteAlarmPlans([.. issues]);
             WriteAlarmDocs();
             files.Add(WriteIssues(outDir, issues));
-            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal))), files, issues, null);
+            WriteTomes(project, auptDir, alarmDir, files);
+            return new PipelineResult(!issues.Any(i => i.Level == IssueLevel.Error && (i.Code.StartsWith("aps.", StringComparison.Ordinal) || i.Code.StartsWith("powder.", StringComparison.Ordinal) || i.Code.StartsWith("gas.", StringComparison.Ordinal))), files, issues, null);
         }
 
         // Группы помещений (design.rooms): раскладка и трассы — по правилам своей группы; без записей — одна группа design.roomGroup.
@@ -749,6 +919,17 @@ public static class ProjectPipeline
         }
 
         AuptGroups.CheckRooms(design, [plan, .. auptLevels.Select(l => l.Plan)], issues);
+
+        // Свои подводы секций (design.feeds): помещение по имени на любом этаже; без записи — общий подводящий.
+        var roomNames = new[] { plan }.Concat(auptLevels.Select(l => l.Plan)).SelectMany(p => p.Rooms).ToDictionary(r => r.Id, r => r.Name);
+        foreach (var f in design.Feeds.Where(f => !roomNames.Values.Any(n => string.Equals(n, f.Room, StringComparison.OrdinalIgnoreCase))))
+        {
+            issues.Add(new Issue("design.feeds.noRoom", IssueLevel.Warning, $"design.feeds: помещение «{f.Room}» на чертежах не найдено (слой ПТ_КОНТУР) — подвод не применён."));
+        }
+
+        ProjectFeed? FeedOf(string roomId) => roomNames.TryGetValue(roomId, out var name)
+            ? design.Feeds.FirstOrDefault(f => string.Equals(f.Room, name, StringComparison.OrdinalIgnoreCase))
+            : null;
         var mainZone = roomGroups.Zones.FirstOrDefault(z => z.Group == design.RoomGroup) ?? roomGroups.Zones[0];
         var rules = mainZone.Rules;
         var parameters = mainZone.Parameters;
@@ -769,8 +950,10 @@ public static class ProjectPipeline
         }
 
         var pipeSizes = PipeSizes(normsDir);
+        // Сортамент сети: при муфтах граница стандартов — по наибольшему DN муфт (п. 6.7.2.6).
+        var seriesStandard = design.SeriesStandard((int)norms.Find("sp485.p6_7_2_6.couplings")!.Values["maxDn"]!.Value);
         var settings = new DesignSettings(
-            design.PipeSeriesStandard,
+            seriesStandard,
             new KFactor(design.SprinklerK),
             new Length(design.DictatingAboveAxis),
             new Length(design.SupplyLength),
@@ -782,6 +965,13 @@ public static class ProjectPipeline
             // Диаметры по табл. Б.4, но участки со скоростью выше предела 6.7.1.37 увеличиваются автоматически:
             // иначе на реальном проекте напор доходил до 193 м и насос не подбирался.
             ResizeOverLimit: true);
+        // Водяные завесы (пп. 6.3.6–6.3.14): расчёт ниток до гидравлики АУП — совмещённые с АУП-С входят в расход насоса (Б.28).
+        var curtainSeries = new PipeSeries(norms, seriesStandard, pipeSizes);
+        var curtains = design.Curtains.Select((c, n) => DrencherCurtain.Calculate(
+            new CurtainInput(string.Create(CultureInfo.InvariantCulture, $"CUR{n + 1}"), c.Name.Length > 0 ? c.Name : $"завеса {n + 1}", c.Width, c.K, c.Pressure, c.Dn, c.Group ?? design.RoomGroup, c.Combined),
+            curtainSeries, norms)).ToList();
+        issues.AddRange(curtains.SelectMany(c => c.Issues));
+        settings = settings with { CurtainFlowLps = curtains.Where(c => c.Input.CombinedWithSprinkler).Sum(c => c.TotalFlow.LitersPerSecond) };
         HydrantInput? hydrants = null;
         if (design.Hydrants is { } h)
         {
@@ -800,7 +990,8 @@ public static class ProjectPipeline
                 h.PipeDn,
                 h.IsParking,
                 h.Zh1Row,
-                h.ExtraJet);
+                h.ExtraJet,
+                project.Norms);
             var demand = HydrantDemand.Resolve(norms, hs);
             issues.AddRange(demand.Issues);
             hydrants = demand.Demand is { } dv ? new HydrantInput(hs, dv) : null;
@@ -814,13 +1005,13 @@ public static class ProjectPipeline
         IReadOnlyList<int>? sprinklerTemps = null;
         if (sprinklerK > 0)
         {
-            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, roomGroups.ZoneOf(r.RoomId).Rules, AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design), roomGroups.ZoneOf(r.RoomId).Parameters, hydrants)).ToList();
+            designs = routing.Routes.Select(r => DesignCalculation.Run(r, norms, roomGroups.ZoneOf(r.RoomId).Rules, AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design, FeedOf(r.RoomId)), roomGroups.ZoneOf(r.RoomId).Parameters, hydrants)).ToList();
         }
         else
         {
             // Автоподбор: модели каталога с нужным положением розетки, полный расчёт для каждой (SprinklerSelection).
             var catalog = SprinklerCatalog.ForWater(SprinklerCatalog.Load(catalogPath), design.SprinklerDeflector).ToList();
-            selection = SprinklerSelection.Select([.. routing.Routes.Select(r => (r, roomGroups.ZoneOf(r.RoomId).Rules, (FireParameters?)roomGroups.ZoneOf(r.RoomId).Parameters, (DesignSettings?)AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design)))], norms, settings, hydrants, catalog.Select(c => c.Candidate).ToList());
+            selection = SprinklerSelection.Select([.. routing.Routes.Select(r => (r, roomGroups.ZoneOf(r.RoomId).Rules, (FireParameters?)roomGroups.ZoneOf(r.RoomId).Parameters, (DesignSettings?)AuptLevels.SettingsFor(r.RoomId, auptLevels, settings, design, FeedOf(r.RoomId))))], norms, settings, hydrants, catalog.Select(c => c.Candidate).ToList());
             issues.AddRange(selection.Issues);
             if (selection is not { Chosen: { } chosen, Designs: { } chosenDesigns })
             {
@@ -856,6 +1047,12 @@ public static class ProjectPipeline
         UserTank? userTank = design.Tank is { } tank
             ? new UserTank(new Length(tank.Length), new Length(tank.Width), new Length(tank.Height), new Length(tank.DeadLayer))
             : null;
+        foreach (var c in curtains.Where(c => c.Input.CombinedWithSprinkler && c.FeedPressure.Mpa > governing.InletNodePressure.Mpa + 1e-9))
+        {
+            issues.Add(new Issue("curtain.pressure", IssueLevel.Warning,
+                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Завеса «{c.Input.Name}»: в точке питания нужно {c.FeedPressure.Mpa:0.000} МПа, а в точке подключения АУП — {governing.InletNodePressure.Mpa:0.000} МПа: подключить ближе к насосной, увеличить DN нитки или поднять напор."), c.Input.Id));
+        }
+
         if (ReservoirCheck.Check(userTank, worst.WaterVolume, worst.TankMaxFill) is { } reservoirIssue)
         {
             issues.Add(reservoirIssue);
@@ -869,7 +1066,27 @@ public static class ProjectPipeline
         var temperatureText = temperature.Choice is { } tc ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $", {tc.Nominal} °С (колба — {Feminine(tc.Color)})") : "";
 
         var materials = Materials(normsDir);
-        var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, design.PipeSeriesStandard, new SprinklerSpec(
+
+        // Соединения по DN (п. 6.7.2.1, 6.7.2.6): муфты — только для допустимого сортамента и DN; меньшие DN — на резьбе.
+        var jointSeries = new PipeSeries(norms, seriesStandard, pipeSizes);
+        var standardByDn = routes.SelectMany(r => r.Segments.Concat(r.Loops))
+            .Select(s => jointSeries.Pick(s.Dn)).OfType<SeriesPipe>()
+            .GroupBy(x => x.Dn).ToDictionary(g => g.Key, g => g.First().Standard);
+        // DN, которых нет в сортаменте под муфты и резьбу (первый стандарт проекта): для них сварка — единственный вариант.
+        var smallSeries = new PipeSeries(norms, design.PipeStandard, pipeSizes);
+        var noGroovedGrade = standardByDn.Keys.Where(dn => smallSeries.Pick(dn)?.Dn != dn).ToHashSet();
+        var jointPlan = PipeJoints.Resolve(standardByDn, design.Joints, design.GroovedMinDn, norms, noGroovedGrade);
+        issues.AddRange(jointPlan.Issues);
+
+        // ГОСТ Р 51737 (разд. 1) распространяется на муфты водозаполненных установок — для воздухозаполненной это надо подтвердить.
+        if (design.AirFilled && jointPlan.ByDn.Values.Contains(JointKind.Grooved) && norms.Find("gost51737.p1.scope") is { } scope)
+        {
+            issues.Add(new Issue("joints.airFilled", IssueLevel.Warning,
+                $"Разъёмные муфты в воздухозаполненной установке: {scope.Doc} распространяется на {scope.Attributes["subject"]} — применимость муфт подтвердить технической документацией изготовителя или принять сварку.",
+                Clause: $"{scope.Doc}, разд. {scope.Clause}"));
+        }
+        var jointsText = JointsText(design, jointPlan);
+        var takeoff = MaterialTakeoffBuilder.Build(routes, layout.Sprinklers.Count, norms, seriesStandard, new SprinklerSpec(
             string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{design.SprinklerName}, K = {sprinklerK:0.###}{temperatureText}"),
             sprinklerModel,
             sprinklerSupplier,
@@ -877,10 +1094,11 @@ public static class ProjectPipeline
             design.FittingStandards.Count > 0 ? design.FittingStandards : null,
             materials.SteelDensity,
             pipeSizes,
-            materials.Coating);
+            materials.Coating,
+            new JointSpec(jointPlan.ByDn, design.PipeStockLength, design.ThreadedFittingStandards, design.CouplingStandard, PumpCatalog.Grooved(normsDir)));
 
         // Насосная установка: агрегаты, обвязка по скорости, патрубки для пожарной техники (пп. 6.10.3, 6.7.1.37, 6.10.17).
-        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
+        var station = PumpStation.Design(norms, worst.PumpFlow, worst.PumpHead, new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true), new Pressure(design.InletPressure));
         issues.AddRange(station.Issues);
         var stationSet = EquipmentSet.PathFor(normsDir, EquipmentSet.PumpStationFile);
 
@@ -908,8 +1126,14 @@ public static class ProjectPipeline
 
         // Жокей-насос: расход и уставки — решение проектировщика (В-07), норма их не задаёт. Данные не влияют на расчёт
         // Q/H и спецификацию — только замечания и пояснительная записка; Error jockey.flow выпуск не останавливает.
-        issues.AddRange(JockeyIssues(design.Jockey));
+        // Незаданные проектировщиком значения назначаются по правилу практики из данных (В-07): доля расхода диктующего
+        // (наименьшего по расходу) оросителя, включение при расчётном давлении насоса.
+        var jockeyDesign = ProjectJockey.Assign(design.Jockey, PumpCatalog.JockeyRule(normsDir),
+            worst.SprinklerFlows.Count > 0 ? worst.SprinklerFlows.Values.Min(f => f.LitersPerSecond) : 0, worst.PumpPressure.Mpa);
+        issues.AddRange(JockeyIssues(jockeyDesign));
         var stationTakeoff = new MaterialTakeoff([], []);
+        JockeyTankResult? jockeyTank = null;
+        JockeyPumpChoice? jockeyChoice = null;
 
         // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
         var sections = routes.Select(r => r.InletId).Distinct()
@@ -946,8 +1170,31 @@ public static class ProjectPipeline
         {
             // Отдельная спецификация насосной (комплект ПТ2): оборудование, арматура и приборы, фасонные части обвязки.
             var ruPs = CultureInfo.GetCultureInfo("ru-RU");
+
+            // Бак жокей-насоса (п. 6.9.4): давление в системе — наибольшее из напора насосов и уставки отключения жокей-насоса.
+            var jStop = jockeyDesign.StopPressureMpa is { } js ? new Pressure(js) : (Pressure?)null;
+            var jStart = jockeyDesign.StartPressureMpa is { } jst ? new Pressure(jst) : (Pressure?)null;
+            jockeyTank = JockeyTank.Select(PumpCatalog.Tanks(normsDir), norms, new Pressure(Math.Max(worst.PumpPressure.Mpa, jStop?.Mpa ?? 0)), jStop, jStart);
+            issues.AddRange(jockeyTank.Issues);
+
+            // Жокей-насос изготовителя: обозначение — из расхода и уставки отключения проектировщика (В-07) и вместимости бака.
+            jockeyChoice = PumpCatalog.JockeyPumps(normsDir) is { } jockeySeries
+                && jockeyDesign.FlowLitersPerSecond is { } jFlow && jFlow > 0 && jStop is { } jStopP
+                ? jockeySeries.Choose(new Flow(jFlow), jStopP, jockeyTank.Tank?.VolumeL ?? worst.JockeyTankMinLiters)
+                : null;
+            if (jockeyChoice is not null)
+            {
+                issues.AddRange(jockeyChoice.Issues);
+            }
+
             var stationTokens = new Dictionary<string, string>
             {
+                ["jockeyName"] = jockeyChoice?.Designation ?? "Насос жокей (автоматический водопитатель, п. 6.9.4)",
+                ["jockeyDoc"] = jockeyChoice?.Document ?? "марка — по каталогу",
+                ["jockeyNote"] = jockeyChoice is null ? "расход и уставки — В-07" : jockeyChoice.IncludesTank ? "с мембранной ёмкостью, уставки — по проекту" : "уставки — по проекту",
+                ["tankName"] = jockeyTank.Tank?.Designation ?? $"Бак мембранный вместимостью не менее {worst.JockeyTankMinLiters.ToString("0", ruPs)} л",
+                ["tankDoc"] = jockeyTank.Tank?.Document ?? "по каталогу",
+                ["tankNote"] = jockeyTank.Precharge is { } pre ? $"давление воздуха {pre.Mpa.ToString("0.00", ruPs)} МПа (п. 6.9.4)" : "давление воздуха — по уставкам жокей-насоса",
                 ["q"] = (worst.PumpFlow.LitersPerSecond * 3.6).ToString("0.0", ruPs),
                 ["h"] = worst.PumpHead.Meters.ToString("0.0", ruPs),
                 ["dnS"] = station.Suction.Pipe.Dn.ToString(CultureInfo.InvariantCulture),
@@ -956,8 +1203,8 @@ public static class ProjectPipeline
                 ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                 ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
             };
-            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount };
-            stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts)] };
+            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount, ["ringValves"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount), ["suctionCaps"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount) > 0 ? 0 : 1, ["jockeyTanks"] = jockeyChoice?.IncludesTank == true ? 0 : 1 };
+            stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts, PumpCatalog.Valves(normsDir))] };
 
             // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,
             // кроме шкафа: прибор управления есть и в установке, его выходы в АПС нужны так же (ГОСТ Р 53325-2012, п. 7.4.5).
@@ -974,7 +1221,7 @@ public static class ProjectPipeline
             if (controlPoints.Count > 0)
             {
                 issues.Add(new Issue("aps.signals.incomplete", IssueLevel.Info,
-                    "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; сигналов жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+                    "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; жокей-насос — выходы ШУ(ж) по ДАЭ 500.027.000 РЭ, прил. Б (вход «Блокировка работы насоса» X4 — по проекту АПС); сигнала обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
             }
 
             BuildAlarmPower();
@@ -1009,7 +1256,7 @@ public static class ProjectPipeline
                 roomData?.SetNote ?? "по каталогу изготовителя",
                 1,
                 "компл.",
-                $"коллекторы DN{chosenSetRow.CollectorDn}; или аналог",
+                $"коллекторы DN{chosenSetRow.CollectorDn}",
                 Supplier: chosenSetRow.Maker,
                 Role: "pumpSet");
             stationTakeoff = stationTakeoff with { Items = [row, .. stationTakeoff.Items.Where(i => i.Role is null || !EquipmentSet.PumpSetRoles.Contains(i.Role))] };
@@ -1033,7 +1280,7 @@ public static class ProjectPipeline
         PipingResult? piping = null;
         if (roomPlan is { Items.Count: > 0 } && plan.PumpRooms[0] is { Inlet: { } stationInlet } pumpRoom && PumpCatalog.Piping(normsDir) is { } pr && setChoice?.Chosen is { } pipedSet)
         {
-            var series = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
+            var series = new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var set = roomPlan.Items.First(i => i.Kind == StationItemKind.PumpSet);
             var units = roomPlan.Items.Where(i => i.Kind == StationItemKind.ControlUnit).ToList();
 
@@ -1129,8 +1376,8 @@ public static class ProjectPipeline
                 {
                     new TakeoffItem(TakeoffGroup.PumpStationPipes,
                         sp is null ? $"Трубы стальные DN{g.Key}" : string.Create(ruP, $"Трубы {sp.PipeType} DN{g.Key}, Ø{sp.OuterDiameterMm:0.##}×{sp.WallMm:0.##} мм"),
-                        sp?.Standard, Math.Round(meters, 1), "м", "по трассе на плане насосной, с опусками"),
-                    new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "повороты трассы и опуски к оборудованию"),
+                        sp?.Standard, Math.Round(meters, 1), "м", "по плану насосной"),
+                    new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{g.Key}", elbowStandard, g.Sum(r => r.Elbows), "шт.", "по плану насосной"),
                 };
             });
             // Гильзы в стенах (закладные): на каждом проходе трубы через стену, Ø — наружный диаметр трубы + запас (Козицина, с. 26).
@@ -1144,7 +1391,7 @@ public static class ProjectPipeline
                 .Select(g =>
                 {
                     var outer = series.Pick(g.Key)?.OuterDiameterMm ?? g.Key;
-                    return new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruP, $"Гильза стальная для прохода трубы DN{g.Key} через стену: Ø не менее {outer + sleeveExtra:0} мм, L = {wallT:0} мм"), "по месту", g.Count(), "шт.", "закладная деталь; заделка — эластичным негорючим материалом", Role: "sleeve");
+                    return new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruP, $"Гильза стальная для прохода трубы DN{g.Key} через стену: Ø не менее {outer + sleeveExtra:0} мм, L = {wallT:0} мм"), "по месту", g.Count(), "шт.", "заделка негорючим материалом", Role: "sleeve");
                 });
             var extraRows = new List<TakeoffItem>(sleeveRows);
             if (design.PumpRoom.Underground)
@@ -1153,7 +1400,7 @@ public static class ProjectPipeline
                 extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStation, "Насос дренажный погружной с поплавковым выключателем", "марка — по каталогу", drains, "шт.", "в приямке; I категория электроснабжения (п. 6.10.23)", Role: "drainPump"));
             }
 
-            extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", units.Count, "шт.", "в верхней точке напорной линии (п. 6.10.29); или аналог", Role: "airVent"));
+            extraRows.Add(new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", units.Count, "шт.", "в верхней точке напорной линии (п. 6.10.29)", Role: "airVent"));
 
             // Отводы патрубков ГМ теперь считаются по трассе — строка шаблона убирается.
             stationTakeoff = stationTakeoff with { Items = [.. stationTakeoff.Items.Where(i => i.Role != "elbowT"), .. pipeRows, .. extraRows] };
@@ -1195,7 +1442,7 @@ public static class ProjectPipeline
 
             if (inletRoutes.Count > 0)
             {
-                var seriesI = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
+                var seriesI = new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true);
 
                 // Отметка трассы ввода без коллизий с сетью АУП: задана в проекте — проверяется; не задана — ниже сети на
                 // наибольшее нужное расхождение на пересечениях (полусумма наружных диаметров + 20 мм), с округлением вниз до 50 мм.
@@ -1237,7 +1484,7 @@ public static class ProjectPipeline
                         .. stationTakeoff.Items,
                         new TakeoffItem(TakeoffGroup.PumpStationPipes, spI is null ? $"Трубы стальные DN{dnI}" : string.Create(ruI, $"Трубы {spI.PipeType} DN{dnI}, Ø{spI.OuterDiameterMm:0.##}×{spI.WallMm:0.##} мм"), spI?.Standard, Math.Round(meters, 1), "м", "трасса от вводов в здание до насосной (план трассы ввода)", Role: "inletPipe"),
                         new TakeoffItem(TakeoffGroup.PumpStationFittings, $"Отвод 90° DN{dnI}", design.FittingStandards.TryGetValue("Отвод", out var esI) ? esI : null, inletRoutes.Sum(r => r.Elbows) + riserElbows, "шт.", "повороты трассы ввода, подъёмы и опуски", Role: "inletElbow"),
-                        .. rise > 0.001 ? new[] { new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", inletRoutes.Count, "шт.", "в верхней точке трассы ввода перед опуском к насосной (п. 6.10.29); или аналог", Role: "inletVent") } : [],
+                        .. rise > 0.001 ? new[] { new TakeoffItem(TakeoffGroup.PumpStationValves, "Воздухоотводчик автоматический DN15, PN 16", "по ТУ изготовителя", inletRoutes.Count, "шт.", "в верхней точке трассы ввода перед опуском к насосной (п. 6.10.29)", Role: "inletVent") } : [],
                         new TakeoffItem(TakeoffGroup.PumpStationFittings, string.Create(ruI, $"Гильза стальная для прохода трубы DN{dnI} через наружную стену: Ø не менее {outerI + PumpCatalog.PipingExtras(normsDir).SleeveExtra:0} мм"), "по месту", inletRoutes.Count, "шт.", "ввод в здание; заделка — по узлу прохода (сальник), Козицина, с. 26", Role: "inletSleeve"),
                     ],
                 };
@@ -1266,7 +1513,7 @@ public static class ProjectPipeline
             hydrantReach = new Length(hp.Reach ?? (hp.HoseLength + hydrants.Demand.TableJetHeight.Meters));
             foreach (var room in plan.Rooms)
             {
-                var placed = HydrantPlacement.Place(plan, room, hydrantReach.Value, hydrants.Demand.Jets);
+                var placed = HydrantPlacement.Place(plan, room, hydrantReach.Value, hydrants.Demand.Jets, VpvNorms.For(hydrants.Settings.Region).PlacementClause);
                 hydrantPoints.AddRange(placed.Points);
                 issues.AddRange(placed.Issues);
             }
@@ -1291,12 +1538,47 @@ public static class ProjectPipeline
             takeoff = takeoff with { Items = [.. takeoff.Items, .. HydrantEquipment.Items(hydrantSet, hydrants.Settings, Math.Max(1, hydrantPoints.Count), issues.Any(i => i.Code == "vpv.diaphragm"))] };
         }
 
+        if (curtains.Count > 0)
+        {
+            takeoff = takeoff with
+            {
+                Items = [.. takeoff.Items, .. design.Curtains.Zip(curtains).Where(x => x.Second.PerRow > 0).Select(x => new TakeoffItem(TakeoffGroup.Sprinklers,
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ороситель дренчерный водяной, K = {x.Second.Input.K:0.###} (завеса «{x.Second.Input.Name}»)"), x.First.Model.Length > 0 ? x.First.Model : "по каталогу",
+                    x.Second.Rows * x.Second.PerRow, "шт.", string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"{x.Second.Rows} нитк. × {x.Second.PerRow}, шаг {x.Second.SpacingM:0.00} м, DN{x.Second.Input.Dn}"))),
+                    new TakeoffItem(TakeoffGroup.ControlUnit, "Запорное устройство с электроприводом для пуска водяных завес", null, curtains.Count, "компл.", "подобрать; пуск автоматически и вручную (пп. 6.3.8, 6.3.9, 6.3.14 СП 485)")],
+            };
+        }
+
+        // Пенная АУП (пп. 6.9.18, 6.9.19, 6.9.23): раствор с трубами, пенообразователь с резервом, бак-дозатор в спецификации.
+        FoamConcentrateResult? foamResult = null;
+        if (design.Foam is { } foamInput)
+        {
+            var pipeIssues = new List<Issue>();
+            var pipesM3 = AirFilled.InnerVolume(routes, new PipeSeries(norms, seriesStandard, pipeSizes), pipeIssues);
+            issues.AddRange(pipeIssues.Where(x => !issues.Contains(x)));
+            var solutionFlow = new Flow(governing.PumpFlow.LitersPerSecond - (governing.Hydrants?.TotalFlow.LitersPerSecond ?? 0));
+            foamResult = FoamConcentrate.Calculate(solutionFlow, governing.Duration, pipesM3, foamInput.Concentration, governing.DictatingFlow, norms);
+            issues.AddRange(foamResult.Issues);
+            if (foamResult.TotalM3 > 0)
+            {
+                var ruF = CultureInfo.GetCultureInfo("ru-RU");
+                takeoff = takeoff with
+                {
+                    Items = [.. takeoff.Items,
+                        new TakeoffItem(TakeoffGroup.ControlUnit, $"Пенообразователь{(foamInput.Name.Length > 0 ? $" {foamInput.Name}" : "")}", null, Math.Round(foamResult.TotalM3, 2), "м³",
+                            string.Create(ruF, $"расчётный {foamResult.ConcentrateM3:0.00} м³ + резерв {foamResult.ReserveM3:0.00} м³ (п. 6.9.18 СП 485); концентрация {foamResult.ConcentrationPercent:0.#} %")),
+                        new TakeoffItem(TakeoffGroup.ControlUnit, "Бак-дозатор пенообразователя с обвязкой", null, 1, "компл.",
+                            string.Create(ruF, $"подобрать: объём не менее {foamResult.TotalM3:0.00} м³ (или основной и резервный), дозирование от {foamResult.DosingMin.LitersPerSecond:0.00} до {foamResult.DosingMax.LitersPerSecond:0.00} л/с (пп. 6.9.18, 6.9.23)"))],
+                };
+            }
+        }
+
         // Воздухозаполненная АУП (пп. 6.2.1, 6.2.4–6.2.8, 6.2.19, 6.7.1.21): объём воздуха, проверки, узел и компрессор в спецификации.
         AirFilledResult? air = null;
         var coldRule = norms.Find("sp485.p6_2_19.airDeflector")?.Values["belowTemperature"];
         if (design.AirFilled)
         {
-            air = AirFilled.Check(routes, new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes), design.SprinklerDeflector, design.MinAmbientTemperature, norms);
+            air = AirFilled.Check(routes, new PipeSeries(norms, seriesStandard, pipeSizes), design.SprinklerDeflector, design.MinAmbientTemperature, norms);
             issues.AddRange(air.Issues);
             static TakeoffItem Air(TakeoffItem x) => x with { Name = x.Name.Replace("водозаполненный", "воздухозаполненный", StringComparison.Ordinal) };
             takeoff = takeoff with
@@ -1313,7 +1595,7 @@ public static class ProjectPipeline
         }
 
         // Опоры трубопроводов (табл. 6.7.1, пп. 6.7.1.26, 6.7.1.31) и их крепёж по шаблону каталога.
-        var supports = PipeSupports.Build(routes, norms, design.PipeSeriesStandard, pipeSizes);
+        var supports = PipeSupports.Build(routes, norms, seriesStandard, pipeSizes);
         issues.AddRange(supports.Issues.Where(i => !issues.Contains(i)));
         var supportSet = SupportEquipment.PathFor(normsDir);
         if (File.Exists(supportSet))
@@ -1346,7 +1628,7 @@ public static class ProjectPipeline
         ])).ToList();
 
         // plan.dwg — лист: трубы поверх исходного чертежа этажа, без замечаний; plan.dxf — слои программы с замечаниями (для проверки и вставки).
-        Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
+        Write(auptDir, PlanFile, files, p => PlanDxfWriter.Write(p, layout, routes, [], summary: summary, inlets: inletNotes, basePath: drawing, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font), stamp: SheetStamp(project, "План этажа", "План этажа. Расстановка оросителей, трубопроводы")));
         WriteAlarmPlans(outIssues);
 
         Write(auptDir, PlanDxfFile, files, p => PlanDxfWriter.Write(p, layout, routes, outIssues, summary: summary, inlets: inletNotes, supports: supports.Points, dimensions: dimensions, hydrants: hydrantPoints, axes: axes, style: new PlanDxfStyle(Font: project.Font)));
@@ -1393,7 +1675,7 @@ public static class ProjectPipeline
                 setChoice?.Chosen is { } ss
                     ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1…Н{ss.MainPumps + ss.StandbyPumps} — {ss.Designation}: основные Н1…Н{ss.MainPumps}, резервный Н{ss.MainPumps + ss.StandbyPumps}; Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м")
                     : string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1, Н2 — агрегаты пожарные: Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м (рабочий и резервный)"),
-                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"НЖ — жокей-насос, бак не менее {worst.JockeyTankMinLiters:0} л"),
+                JockeyText(jockeyChoice, jockeyDesign, jockeyTank?.Tank?.VolumeL ?? worst.JockeyTankMinLiters),
                 fromTank ? "Из пожарного резервуара" : "Из наружной сети",
                 [
                     "Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении (п. 6.10.3 СП 485).",
@@ -1444,7 +1726,7 @@ public static class ProjectPipeline
             var pr1 = design.PumpRoom;
             var features = PumpRoomFeatures.Build(roomPlan.Room.Outline, roomPlan.Items, roomPlan.Room.Door, pr1.PitSize * 1000, PumpCatalog.PipingExtras(normsDir).FoundationMargin);
             var sleeveExtraD = PumpCatalog.PipingExtras(normsDir).SleeveExtra;
-            var seriesD = new PipeSeries(norms, design.PipeSeriesStandard, pipeSizes, includeOutdoorOnly: true);
+            var seriesD = new PipeSeries(norms, design.StationSeriesStandard, pipeSizes, includeOutdoorOnly: true);
             var sleeves = (piping?.Runs ?? [])
                 .SelectMany(r => new[] { r.Path[0], r.Path[^1] }.Where(pt => IsWall(roomPlan.Room.Outline, pt)).Select(pt => (pt, (seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD, $"гильза Ø{(seriesD.Pick(r.Dn)?.OuterDiameterMm ?? r.Dn) + sleeveExtraD:0}")))
                 .ToList();
@@ -1477,8 +1759,8 @@ public static class ProjectPipeline
                     .. roomPlan.Rules.Select(r => $"Проход: {r} (п. 6.10.16 СП 485)."),
                     string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Отметка пола насосной {pr1.FloorElevation:+0.000;−0.000;0.000}; уровень земли {pr1.GroundElevation:+0.000;−0.000}; стены — {pr1.WallThickness * 1000:0} мм (условно, по архитектурному разделу)."),
                     string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Пол — с уклоном к приямку {pr1.PitSize:0.0} × {pr1.PitSize:0.0} м глубиной {pr1.PitDepth:0.0} м; дренажные насосы в приямке (п. 6.10.23)."),
-                    "Фундамент установки — по паспорту изготовителя; при отсутствии сведений масса фундамента не менее 4 масс агрегатов (п. 6.10.26). Электродвигатели — не ниже 0,5 м от пола (п. 6.10.22).",
-                    "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно (data/catalog/pump_room.json), уточнить по выбранному оборудованию.",
+                    string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Фундамент установки — по паспорту изготовителя; при отсутствии сведений масса фундамента не менее {norms.Find("sp485.p6_10_26.foundation")!.Values["massRatio"]:0.#} масс агрегатов (п. 6.10.26). Электродвигатели — не ниже {norms.Find("sp485.p6_10_22.flooding")!.Values["motorAboveFloor"]:0.0#} м от пола (п. 6.10.22)."),
+                    "Габариты установки и прибора управления — по каталогу изготовителя; узлов управления и жокей-насоса — приняты условно, уточнить по выбранному оборудованию.",
                     "Свободная зона у двери 1 × 1 м — правило программы.",
                     "Номера позиций — по спецификации ПТ2.СО.",
                 ])
@@ -1603,9 +1885,9 @@ public static class ProjectPipeline
                     [
                         "Разрез — вид вдоль помещения насосной; все трубы спроецированы на плоскость разреза, отметки — оси труб.",
                         string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Ввод — на отметке {Elev(pr1.GroundElevation - pr1.InletDepth)} ({pr1.InletDepth:0.0} м от уровня земли {Elev(pr1.GroundElevation)}); трубопроводы АУП — на {Elev(design.PipeElevation)}."),
-                        "Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:200 (п. 6.10.29); переходы — эксцентрические.",
-                        "Электродвигатели насосов — не ниже 0,5 м от пола (п. 6.10.22); установка — на фундаменте по паспорту изготовителя (п. 6.10.26).",
-                        "Высоты узла управления и жокей-насоса — условные (data/catalog/pump_room.json).",
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Всасывающие трубопроводы — с подъёмом к насосной установке не менее 1:{1 / norms.Find("sp485.p6_10_29.suctionSlope")!.Values["minSlope"]!.Value:0} (п. 6.10.29); переходы — эксцентрические."),
+                        string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Электродвигатели насосов — не ниже {norms.Find("sp485.p6_10_22.flooding")!.Values["motorAboveFloor"]:0.0#} м от пола (п. 6.10.22); установка — на фундаменте по паспорту изготовителя (п. 6.10.26)."),
+                        "Высоты узла управления и жокей-насоса — условные, уточнить по выбранному оборудованию.",
                     ]),
                 SheetStamp(project, "Разрез", "Разрез 1-1 насосной станции") with { Name = "Разрез 1-1 насосной станции" },
                 project.Font));
@@ -1675,6 +1957,8 @@ public static class ProjectPipeline
             ? project.Literature
             : literature.Where(e => e.Status.StartsWith("действует", StringComparison.Ordinal)).Select(e => e.Id).ToList();
         var t = project.Title;
+        // Таблица соответствия нормам — в записку (раздел 13) и отдельным compliance.xlsx.
+        var compliance = ComplianceComposer.Compose(designs, worst, setChoice?.Chosen is not null ? setChoice.HeadAtDuty : null, issues);
         var note = ExplanatoryNoteComposer.Compose(
             new NoteInputs(
                 new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
@@ -1687,11 +1971,11 @@ public static class ProjectPipeline
                 routing with { Routes = routes },
                 takeoff,
                 governing,
-                AuptLevels.SettingsFor(governing.Route.RoomId, auptLevels, settings, design),
+                AuptLevels.SettingsFor(governing.Route.RoomId, auptLevels, settings, design, FeedOf(governing.Route.RoomId)),
                 literature,
                 ids,
                 selection,
-                $"Соединения стальных трубопроводов — на сварке по {design.WeldStandard}; фасонные части — {string.Join(", ", design.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}.",
+                $"Соединения стальных трубопроводов: {jointsText}.",
                 supports,
                 temperature.Choice,
                 design.MaxAmbientTemperature,
@@ -1703,19 +1987,69 @@ public static class ProjectPipeline
                 piping,
                 PumpCatalog.Piping(normsDir)?.Source,
                 userTank,
-                design.Jockey,
+                jockeyDesign,
                 [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                     $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))],
-                air),
+                air,
+                curtains,
+                foamResult,
+                design.Foam?.Name,
+                Compliance: compliance,
+                JockeyTank: jockeyTank),
             norms);
         Write(auptDir, NoteFile, files, p => NoteDocx.Write(p, note, Stamp(project, "ПЗ", "Пояснительная записка"), project.Font));
 
+        // Раздел 9 по п. 26 ПП РФ № 87 (стадия П) — подпункты, следующие из расчётов систем ППЗ.
+        if (project.Pp87)
+        {
+            var allRooms = plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList();
+            var protectedIds = layout.Sprinklers.Select(x => x.RoomId).ToHashSet(StringComparer.Ordinal);
+            var ru87 = CultureInfo.GetCultureInfo("ru-RU");
+            var volumes87 = new List<string>();
+            if (project.Alarm is not null)
+            {
+                volumes87.Add("система пожарной сигнализации и система оповещения и управления эвакуацией — том АПС");
+            }
+
+            if (project.Powder is not null)
+            {
+                volumes87.Add("модульная установка порошкового пожаротушения — том АПТ");
+            }
+
+            if (project.Gas is not null)
+            {
+                volumes87.Add("модульная установка газового пожаротушения — том АГП");
+            }
+
+            var schemes87 = new List<string> { "принципиальная схема насосной станции (лист ПТ)", "аксонометрическая схема трубопроводов АУП (лист ПТ)" };
+            if (project.Alarm is not null)
+            {
+                schemes87.Add("структурная схема системы пожарной сигнализации (том АПС)");
+            }
+
+            var pb = Pp87Composer.Compose(new Pp87Inputs(
+                new NoteTitle(t.Organization, t.Subject, t.Document, t.Author, t.Supervisor, t.CityYear, project.Name),
+                project.Name,
+                [.. allRooms.Where(r => protectedIds.Contains(r.Id))],
+                layout.Sprinklers.Count,
+                worst,
+                string.Join("; ", roomGroups.Zones.Select(z => string.Create(ru87, $"группа помещений {z.Group} ({z.Parameters.Source}): {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м²")).Distinct()),
+                design.AirFilled,
+                curtains,
+                hydrantPoints.Count,
+                string.Create(ru87, $"насосная станция: пожарных насосов рабочих — {station.WorkingPumps}, резервных — {station.StandbyPumps}; Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м"),
+                volumes87,
+                schemes87));
+            Write(outDir, Pp87File, files, p => NoteDocx.Write(p, pb, Stamp(project, "ПБ", "Мероприятия по обеспечению пожарной безопасности"), project.Font));
+        }
+
         // Лист «Общие данные» (ГОСТ Р 21.101): ведомости, основные показатели, общие указания.
         var general = GeneralDataComposer.Compose(
-            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, design.PipeSeriesStandard, design.WeldStandard, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled),
+            new GeneralDataInputs(project.Name, project.Sheets, plan, layout, worst, takeoff, temperature.Choice, hydrantPoints.Count, seriesStandard, jointsText, design.FittingStandards, Stamp(project, "ПТ.СО", "").Designation, stationTakeoff.Items.Count > 0 ? Stamp(project, "ПТ2.СО", "").Designation : null, design.AirFilled, design.WeldStandard),
             norms,
             GeneralDataComposer.DocumentsPath(normsDir));
         Write(auptDir, GeneralDataFile, files, p => GeneralDataDocx.Write(p, general, Stamp(project, "ПТ", "Общие данные") with { SheetCount = project.Sheets.Count }, project.Font));
+        Write(auptDir, ComplianceFile, files, p => ComplianceXlsx.Write(p, compliance, $"{project.Name}. Соответствие требованиям норм (АУПТ)", project.Font));
         files.Add(WriteIssues(outDir, issues));
         var pumpSummary = setChoice?.Chosen is { } summarySet
             ? new PumpSetSummary(
@@ -1731,6 +2065,7 @@ public static class ProjectPipeline
                 [.. summarySet.PumpCurve.Select(p => new PumpCurvePoint(p.QM3h, p.HM))])
             : null;
         var pumpRoomSummary = PumpRoomSummary(plan, setChoice?.Chosen);
+        WriteTomes(project, auptDir, alarmDir, files);
         return new PipelineResult(true, files, issues, worst, pumpSummary, pumpRoomSummary);
     }
 
@@ -1819,6 +2154,24 @@ public static class ProjectPipeline
 
     // Жокей-насос — решение проектировщика (В-07): норма расход и уставки не задаёт. Проверяются только заданные данные:
     // отрицательный расход — Error; уставки включения/отключения несогласованы — Warning; валидные данные — Info.
+    // Подпись жокей-насоса на схеме насосной: обозначение изготовителя (или вид), расход и уставки включения/отключения.
+    private static string JockeyText(JockeyPumpChoice? choice, ProjectJockey jockey, double tankLiters)
+    {
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var parts = new List<string> { choice is null ? string.Create(ru, $"НЖ — жокей-насос, бак не менее {tankLiters:0} л") : $"НЖ — {choice.Designation}" };
+        if (jockey.FlowLitersPerSecond is { } q)
+        {
+            parts.Add(string.Create(ru, $"Q = {q:0.##} л/с"));
+        }
+
+        if (jockey.StartPressureMpa is { } on && jockey.StopPressureMpa is { } off)
+        {
+            parts.Add(string.Create(ru, $"Pвкл = {on:0.00} МПа, Pоткл = {off:0.00} МПа"));
+        }
+
+        return string.Join("; ", parts);
+    }
+
     private static IEnumerable<Issue> JockeyIssues(ProjectJockey? jockey)
     {
         if (jockey is null)
@@ -1873,8 +2226,11 @@ public static class ProjectPipeline
 
         if (parts.Count > 0)
         {
-            yield return new Issue("jockey.manual", IssueLevel.Info, string.Create(ru,
-                $"Параметры жокей-насоса заданы решением проектировщика: {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07)."));
+            yield return jockey.AssignedBy is null
+                ? new Issue("jockey.manual", IssueLevel.Info, string.Create(ru,
+                    $"Параметры жокей-насоса заданы решением проектировщика: {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07)."))
+                : new Issue("jockey.assigned", IssueLevel.Info, string.Create(ru,
+                    $"Параметры жокей-насоса назначены по практике (незаданные проектировщиком): {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07); проверьте по опросному листу изготовителя."));
         }
     }
 
@@ -1886,17 +2242,83 @@ public static class ProjectPipeline
         IReadOnlyList<TitleSignature> signatures = t.Signatures.Count > 0
             ? [.. t.Signatures.Select(s => new TitleSignature(s.Role, s.Name))]
             : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
-        return new TitleBlock($"{t.Code}-{mark}", project.Name, t.Building, name, t.Stage, t.Organization, signatures);
+        // Графа 27 — только если заказчик задан (не заглушка «[…]»).
+        var customer = t.Customer.Trim() is { Length: > 0 } c && !c.StartsWith('[') ? c : null;
+        return new TitleBlock($"{t.Code}-{DesignMark(project, mark)}", project.Name, t.Building, name, t.Stage, t.Organization, signatures, Customer: customer);
     }
+
+    /// <summary>
+    /// Марка документа стадии «П»: основной комплект ПТ — шифр раздела, его спецификации — «шифр.СО», записка — «шифр.ПЗ»
+    /// (как в томе ИОС2.2 образца); на стадии «Р» и для других марок — без изменений.
+    /// </summary>
+    public static string DesignMark(ProjectFile project, string mark)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var t = project.Title;
+        return !t.IsDesignStage ? mark : mark switch
+        {
+            "ПТ" => t.SectionMark,
+            "ПТ.СО" or "ПТ2.СО" => t.SectionMark + ".СО",
+            "ПЗ" => t.SectionMark + ".ПЗ",
+            "АПС" => t.AlarmSectionMark,
+            "АПС.ПЗ" or "АПС.СО" or "АПС.КЖ" => t.AlarmSectionMark + mark[3..],
+            _ => mark,
+        };
+    }
+
+    /// <summary>Графическая часть тома стадии «П» по порядку листов: принципиальная схема, расчётная (аксонометрическая) схема, план сетей.</summary>
+    public static readonly IReadOnlyList<string> DesignSheets = ["Принципиальная", "Аксонометрическая схема трубопроводов", "План этажа"];
 
     // Основная надпись листа основного комплекта: номер и наименование — из ведомости чертежей (по началу наименования).
     private static TitleBlock SheetStamp(ProjectFile project, string prefix, string fallbackName)
     {
         var sheet = project.Sheets.FirstOrDefault(s => s.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (project.Title.IsDesignStage)
+        {
+            // Стадия «П»: листы графической части тома нумеруются по её порядку; остальные листы в том не входят.
+            var k = DesignSheets.ToList().FindIndex(d => prefix.StartsWith(d, StringComparison.OrdinalIgnoreCase) || d.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            return Stamp(project, "ПТ", sheet?.Name ?? fallbackName) with { Sheet = k >= 0 ? (k + 1).ToString(CultureInfo.InvariantCulture) : null };
+        }
+
         return Stamp(project, "ПТ", sheet?.Name ?? fallbackName) with { Sheet = sheet?.Sheet };
     }
 
     private static string Plural(string noun) => GeneralDataComposer.Plural(noun);
+
+    // Соединения сети словами — для записки и «Общих данных»: по видам с диапазонами DN и стандартами; насосная — п. 6.7.2.4.
+    private static string JointsText(ProjectDesign design, PipeJointsResult plan)
+    {
+        string Range(JointKind kind)
+        {
+            var dns = plan.ByDn.Where(x => x.Value == kind).Select(x => x.Key).Order().ToList();
+            return dns.Count == 0 ? "" : dns.Count == 1 ? $"DN{dns[0]}" : $"DN{dns[0]}–DN{dns[^1]}";
+        }
+
+        var welded = $"на сварке по {design.WeldStandard}; фасонные части — {string.Join(", ", design.FittingStandards.Select(f => $"{Plural(f.Key)} по {f.Value}"))}";
+        if (design.Joints != JointKind.Grooved || plan.ByDn.Count == 0)
+        {
+            return welded;
+        }
+
+        var parts = new List<string>();
+        if (Range(JointKind.Grooved) is { Length: > 0 } g)
+        {
+            parts.Add($"{g} — на трубопроводных разъёмных (грувлочных) муфтах по {design.CouplingStandard} с фасонными частями под муфту (п. 6.7.2.1 СП 485)");
+        }
+
+        if (Range(JointKind.Threaded) is { Length: > 0 } t)
+        {
+            parts.Add($"{t} — на резьбе, соединительные части из ковкого чугуна по {string.Join(", ", design.ThreadedFittingStandards.Values.Distinct())}");
+        }
+
+        if (Range(JointKind.Welded) is { Length: > 0 } w)
+        {
+            parts.Add($"{w} — {welded}");
+        }
+
+        parts.Add("трубопроводы насосной станции — на сварке, к арматуре — на фланцах (п. 6.7.2.4 СП 485)");
+        return string.Join("; ", parts);
+    }
 
     // Условные точки на стенах помещения (вводы/выпуски), когда разметка ПТ_НС_ВВОД/ВЫПУСК не сделана: равномерно по
     // периметру прямоугольника помещения; start — доля периметра от левого нижнего угла.
@@ -2052,21 +2474,117 @@ public static class ProjectPipeline
                 ("Интенсивность орошения i", $"{F(p.Intensity, "0.###")} л/(с·м²)"),
                 ("Минимальная площадь S", $"{F(p.MinArea, "0.##")} м²; в зоне N = {d.ZoneSprinklers.Count} оросит."),
                 ("Диктующий ороситель", $"q = {F(d.DictatingFlow.LitersPerSecond, "0.00")} л/с, p = {F(d.DictatingPressure.Mpa, "0.000")} МПа (Б.1)"),
-                ("Расчётный расход Q_р", $"{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с (Б.23)"),
-                ("Нормативный расход Q_н", $"{F(d.NormativeFlow.LitersPerSecond, "0.##")} л/с"),
-                ("Расход насоса Q_нас", $"{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с, {F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч ({d.PumpFlowClause})"),
+                ("Расчётный расход Qр", $"{F(d.DesignFlow.LitersPerSecond, "0.00")} л/с (Б.23)"),
+                ("Нормативный расход Qн", $"{F(d.NormativeFlow.LitersPerSecond, "0.##")} л/с"),
+                ("Расход насоса Qнас", $"{F(d.PumpFlow.LitersPerSecond, "0.00")} л/с, {F(d.PumpFlow.LitersPerSecond * 3.6, "0.0")} м³/ч ({d.PumpFlowClause})"),
                 .. (d.Hydrants is { } h
-                    ? [("ВПВ (СН КР 40-04:2025)", $"{h.Demand.Jets} × {F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с, H_ПК = {F(h.Demand.Head.Meters, "0.#")} м (Ж.2, Ж.3)")]
+                    ? [($"ВПВ ({VpvNorms.For(h.Settings.Region).Doc})", $"{h.Demand.Jets} × {F(h.JetFlowActual.LitersPerSecond, "0.00")} л/с, H_ПК = {F(h.Demand.Head.Meters, "0.#")} м (Ж.2, Ж.3)")]
                     : Array.Empty<(string, string)>()),
                 ("Давление в точке подключения", $"{F(d.InletNodePressure.Mpa, "0.000")} МПа"),
-                ("Давление на входе насоса P_вх", $"{F(d.InletNodePressure.Mpa + ((1 + d.LocalLossFactor) * d.SupplyLinearLoss.Mpa) + d.Elevation.Mpa - d.PumpPressure.Mpa, "0.000")} МПа (по ТУ)"),
-                ("Требуемое давление насоса P_н", $"{F(d.PumpPressure.Mpa, "0.000")} МПа, H_н = {F(d.PumpHead.Meters, "0.0")} м (Б.30)"),
+                ("Давление на входе насоса Pвх", $"{F(d.InletNodePressure.Mpa + ((1 + d.LocalLossFactor) * (d.SupplyLinearLoss.Mpa + d.RiserLinearLoss.Mpa)) + d.Elevation.Mpa - d.PumpPressure.Mpa, "0.000")} МПа (по ТУ)"),
+                ("Требуемое давление насоса Pн", $"{F(d.PumpPressure.Mpa, "0.000")} МПа, Hн = {F(d.PumpHead.Meters, "0.0")} м (Б.30)"),
                 ("Наибольшая скорость", $"{F(d.Path.Max(x => x.Velocity), "0.00")} м/с (не более {F(d.VelocityLimit, "0.#")} м/с, п. 6.7.1.37)"),
                 ("Запас воды W", $"{F(d.WaterVolume, "0.0")} м³ за {F(d.Duration, "0")} мин"),
             ],
             d.ZoneSprinklers,
-            $"ДИКТУЮЩАЯ ЗОНА: S = {F(p.MinArea, "0.##")} м², N = {d.ZoneSprinklers.Count}, Q_р = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с",
+            $"ДИКТУЮЩАЯ ЗОНА: S = {F(p.MinArea, "0.##")} м², N = {d.ZoneSprinklers.Count}, Qр = {F(d.DesignFlow.LitersPerSecond, "0.00")} л/с",
             Math.Max(d.RowSpacing.Millimeters, d.LineSpacing.Millimeters) / 2);
+    }
+
+    // Описи томов (tome.json) для сборки PDF тома с ИУЛ командой pdf (ADR 0015).
+    private static void WriteTomes(ProjectFile project, string auptDir, string alarmDir, List<string> files)
+    {
+        var t = project.Title;
+        IReadOnlyList<Export.IulSignature> signatures = t.Signatures.Count > 0
+            ? [.. t.Signatures.Select(s => new Export.IulSignature(s.Role, s.Name))]
+            : [new("Разраб.", t.Author), new("Руковод.", t.Supervisor), new("Н. контр.", "")];
+        IEnumerable<string> In(string dir) => files.Where(f => string.Equals(Path.GetDirectoryName(Path.GetFullPath(f)), Path.GetFullPath(dir), StringComparison.OrdinalIgnoreCase));
+        void Manifest(string dir, params TomeEntry[] tomes)
+        {
+            var list = tomes.Where(x => x.Documents.Count > 0).ToList();
+            if (list.Count > 0 && Directory.Exists(dir))
+            {
+                Tome.WriteManifest(dir, new TomeManifest(list, signatures, project.Font));
+            }
+        }
+
+        if (t.IsDesignStage)
+        {
+            // Стадия «П» (как том ИОС2.2 образца): обложка, титул, содержание, записка, графическая часть, спецификация.
+            var written = In(auptDir).ToList();
+            var code = $"{t.Code}-{t.SectionMark}";
+            var note = Tome.Ordered(written, [NoteFile]);
+            string[] sheetNames = ["Принципиальная схема насосной станции пожаротушения", "Аксонометрическая (расчётная) схема трубопроводов", "План сетей. Расстановка оросителей, трубопроводы"];
+            var drawings = new List<TomeContentGroup>();
+            foreach (var (file, k) in new[] { PumpSchemeFile, AxonometryFile, PlanFile }.Select((f, k) => (f, k)))
+            {
+                foreach (var d in Tome.Ordered(written, [file]))
+                {
+                    drawings.Add(new TomeContentGroup(code, $"Лист {k + 1}. {sheetNames[k]}", [d]));
+                }
+            }
+
+            var spec = Tome.Ordered(written, [SpecificationDocxFile, PumpStationSpecFile]);
+            List<TomeContentGroup> groups =
+            [
+                new(code + ".ПЗ", "Пояснительная записка", note),
+                .. drawings,
+                new(code + ".СО", "Спецификация оборудования, изделий и материалов", spec),
+            ];
+            var cover = new Export.TomeCover(
+                t.Organization,
+                t.Customer,
+                t.Building,
+                "ПРОЕКТНАЯ ДОКУМЕНТАЦИЯ",
+                t.SectionTitle,
+                code,
+                t.Volume,
+                t.CityYear,
+                t.TitleSignatures.Count > 0 ? [.. t.TitleSignatures.Select(s => new Export.IulSignature(s.Role, s.Name))] : [new("Главный инженер проекта", t.Supervisor)]);
+            Manifest(auptDir, new TomeEntry(code, t.SectionTitle, [.. groups.SelectMany(g => g.Documents)], cover, groups, t.Stage, t.Organization));
+        }
+        else
+        {
+            Manifest(
+                auptDir,
+                new TomeEntry($"{t.Code}-ПТ", "Автоматическая установка водяного пожаротушения. Основной комплект рабочих чертежей", Tome.Ordered(In(auptDir), Tome.AuptOrder)),
+                new TomeEntry($"{t.Code}-ПЗ", "Автоматическая установка водяного пожаротушения. Пояснительная записка", Tome.Ordered(In(auptDir), [NoteFile])));
+        }
+        if (t.IsDesignStage)
+        {
+            // Стадия «П» для АПС и СОУЭ (ПП РФ № 87, п. 26, подп. з, и, к — записка; п — структурная схема): тот же состав тома,
+            // что у АУП — обложка, титул, содержание, записка, графическая часть (схема, планы), спецификация.
+            var written = In(alarmDir).ToList();
+            var code = $"{t.Code}-{t.AlarmSectionMark}";
+            var drawings = Tome.Ordered(written, [AlarmSchemeFile, "aps_plan*"])
+                .Select((d, k) => new TomeContentGroup(code, $"Лист {k + 1}. {(k == 0 && Path.GetFileName(d) == AlarmSchemeFile ? "Структурная схема" : "План расстановки извещателей и оповещателей")}", [d]))
+                .ToList();
+            List<TomeContentGroup> groups =
+            [
+                new(code + ".ПЗ", "Пояснительная записка", Tome.Ordered(written, [AlarmNoteFile])),
+                .. drawings,
+                new(code + ".СО", "Спецификация оборудования, изделий и материалов", Tome.Ordered(written, [AlarmSpecDocxFile])),
+                new(code + ".СО", "Спецификация. Приложение: перечень документов о подтверждении соответствия", Tome.Ordered(written, [AlarmCertificatesFile])),
+            ];
+            groups = [.. groups.Where(g => g.Documents.Count > 0)];
+            var cover = new Export.TomeCover(
+                t.Organization,
+                t.Customer,
+                t.Building,
+                "ПРОЕКТНАЯ ДОКУМЕНТАЦИЯ",
+                t.AlarmSectionTitle,
+                code,
+                t.AlarmVolume,
+                t.CityYear,
+                t.TitleSignatures.Count > 0 ? [.. t.TitleSignatures.Select(s => new Export.IulSignature(s.Role, s.Name))] : [new("Главный инженер проекта", t.Supervisor)]);
+            Manifest(alarmDir, new TomeEntry(code, t.AlarmSectionTitle, [.. groups.SelectMany(g => g.Documents)], cover, groups, t.Stage, t.Organization));
+            return;
+        }
+
+        Manifest(
+            alarmDir,
+            new TomeEntry($"{t.Code}-АПС", "Автоматическая пожарная сигнализация. Основной комплект рабочих чертежей", Tome.Ordered(In(alarmDir), Tome.AlarmOrder)),
+            new TomeEntry($"{t.Code}-АПС.ПЗ", "Автоматическая пожарная сигнализация. Пояснительная записка", Tome.Ordered(In(alarmDir), [AlarmNoteFile])));
     }
 
     private static void Write(string dir, string name, List<string> files, Action<string> write)

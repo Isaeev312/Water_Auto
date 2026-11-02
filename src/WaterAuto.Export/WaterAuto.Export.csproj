@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <PackageReference Include="ACadSharp" />
+    <PackageReference Include="PDFsharp" />
   </ItemGroup>
 
 </Project>

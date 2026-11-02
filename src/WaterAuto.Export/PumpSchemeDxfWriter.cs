@@ -88,9 +88,32 @@ public static class PumpSchemeDxfWriter
             data.Marks?.TryGetValue(role, out var list) == true && index < list.Count ? list[index] : fallback;
 
         // Вводы (п. 6.10.27): всасывающий коллектор; каждый ввод — отдельная линия со своей задвижкой до коллектора.
-        d.Pipe(25, yS, xJ + 8, yS);
-        d.Cap(xJ + 8, yS, horizontal: true);
-        Pos(xJ + 8, yS, "capS");
+        // При двух вводах коллектор — кольцо из двух линий с задвижками между ответвлениями (ремонт участка без остановки).
+        var ring = RingValves(data.Pumps, data.Inlets) > 0;
+        const double yL = yS - 10, xL = 95;
+        if (ring)
+        {
+            d.Pipe(25, yS, xJ + 8, yS);
+            d.Pipe(25, yL, xJ + 8, yL);
+            d.Pipe(xL, yL, xL, yS);
+            d.Pipe(xJ + 8, yL, xJ + 8, yS);
+            var taps = branches.Append(xJ).ToList();
+            for (var k = 0; k + 1 < taps.Count; k++)
+            {
+                var xv = (taps[k] + taps[k + 1]) / 2;
+                d.Valve(xv, yS, vertical: false, sensor: false);
+                d.Valve(xv, yL, vertical: false, sensor: false);
+            }
+
+            Pos((taps[0] + taps[1]) / 2, yL, "ringValve");
+        }
+        else
+        {
+            d.Pipe(25, yS, xJ + 8, yS);
+            d.Cap(xJ + 8, yS, horizontal: true);
+            Pos(xJ + 8, yS, "capS");
+        }
+
         d.Pipe(x0, yD, xEnd + (Math.Max(1, data.Outlets?.Count ?? 1) - 1) * 30, yD);
         d.Cap(x0, yD, horizontal: true, left: true);
         Pos(x0, yD, "capD", -1);
@@ -99,7 +122,17 @@ public static class PumpSchemeDxfWriter
         d.Valve(85, yS, vertical: false, sensor: true);
         Pos(85, yS, "inletValve", -1);
         Mark(80, yS - 7, "inletValve", 0);
-        for (var k = 1; k < Math.Max(1, data.Inlets); k++)
+        if (ring)
+        {
+            // Второй ввод — в нижнюю линию кольца; задвижка — левее первой, чтобы датчик и подписи не накладывались.
+            d.Arrow(34, yL, 1, 0);
+            d.Valve(60, yL, vertical: false, sensor: true);
+            d.Text(27, yL + 3, "Ввод 2", 2.5);
+            Pos(60, yL, "inletValve", -1);
+            Mark(55, yL - 7, "inletValve", 1);
+        }
+
+        for (var k = ring ? 2 : 1; k < Math.Max(1, data.Inlets); k++)
         {
             // Второй и следующие вводы — отдельными ветвями слева; задвижка — на ветви до общего коллектора.
             var yIn = yS + (12 * k);
@@ -162,11 +195,12 @@ public static class PumpSchemeDxfWriter
         d.Pump(xJ, 145, 5);
         d.Text(xJ + 7, 145, "НЖ", 3.5);
         Pos(xJ - 5, 145, "jockey", -1);
+        Mark(xJ + 7, 139, "jockey", 0);
         d.Check(xJ, 170);
         d.Valve(xJ, 180, vertical: true, sensor: false);
         d.Pipe(xJ, 158, xJ + 18, 158);
         d.Tank(xJ + 18, 152);
-        d.Text(xJ + 7, 128, data.JockeyText, 2.5, width: 40);
+        d.Text(xJ + 7, 134, data.JockeyText, 2.5, width: 40);
 
         // Напорный коллектор — гребёнка: по ветви на секцию с затворами до и после узла управления и манометрами;
         // выход — к точке ввода сети секции на плане.
@@ -184,7 +218,7 @@ public static class PumpSchemeDxfWriter
             d.Gauge(x, 239, "Р", vacuum: false);
             d.Arrow(x, 250, 0, 1);
             d.Text(x - 3, 253, $"Секция {k + 1}", 2.5);
-            d.Text(x - 3, 257.5, $"→ {outlets[k]}", 2.5);
+            d.Text(x - 3, 257.5, $"в сеть: {outlets[k]}", 2.5);
             d.Text(x + 2, 245, $"DN{data.SupplyDn}", 2);
             if (k == 0)
             {
@@ -224,17 +258,24 @@ public static class PumpSchemeDxfWriter
 
         d.Text(150, 280, "Принципиальная схема насосной станции пожаротушения", 5);
         Legend(d, 262, 104);
-        var y = 92.0;
+        var y = ring ? 76.0 : 92.0;
         foreach (var note in data.Notes.Select((n, k) => $"{k + 1}. {n}"))
         {
             d.Text(25, y, note, 2.5, width: 200);
             y -= 9.5;
         }
 
+        d.Flush();
         return doc;
     }
 
     // Таблица условных обозначений — над основной надписью, в два столбца.
+    /// <summary>
+    /// Секционные задвижки кольцевого всасывающего коллектора: при двух и более вводах — по одной на каждой из двух линий
+    /// между соседними ответвлениями (агрегаты и жокей-насос); при одном вводе кольца нет.
+    /// </summary>
+    public static int RingValves(int pumps, int inlets) => inlets >= 2 ? 2 * pumps : 0;
+
     private static void Legend(Drawer d, double x, double top)
     {
         d.Text(x, top, "Условные обозначения", 3);
@@ -261,7 +302,90 @@ public static class PumpSchemeDxfWriter
     {
         private static XYZ P(double x, double y) => new(x, y, 0);
 
-        public void Pipe(double ax, double ay, double bx, double by) => doc.Entities.Add(new Line(P(ax, ay), P(bx, by)) { Layer = pipes });
+        // Трубы копятся и в конце рисуются с разрывами там, где стоит значок (арматура, насос, узел управления):
+        // линия трубы не проходит сквозь изображение изделия.
+        private readonly List<(double Ax, double Ay, double Bx, double By)> pipeRuns = [];
+        private readonly List<(double X0, double Y0, double X1, double Y1)> gaps = [];
+
+        public void Pipe(double ax, double ay, double bx, double by) => pipeRuns.Add((ax, ay, bx, by));
+
+        private void Gap(double x0, double y0, double x1, double y1) => gaps.Add((Math.Min(x0, x1), Math.Min(y0, y1), Math.Max(x0, x1), Math.Max(y0, y1)));
+
+        public void Flush()
+        {
+            foreach (var (ax, ay, bx, by) in pipeRuns)
+            {
+                var len = Math.Sqrt(((bx - ax) * (bx - ax)) + ((by - ay) * (by - ay)));
+                if (len < 1e-9)
+                {
+                    continue;
+                }
+
+                // Интервалы параметра t ∈ [0, 1], закрытые значками (пересечение отрезка с прямоугольником).
+                var cut = new List<(double T0, double T1)>();
+                foreach (var g in gaps)
+                {
+                    var (t0, t1) = (0.0, 1.0);
+                    if (Clip(ax, bx, g.X0, g.X1, ref t0, ref t1) && Clip(ay, by, g.Y0, g.Y1, ref t0, ref t1) && t1 - t0 > 1e-6)
+                    {
+                        cut.Add((t0, t1));
+                    }
+                }
+
+                var t = 0.0;
+                foreach (var (c0, c1) in cut.OrderBy(c => c.T0))
+                {
+                    if (c0 > t + 1e-6)
+                    {
+                        Seg(t, c0);
+                    }
+
+                    t = Math.Max(t, c1);
+                }
+
+                if (t < 1 - 1e-6)
+                {
+                    Seg(t, 1);
+                }
+
+                void Seg(double u0, double u1) => doc.Entities.Add(new Line(P(ax + ((bx - ax) * u0), ay + ((by - ay) * u0)), P(ax + ((bx - ax) * u1), ay + ((by - ay) * u1))) { Layer = pipes });
+            }
+
+            static bool Clip(double a, double b, double lo, double hi, ref double t0, ref double t1)
+            {
+                var d = b - a;
+                if (Math.Abs(d) < 1e-12)
+                {
+                    return a >= lo - 1e-9 && a <= hi + 1e-9;
+                }
+
+                var (u0, u1) = ((lo - a) / d, (hi - a) / d);
+                if (u0 > u1)
+                {
+                    (u0, u1) = (u1, u0);
+                }
+
+                t0 = Math.Max(t0, u0);
+                t1 = Math.Min(t1, u1);
+                return t0 <= t1;
+            }
+        }
+
+        // Фланцы — черта поперёк трубы с каждой стороны изделия (фланцевое присоединение арматуры).
+        private void Flanges(double x, double y, double half, bool vertical)
+        {
+            const double f = 3.8;
+            if (vertical)
+            {
+                L(x - f, y - half, x + f, y - half);
+                L(x - f, y + half, x + f, y + half);
+            }
+            else
+            {
+                L(x - half, y - f, x - half, y + f);
+                L(x + half, y - f, x + half, y + f);
+            }
+        }
 
         private void L(double ax, double ay, double bx, double by) => doc.Entities.Add(new Line(P(ax, ay), P(bx, by)) { Layer = equipment });
 
@@ -289,6 +413,16 @@ public static class PumpSchemeDxfWriter
                 L(x - s, y - s, x - s, y + s); L(x - s, y - s, x + s, y + s); L(x - s, y + s, x + s, y - s); L(x + s, y - s, x + s, y + s);
             }
 
+            Flanges(x, y, s + 0.8, vertical);
+            if (vertical)
+            {
+                Gap(x - 0.1, y - s - 0.8, x + 0.1, y + s + 0.8);
+            }
+            else
+            {
+                Gap(x - s - 0.8, y - 0.1, x + s + 0.8, y + 0.1);
+            }
+
             if (sensor)
             {
                 var (sx, sy) = vertical ? (x + s + 3, y) : (x, y + s + 3);
@@ -301,12 +435,15 @@ public static class PumpSchemeDxfWriter
         public void Check(double x, double y, bool down = false, bool horizontal = false)
         {
             const double s = 3;
+            Flanges(x, y, s + 0.8, !horizontal);
             if (horizontal)
             {
+                Gap(x - s - 0.8, y - 0.1, x + s + 0.8, y + 0.1);
                 L(x - s, y - s, x - s, y + s); L(x - s, y - s, x + s, y); L(x - s, y + s, x + s, y); L(x + s, y - s, x + s, y + s);
                 return;
             }
 
+            Gap(x - 0.1, y - s - 0.8, x + 0.1, y + s + 0.8);
             var dir = down ? -1 : 1;
             L(x - s, y - (dir * s), x + s, y - (dir * s)); L(x - s, y - (dir * s), x, y + (dir * s)); L(x + s, y - (dir * s), x, y + (dir * s)); L(x - s, y + (dir * s), x + s, y + (dir * s));
         }
@@ -315,6 +452,7 @@ public static class PumpSchemeDxfWriter
         public void Pump(double x, double y, double r)
         {
             doc.Entities.Add(new Circle { Center = P(x, y), Radius = r, Layer = equipment });
+            Gap(x - 0.1, y - r, x + 0.1, y + r);
             L(x - (0.6 * r), y - (0.5 * r), x, y + (0.7 * r)); L(x + (0.6 * r), y - (0.5 * r), x, y + (0.7 * r)); L(x - (0.6 * r), y - (0.5 * r), x + (0.6 * r), y - (0.5 * r));
         }
 
@@ -322,6 +460,7 @@ public static class PumpSchemeDxfWriter
         public void Insert(double x, double y, bool horizontal = false)
         {
             var (w, h) = horizontal ? (3.0, 2.0) : (2.0, 3.0);
+            Gap(x - w, y - h, x + w, y + h);
             L(x - w, y - h, x + w, y - h); L(x + w, y - h, x + w, y + h); L(x + w, y + h, x - w, y + h); L(x - w, y + h, x - w, y - h);
             L(x - w, y - h, x + w, y + h); L(x - w, y + h, x + w, y - h);
         }
@@ -353,6 +492,7 @@ public static class PumpSchemeDxfWriter
         public void Box(double x, double y, string mark)
         {
             L(x, y - 6, x + 14, y - 6); L(x + 14, y - 6, x + 14, y + 6); L(x + 14, y + 6, x, y + 6); L(x, y + 6, x, y - 6);
+            Gap(x, y - 6, x + 14, y + 6);
             Text(x + 3, y - 1.5, mark, 3.5);
         }
 
@@ -370,6 +510,7 @@ public static class PumpSchemeDxfWriter
         public void Reducer(double x, double y, bool wideBelow)
         {
             var (bottom, top) = wideBelow ? (2.5, 1.5) : (1.5, 2.5);
+            Gap(x - 0.1, y - 2, x + 0.1, y + 2);
             L(x - bottom, y - 2, x + bottom, y - 2); L(x + bottom, y - 2, x + top, y + 2); L(x + top, y + 2, x - top, y + 2); L(x - top, y + 2, x - bottom, y - 2);
         }
 
