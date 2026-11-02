@@ -53,6 +53,12 @@
       "per": 1,
       "group": "equipment",
       "role": "jockey",
+      "mark": "ШУЖ",
+      "signals": [
+        { "kind": "pumpStart", "clause": "ДАЭ 500.027.000 РЭ, прил. Б: X5:5-6 «Установка запущена»" },
+        { "kind": "pumpFault", "clause": "ДАЭ 500.027.000 РЭ, прил. Б: X5:1-2 «Неисправность»" },
+        { "kind": "automaticsOff", "clause": "ДАЭ 500.027.000 РЭ, прил. Б: X5:3-4 «Автом. отключена»" }
+      ],
       "note": "{jockeyNote}"
     },
     {

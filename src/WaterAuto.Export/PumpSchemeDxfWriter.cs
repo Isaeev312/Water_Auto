@@ -195,11 +195,12 @@ public static class PumpSchemeDxfWriter
         d.Pump(xJ, 145, 5);
         d.Text(xJ + 7, 145, "НЖ", 3.5);
         Pos(xJ - 5, 145, "jockey", -1);
+        Mark(xJ + 7, 139, "jockey", 0);
         d.Check(xJ, 170);
         d.Valve(xJ, 180, vertical: true, sensor: false);
         d.Pipe(xJ, 158, xJ + 18, 158);
         d.Tank(xJ + 18, 152);
-        d.Text(xJ + 7, 128, data.JockeyText, 2.5, width: 40);
+        d.Text(xJ + 7, 134, data.JockeyText, 2.5, width: 40);
 
         // Напорный коллектор — гребёнка: по ветви на секцию с затворами до и после узла управления и манометрами;
         // выход — к точке ввода сети секции на плане.

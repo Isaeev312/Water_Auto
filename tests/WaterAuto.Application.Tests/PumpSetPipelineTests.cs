@@ -164,7 +164,8 @@ public sealed class PumpSetPipelineTests : IDisposable
         // Два ввода в насосную — две задвижки; одна секция — затворы до и после узла и его сигнализатор давления.
         // Шкаф входит в комплектную установку, но его выходы в АПС нужны и у неё (ГОСТ Р 53325-2012, п. 7.4.5).
         // Затворы обвязки входят в установку и в перечень не попадают, как и в ПТ2.СО, — номера ЗД на них не тратятся.
-        marks.ShouldBe(["ШУН", "ШУН", "ШУН", "УУ1", "ЗД1", "ЗД2", "ЗД3", "ЗД4"]);
+        // Жокей-насос — три выхода ШУ(ж) по РЭ изготовителя (прил. Б): запущена, неисправность, автоматика отключена.
+        marks.ShouldBe(["ШУН", "ШУН", "ШУН", "УУ1", "ШУЖ", "ШУЖ", "ШУЖ", "ЗД1", "ЗД2", "ЗД3", "ЗД4"]);
         body.Where(r => r[1] == "ШУН").ShouldAllBe(r => r[4].StartsWith("Прибор управления установки " + result.Pump!.Designation, StringComparison.Ordinal));
         body.Where(r => r[1] is "УУ1" or "ЗД3" or "ЗД4").ShouldAllBe(r => r[3] == "1");
         body.Where(r => r[1] is "ЗД1" or "ЗД2" or "ШУН").ShouldAllBe(r => r[3] == "насосная");
@@ -172,17 +173,18 @@ public sealed class PumpSetPipelineTests : IDisposable
         body.ShouldAllBe(r => r[2] != "");
         result.Issues.ShouldContain(i => i.Code == "aps.signals.incomplete");
 
-        // АКБ — по числу сигналов: 8 входов — один АР8; набор из каталога назван в замечании, ошибок расчёта нет.
+        // АКБ — по числу сигналов: 11 входов — два АР8; набор из каталога назван в замечании, ошибок расчёта нет.
         result.Issues.ShouldContain(i => i.Code == "aps.power.defaultSet");
         result.Issues.ShouldNotContain(i => (i.Code.StartsWith("aps.power", StringComparison.Ordinal) || i.Code.StartsWith("aps.battery", StringComparison.Ordinal)) && i.Level == IssueLevel.Error);
         var battery = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.BatteryFile)).SelectMany(r => r).ToList();
         battery.ShouldContain("Требуемая ёмкость АКБ, А·ч");
 
-        // Таблица адресов: 8 сигналов — входы 1…8 одного АР8, обозначения те же.
+        // Таблица адресов: 11 сигналов — входы 1…8 первого АР8 и 1…3 второго, обозначения те же.
         var addresses = WaterAuto.Reports.XlsxPreview.ReadFirstSheet(FileOf(result, ProjectPipeline.AddressTableFile)).Skip(WaterAuto.Reports.AddressTableXlsx.HeaderRow).Where(r => r[3] != "").ToList();
-        addresses.Select(r => r[3]).ShouldBe(Enumerable.Range(1, 8).Select(n => n.ToString(CultureInfo.InvariantCulture)));
+        addresses.Select(r => r[3]).ShouldBe(Enumerable.Range(1, 8).Concat(Enumerable.Range(1, 3)).Select(n => n.ToString(CultureInfo.InvariantCulture)));
         addresses.Select(r => r[4]).ShouldBe(marks);
-        addresses.ShouldAllBe(r => r[2] == "С2000-АР8 №1");
+        addresses.Take(8).ShouldAllBe(r => r[2] == "С2000-АР8 №1");
+        addresses.Skip(8).ShouldAllBe(r => r[2] == "С2000-АР8 №2");
 
         // Обозначения перечня — те же на схеме насосной.
         var scheme = DxfReader.Read(FileOf(result, ProjectPipeline.PumpSchemeFile)).Entities.OfType<TextEntity>().Select(t => t.Value).ToList();
@@ -190,6 +192,9 @@ public sealed class PumpSetPipelineTests : IDisposable
         {
             scheme.ShouldContain(mark);
         }
+
+        // Жокей-насос на схеме — обозначение изготовителя и уставки (назначены по практике, В-07).
+        DxfReader.Read(FileOf(result, ProjectPipeline.PumpSchemeFile)).Entities.OfType<MText>().Select(t => t.Value).ShouldContain(t => t.Contains("ЖН-", StringComparison.Ordinal) && t.Contains("Pоткл", StringComparison.Ordinal));
     }
 
     [Fact]

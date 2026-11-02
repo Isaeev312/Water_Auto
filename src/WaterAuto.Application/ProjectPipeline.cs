@@ -1115,6 +1115,7 @@ public static class ProjectPipeline
         issues.AddRange(JockeyIssues(jockeyDesign));
         var stationTakeoff = new MaterialTakeoff([], []);
         JockeyTankResult? jockeyTank = null;
+        JockeyPumpChoice? jockeyChoice = null;
 
         // Секции — по точкам ввода, к которым присоединены помещения; подпись — имя точки ввода с плана.
         var sections = routes.Select(r => r.InletId).Distinct()
@@ -1159,7 +1160,7 @@ public static class ProjectPipeline
             issues.AddRange(jockeyTank.Issues);
 
             // Жокей-насос изготовителя: обозначение — из расхода и уставки отключения проектировщика (В-07) и вместимости бака.
-            var jockeyChoice = PumpCatalog.JockeyPumps(normsDir) is { } jockeySeries
+            jockeyChoice = PumpCatalog.JockeyPumps(normsDir) is { } jockeySeries
                 && jockeyDesign.FlowLitersPerSecond is { } jFlow && jFlow > 0 && jStop is { } jStopP
                 ? jockeySeries.Choose(new Flow(jFlow), jStopP, jockeyTank.Tank?.VolumeL ?? worst.JockeyTankMinLiters)
                 : null;
@@ -1202,7 +1203,7 @@ public static class ProjectPipeline
             if (controlPoints.Count > 0)
             {
                 issues.Add(new Issue("aps.signals.incomplete", IssueLevel.Info,
-                    "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; сигналов жокей-насоса и обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
+                    "Перечень сигналов АУПТ в АПС неполный: от шкафа насосов — только обобщённые «Пуск», «Неисправность» и «Автоматика отключена», остальные — по паспорту шкафа; жокей-насос — выходы ШУ(ж) по ДАЭ 500.027.000 РЭ, прил. Б (вход «Блокировка работы насоса» X4 — по проекту АПС); сигнала обводной задвижки водомерного узла в каталоге нет (вопрос А-05)."));
             }
 
             BuildAlarmPower();
@@ -1656,7 +1657,7 @@ public static class ProjectPipeline
                 setChoice?.Chosen is { } ss
                     ? string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1…Н{ss.MainPumps + ss.StandbyPumps} — {ss.Designation}: основные Н1…Н{ss.MainPumps}, резервный Н{ss.MainPumps + ss.StandbyPumps}; Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м")
                     : string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"Н1, Н2 — агрегаты пожарные: Q = {worst.PumpFlow.LitersPerSecond * 3.6:0.0} м³/ч, H = {worst.PumpHead.Meters:0.0} м (рабочий и резервный)"),
-                string.Create(CultureInfo.GetCultureInfo("ru-RU"), $"НЖ — жокей-насос, бак не менее {worst.JockeyTankMinLiters:0} л"),
+                JockeyText(jockeyChoice, jockeyDesign, jockeyTank?.Tank?.VolumeL ?? worst.JockeyTankMinLiters),
                 fromTank ? "Из пожарного резервуара" : "Из наружной сети",
                 [
                     "Резервный агрегат включается автоматически при невыходе рабочего на режим или его отключении (п. 6.10.3 СП 485).",
@@ -2135,6 +2136,24 @@ public static class ProjectPipeline
 
     // Жокей-насос — решение проектировщика (В-07): норма расход и уставки не задаёт. Проверяются только заданные данные:
     // отрицательный расход — Error; уставки включения/отключения несогласованы — Warning; валидные данные — Info.
+    // Подпись жокей-насоса на схеме насосной: обозначение изготовителя (или вид), расход и уставки включения/отключения.
+    private static string JockeyText(JockeyPumpChoice? choice, ProjectJockey jockey, double tankLiters)
+    {
+        var ru = CultureInfo.GetCultureInfo("ru-RU");
+        var parts = new List<string> { choice is null ? string.Create(ru, $"НЖ — жокей-насос, бак не менее {tankLiters:0} л") : $"НЖ — {choice.Designation}" };
+        if (jockey.FlowLitersPerSecond is { } q)
+        {
+            parts.Add(string.Create(ru, $"Q = {q:0.##} л/с"));
+        }
+
+        if (jockey.StartPressureMpa is { } on && jockey.StopPressureMpa is { } off)
+        {
+            parts.Add(string.Create(ru, $"Pвкл = {on:0.00} МПа, Pоткл = {off:0.00} МПа"));
+        }
+
+        return string.Join("; ", parts);
+    }
+
     private static IEnumerable<Issue> JockeyIssues(ProjectJockey? jockey)
     {
         if (jockey is null)
