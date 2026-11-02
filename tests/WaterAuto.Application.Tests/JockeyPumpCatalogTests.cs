@@ -35,3 +35,32 @@ public class JockeyPumpCatalogTests
         choice.Issues.ShouldAllBe(i => i.Level == IssueLevel.Warning);
     }
 }
+
+public class JockeyPracticeTests
+{
+    private static readonly JockeyPractice Rule = new(0.5, 0.1, "ГРВ");
+
+    [Fact]
+    public void Unset_values_are_assigned_by_practice()
+    {
+        var j = ProjectJockey.Assign(null, Rule, 1.36, 0.62);
+        j.FlowLitersPerSecond.ShouldBe(0.68);
+        j.StartPressureMpa.ShouldBe(0.62);
+        j.StopPressureMpa.ShouldBe(0.72);
+        j.AssignedBy.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void Manual_values_win_and_stop_alone_gives_start_below_it()
+    {
+        var j = ProjectJockey.Assign(new ProjectJockey { StopPressureMpa = 0.8 }, Rule, 1.36, 0.62);
+        j.StartPressureMpa.ShouldBe(0.7);
+        j.StopPressureMpa.ShouldBe(0.8);
+
+        var all = new ProjectJockey { FlowLitersPerSecond = 1, StartPressureMpa = 0.5, StopPressureMpa = 0.6 };
+        ProjectJockey.Assign(all, Rule, 1.36, 0.62).ShouldBe(all);
+    }
+
+    [Fact]
+    public void Rule_file_is_read() => PumpCatalog.JockeyRule(RepoPaths.Norms).ShouldNotBeNull();
+}

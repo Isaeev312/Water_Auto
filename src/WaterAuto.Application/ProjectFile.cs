@@ -369,7 +369,42 @@ public sealed record ProjectJockey
 
     /// <summary>Давление отключения жокей-насоса, МПа; норма уставку не задаёт (В-07).</summary>
     public double? StopPressureMpa { get; init; }
+
+    /// <summary>Не из проекта: незаданные проектировщиком значения назначены по правилу практики (его описание); null — всё задано вручную.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? AssignedBy { get; init; }
+
+    /// <summary>
+    /// Незаданные расход и уставки — по правилу практики (data/catalog/jockey_practice.json): доля расхода диктующего оросителя,
+    /// включение при расчётном давлении пожарного насоса, отключение выше на заданную величину. Заданное проектировщиком не меняется.
+    /// </summary>
+    public static ProjectJockey Assign(ProjectJockey? manual, JockeyPractice? practice, double dictatingFlowLps, double pumpPressureMpa)
+    {
+        var j = manual ?? new ProjectJockey();
+        if (practice is null)
+        {
+            return j;
+        }
+
+        var start = j.StartPressureMpa ?? (j.StopPressureMpa is { } stop ? stop - practice.StopAboveStartMpa : pumpPressureMpa);
+        var assigned = j with
+        {
+            FlowLitersPerSecond = j.FlowLitersPerSecond ?? Math.Round(practice.FlowShareOfDictating * dictatingFlowLps, 2),
+            StartPressureMpa = Math.Round(start, 3),
+            StopPressureMpa = j.StopPressureMpa ?? Math.Round(start + practice.StopAboveStartMpa, 3),
+        };
+        return j.FlowLitersPerSecond is not null && j.StartPressureMpa is not null && j.StopPressureMpa is not null
+            ? j
+            : assigned with
+            {
+                AssignedBy = string.Create(System.Globalization.CultureInfo.GetCultureInfo("ru-RU"),
+                    $"расход — {practice.FlowShareOfDictating * 100:0.#} % расхода диктующего оросителя, включение — при расчётном давлении пожарного насоса, отключение — на {practice.StopAboveStartMpa:0.###} МПа выше"),
+            };
+    }
 }
+
+/// <summary>Правило практики для жокей-насоса (В-07): доля расхода диктующего оросителя и превышение уставки отключения, МПа.</summary>
+public sealed record JockeyPractice(double FlowShareOfDictating, double StopAboveStartMpa, string Source);
 
 /// <summary>Резервуар пожарного запаса: габариты и мёртвый слой, м (ARCHITECTURE §5).</summary>
 public sealed class ProjectTank

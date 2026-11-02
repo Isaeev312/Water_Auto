@@ -214,26 +214,26 @@ public sealed class PumpJockeyTests : IDisposable
     }
 
     [Fact]
-    public void Jockey_stop_pressure_without_start_pressure_is_a_warning()
+    public void Jockey_stop_pressure_without_start_pressure_gets_start_by_practice()
     {
         Drawing();
         var result = Run(Project(new ProjectJockey { StopPressureMpa = 0.25 }));
 
-        var warning = result.Issues.Single(i => i.Code == "jockey.settings");
-        warning.Level.ShouldBe(Core.IssueLevel.Warning);
-        warning.Message.ShouldContain("без давления включения");
+        result.Issues.ShouldNotContain(i => i.Code == "jockey.settings");
+        result.Issues.Single(i => i.Code == "jockey.assigned").Message.ShouldContain("отключение при P = 0,25 МПа");
     }
 
     [Fact]
-    public void Project_without_jockey_keeps_the_previous_note_text_and_has_no_jockey_issues()
+    public void Project_without_jockey_gets_flow_and_settings_by_practice()
     {
         Drawing();
         var result = Run(Project(null));
         result.Success.ShouldBeTrue(IssueText(result));
 
-        result.Issues.ShouldNotContain(i => i.Code.StartsWith("jockey.", StringComparison.Ordinal));
+        result.Issues.ShouldContain(i => i.Code == "jockey.assigned");
         var note = DocxText(FileOf(result, ProjectPipeline.NoteFile));
         note.ShouldContain("автоматический водопитатель");
+        note.ShouldContain("Принято по практике проектирования");
         note.ShouldNotContain("Принято решением проектировщика");
     }
 }

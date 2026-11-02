@@ -85,6 +85,20 @@ public static class PumpCatalog
         return new GroovedCatalog(doc.RootElement.GetProperty("toleranceMm").GetDouble(), items);
     }
 
+    /// <summary>Правило назначения расхода и уставок жокей-насоса по практике (data/catalog/jockey_practice.json); null — нет файла.</summary>
+    public static JockeyPractice? JockeyRule(string normsDir)
+    {
+        var path = Path.Combine(Dir(normsDir), "jockey_practice.json");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        var r = doc.RootElement;
+        return new JockeyPractice(r.GetProperty("flowShareOfDictating").GetDouble(), r.GetProperty("stopAboveStartMpa").GetDouble(), r.GetProperty("source").GetString()!);
+    }
+
     /// <summary>Серия жокей-насосов изготовителя (data/catalog/jockey_pumps_*.json, первый по имени); null — каталога нет.</summary>
     public static JockeyPumpSeries? JockeyPumps(string normsDir)
     {

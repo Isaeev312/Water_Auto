@@ -1108,7 +1108,11 @@ public static class ProjectPipeline
 
         // Жокей-насос: расход и уставки — решение проектировщика (В-07), норма их не задаёт. Данные не влияют на расчёт
         // Q/H и спецификацию — только замечания и пояснительная записка; Error jockey.flow выпуск не останавливает.
-        issues.AddRange(JockeyIssues(design.Jockey));
+        // Незаданные проектировщиком значения назначаются по правилу практики из данных (В-07): доля расхода диктующего
+        // (наименьшего по расходу) оросителя, включение при расчётном давлении насоса.
+        var jockeyDesign = ProjectJockey.Assign(design.Jockey, PumpCatalog.JockeyRule(normsDir),
+            worst.SprinklerFlows.Count > 0 ? worst.SprinklerFlows.Values.Min(f => f.LitersPerSecond) : 0, worst.PumpPressure.Mpa);
+        issues.AddRange(JockeyIssues(jockeyDesign));
         var stationTakeoff = new MaterialTakeoff([], []);
         JockeyTankResult? jockeyTank = null;
 
@@ -1149,14 +1153,14 @@ public static class ProjectPipeline
             var ruPs = CultureInfo.GetCultureInfo("ru-RU");
 
             // Бак жокей-насоса (п. 6.9.4): давление в системе — наибольшее из напора насосов и уставки отключения жокей-насоса.
-            var jStop = design.Jockey?.StopPressureMpa is { } js ? new Pressure(js) : (Pressure?)null;
-            var jStart = design.Jockey?.StartPressureMpa is { } jst ? new Pressure(jst) : (Pressure?)null;
+            var jStop = jockeyDesign.StopPressureMpa is { } js ? new Pressure(js) : (Pressure?)null;
+            var jStart = jockeyDesign.StartPressureMpa is { } jst ? new Pressure(jst) : (Pressure?)null;
             jockeyTank = JockeyTank.Select(PumpCatalog.Tanks(normsDir), norms, new Pressure(Math.Max(worst.PumpPressure.Mpa, jStop?.Mpa ?? 0)), jStop, jStart);
             issues.AddRange(jockeyTank.Issues);
 
             // Жокей-насос изготовителя: обозначение — из расхода и уставки отключения проектировщика (В-07) и вместимости бака.
             var jockeyChoice = PumpCatalog.JockeyPumps(normsDir) is { } jockeySeries
-                && design.Jockey?.FlowLitersPerSecond is { } jFlow && jFlow > 0 && jStop is { } jStopP
+                && jockeyDesign.FlowLitersPerSecond is { } jFlow && jFlow > 0 && jStop is { } jStopP
                 ? jockeySeries.Choose(new Flow(jFlow), jStopP, jockeyTank.Tank?.VolumeL ?? worst.JockeyTankMinLiters)
                 : null;
             if (jockeyChoice is not null)
@@ -1964,7 +1968,7 @@ public static class ProjectPipeline
                 piping,
                 PumpCatalog.Piping(normsDir)?.Source,
                 userTank,
-                design.Jockey,
+                jockeyDesign,
                 [.. (AuptGroups.EnvelopeLine(designs, roomGroups, plan.Rooms.Concat(auptLevels.SelectMany(l => l.Plan.Rooms)).ToList()) is { } env ? [env] : Array.Empty<string>()), .. roomGroups.Zones.Select(z => string.Create(CultureInfo.GetCultureInfo("ru-RU"),
                     $"группа {z.Group} ({z.Parameters.Source}): {string.Join(", ", plan.Rooms.Where(r => z.RoomIds.Contains(r.Id)).Select(r => $"«{r.Name}»"))} — интенсивность {z.Parameters.Intensity:0.###} л/(с·м²), площадь {z.Parameters.MinArea:0} м², {z.Parameters.Duration:0} мин"))],
                 air,
@@ -2185,8 +2189,11 @@ public static class ProjectPipeline
 
         if (parts.Count > 0)
         {
-            yield return new Issue("jockey.manual", IssueLevel.Info, string.Create(ru,
-                $"Параметры жокей-насоса заданы решением проектировщика: {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07)."));
+            yield return jockey.AssignedBy is null
+                ? new Issue("jockey.manual", IssueLevel.Info, string.Create(ru,
+                    $"Параметры жокей-насоса заданы решением проектировщика: {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07)."))
+                : new Issue("jockey.assigned", IssueLevel.Info, string.Create(ru,
+                    $"Параметры жокей-насоса назначены по практике (незаданные проектировщиком): {string.Join(", ", parts)}. Норма расход/уставки не задаёт (В-07); проверьте по опросному листу изготовителя."));
         }
     }
 

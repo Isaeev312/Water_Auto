@@ -529,7 +529,10 @@ public static class ExplanatoryNoteComposer
             parts.Add($"отключение при *P*_{{откл}} = {F(stop, "0.###")} МПа");
         }
 
-        yield return new NoteParagraph($"**Жокей-насос.** Принято решением проектировщика: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
+        var basis = jockey.AssignedBy is null
+            ? "Принято решением проектировщика"
+            : $"Принято по практике проектирования ({jockey.AssignedBy})";
+        yield return new NoteParagraph($"**Жокей-насос.** {basis}: {string.Join(", ", parts)}; норма расход и уставки не задаёт (В-07). Ёмкость мембранного бака — не менее {F(jockeyRule.Values["minVolume"]!.Value, "0.#")} л (п. 6.9.4).");
     }
 
     // Мембранный бак (п. 6.9.4): подбор по каталогу и давление воздуха по закону Бойля — Мариотта.

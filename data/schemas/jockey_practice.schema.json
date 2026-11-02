@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Isaeev312/Water_Auto/data/schemas/jockey_practice.schema.json",
+  "title": "Правило назначения расхода и уставок жокей-насоса по практике (норма их не задаёт, В-07)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "verified", "source", "flowShareOfDictating", "stopAboveStartMpa"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "verified": { "type": "boolean" },
+    "source": { "type": "string" },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "flowShareOfDictating": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "Доля расхода диктующего оросителя." },
+    "stopAboveStartMpa": { "type": "number", "exclusiveMinimum": 0, "description": "Давление отключения выше давления включения, МПа." }
+  }
+}
