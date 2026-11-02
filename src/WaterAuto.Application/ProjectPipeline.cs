@@ -98,6 +98,8 @@ public static class ProjectPipeline
     public const string AlarmNoteFile = "aps_pz.docx";
     public const string AlarmSchemeFile = "aps_scheme.dxf";
     public const string AlarmSpecFile = "aps_spec.xlsx";
+    public const string AlarmSpecDocxFile = "aps_spec.docx";
+    public const string AlarmCertificatesFile = "aps_certificates.docx";
     public const string CableJournalFile = "aps_cables.xlsx";
     public const string CableJournalDocxFile = "aps_cables.docx";
     public const string AlarmGeneralDataFile = "aps_general_data.docx";
@@ -552,7 +554,7 @@ public static class ProjectPipeline
                         var scheme = new AlarmScheme(schemeLoopList, alarmSet.Supply.Name, powerBudget?.Supplies ?? 1, alarmSet.Battery.Label, amplifier?.Name, speechPlan?.Amplifiers ?? 0, speechLines,
                             "Порядок устройств на линии — по обходу кольца из кабельного журнала; изоляторы КЗ (БРИЗ) расставляются по линии проектировщиком (п. 6.3.5 СП 484). Пульт и линия RS-485 — по проекту.");
                         var schemeSheet = alarmSheets.FirstOrDefault(sh => sh.Name.StartsWith("Структурная", StringComparison.OrdinalIgnoreCase));
-                        Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = schemeSheet?.Sheet }, project.Font));
+                        Write(alarmDir, AlarmSchemeFile, files, p => AlarmSchemeDxfWriter.Write(p, scheme, Stamp(project, "АПС", schemeSheet?.Name ?? "Структурная схема") with { Sheet = project.Title.IsDesignStage ? "1" : schemeSheet?.Sheet }, project.Font));
                     }
                 }
             }
@@ -568,7 +570,8 @@ public static class ProjectPipeline
                 {
                     var rooms = level.Zones.Select(z => z.RoomId).ToHashSet(StringComparer.Ordinal);
                     var planSheet = level.Index < planSheets.Count ? planSheets[level.Index] : planSheets.LastOrDefault();
-                    var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = planSheet?.Sheet };
+                    // Стадия «П»: лист 1 тома — структурная схема, планы — следом по уровням.
+                    var planStamp = Stamp(project, "АПС", planSheet?.Name ?? "План расстановки извещателей") with { Sheet = project.Title.IsDesignStage ? (level.Index + 2).ToString(CultureInfo.InvariantCulture) : planSheet?.Sheet };
                     var levelLayout = new DetectorLayout([.. detectorLayout.Detectors.Where(d => rooms.Contains(d.RoomId))], detectorLayout.CountByRoom.Where(kv => rooms.Contains(kv.Key)).ToDictionary(), []);
                     var levelIssues = planIssues.Where(i => i.ElementId is null || rooms.Contains(i.ElementId)).ToList();
                     var levelNotifiers = soue is null ? null : soue.Sounders.Concat(soue.Lights).Where(n => rooms.Contains(n.RoomId)).ToList();
@@ -599,6 +602,18 @@ public static class ProjectPipeline
             if (alarmSpec.Count > 0)
             {
                 Write(alarmDir, AlarmSpecFile, files, p => AlarmSpecXlsx.Write(p, alarmSpec, $"{project.Name}. Спецификация оборудования АПС", project.Font));
+
+                // Спецификация по форме 1 ГОСТ 21.110 для тома: изготовитель — графа «Поставщик»; сертификаты — не в примечании,
+                // а отдельным перечнем (позиции — те же, раздел один, нумерация с 1).
+                var alarmTakeoff = new MaterialTakeoff([.. alarmSpec.Select(a => new TakeoffItem(TakeoffGroup.Alarm, a.Name, a.Designation, a.Quantity, a.Unit,
+                    string.IsNullOrWhiteSpace(a.Note) ? null : a.Note, Supplier: a.Manufacturer))], []);
+                Write(alarmDir, AlarmSpecDocxFile, files, p => SpecificationDocx.Write(p, alarmTakeoff, Stamp(project, "АПС.СО", "Спецификация оборудования, изделий и материалов"), project.Font));
+                var certificates = alarmSpec.Select((a, k) => (a, k)).Where(x => !string.IsNullOrWhiteSpace(x.a.Certificate))
+                    .Select(x => new CertificateRow((x.k + 1).ToString(CultureInfo.InvariantCulture), x.a.Name, x.a.Designation, x.a.Manufacturer, x.a.Certificate!)).ToList();
+                if (certificates.Count > 0)
+                {
+                    Write(alarmDir, AlarmCertificatesFile, files, p => CertificateListDocx.Write(p, certificates, Stamp(project, "АПС.СО", "Перечень документов о подтверждении соответствия"), project.Font));
+                }
             }
 
             if (controlPoints.Count > 0)
@@ -620,7 +635,10 @@ public static class ProjectPipeline
                 var tn = project.Title;
                 var alarmNote = AlarmNote.Build(new NoteTitle(tn.Organization, tn.Subject, tn.Document, tn.Author, tn.Supervisor, tn.CityYear, project.Name),
                     detectorZones, detectorLayout ?? new DetectorLayout([], new Dictionary<string, int>(), []), issues, controlPoints, powerBudget, norms, zoning, soue,
-                    [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)!, AlarmNoteFile], speechPlan, amplifier);
+                    // Стадия «П»: в составе тома — только документы тома (схема, планы, спецификация), без рабочих таблиц.
+                    [.. files.Where(f => f.StartsWith(alarmDir, StringComparison.Ordinal)).Select(Path.GetFileName)
+                        .Where(f => !tn.IsDesignStage || f == AlarmSchemeFile || f == AlarmSpecDocxFile || f == AlarmCertificatesFile || f!.StartsWith("aps_plan", StringComparison.Ordinal))!, AlarmNoteFile], speechPlan, amplifier,
+                    tn.IsDesignStage ? tn.AlarmSectionMark : null);
                 Write(alarmDir, AlarmNoteFile, files, p => NoteDocx.Write(p, alarmNote, Stamp(project, "АПС.ПЗ", "Пожарная сигнализация. Пояснительная записка"), project.Font));
             }
         }
@@ -2242,6 +2260,8 @@ public static class ProjectPipeline
             "ПТ" => t.SectionMark,
             "ПТ.СО" or "ПТ2.СО" => t.SectionMark + ".СО",
             "ПЗ" => t.SectionMark + ".ПЗ",
+            "АПС" => t.AlarmSectionMark,
+            "АПС.ПЗ" or "АПС.СО" or "АПС.КЖ" => t.AlarmSectionMark + mark[3..],
             _ => mark,
         };
     }
@@ -2530,6 +2550,37 @@ public static class ProjectPipeline
                 new TomeEntry($"{t.Code}-ПТ", "Автоматическая установка водяного пожаротушения. Основной комплект рабочих чертежей", Tome.Ordered(In(auptDir), Tome.AuptOrder)),
                 new TomeEntry($"{t.Code}-ПЗ", "Автоматическая установка водяного пожаротушения. Пояснительная записка", Tome.Ordered(In(auptDir), [NoteFile])));
         }
+        if (t.IsDesignStage)
+        {
+            // Стадия «П» для АПС и СОУЭ (ПП РФ № 87, п. 26, подп. з, и, к — записка; п — структурная схема): тот же состав тома,
+            // что у АУП — обложка, титул, содержание, записка, графическая часть (схема, планы), спецификация.
+            var written = In(alarmDir).ToList();
+            var code = $"{t.Code}-{t.AlarmSectionMark}";
+            var drawings = Tome.Ordered(written, [AlarmSchemeFile, "aps_plan*"])
+                .Select((d, k) => new TomeContentGroup(code, $"Лист {k + 1}. {(k == 0 && Path.GetFileName(d) == AlarmSchemeFile ? "Структурная схема" : "План расстановки извещателей и оповещателей")}", [d]))
+                .ToList();
+            List<TomeContentGroup> groups =
+            [
+                new(code + ".ПЗ", "Пояснительная записка", Tome.Ordered(written, [AlarmNoteFile])),
+                .. drawings,
+                new(code + ".СО", "Спецификация оборудования, изделий и материалов", Tome.Ordered(written, [AlarmSpecDocxFile])),
+                new(code + ".СО", "Спецификация. Приложение: перечень документов о подтверждении соответствия", Tome.Ordered(written, [AlarmCertificatesFile])),
+            ];
+            groups = [.. groups.Where(g => g.Documents.Count > 0)];
+            var cover = new Export.TomeCover(
+                t.Organization,
+                t.Customer,
+                t.Building,
+                "ПРОЕКТНАЯ ДОКУМЕНТАЦИЯ",
+                t.AlarmSectionTitle,
+                code,
+                t.AlarmVolume,
+                t.CityYear,
+                t.TitleSignatures.Count > 0 ? [.. t.TitleSignatures.Select(s => new Export.IulSignature(s.Role, s.Name))] : [new("Главный инженер проекта", t.Supervisor)]);
+            Manifest(alarmDir, new TomeEntry(code, t.AlarmSectionTitle, [.. groups.SelectMany(g => g.Documents)], cover, groups, t.Stage, t.Organization));
+            return;
+        }
+
         Manifest(
             alarmDir,
             new TomeEntry($"{t.Code}-АПС", "Автоматическая пожарная сигнализация. Основной комплект рабочих чертежей", Tome.Ordered(In(alarmDir), Tome.AlarmOrder)),

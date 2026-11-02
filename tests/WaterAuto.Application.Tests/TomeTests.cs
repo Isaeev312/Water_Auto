@@ -18,7 +18,11 @@ public class TomeTests
         ProjectPipeline.DesignMark(pd, "ПТ").ShouldBe("ИОС2.2");
         ProjectPipeline.DesignMark(pd, "ПТ2.СО").ShouldBe("ИОС2.2.СО");
         ProjectPipeline.DesignMark(pd, "ПЗ").ShouldBe("ИОС2.2.ПЗ");
-        ProjectPipeline.DesignMark(pd, "АПС").ShouldBe("АПС");
+        // АПС и СОУЭ — своя часть (по умолчанию «ПБ2»: ПП РФ № 87, п. 26).
+        ProjectPipeline.DesignMark(pd, "АПС").ShouldBe("ПБ2");
+        ProjectPipeline.DesignMark(pd, "АПС.ПЗ").ShouldBe("ПБ2.ПЗ");
+        ProjectPipeline.DesignMark(pd, "АПС.СО").ShouldBe("ПБ2.СО");
+        ProjectPipeline.DesignMark(new ProjectFile(), "АПС.СО").ShouldBe("АПС.СО");
         ProjectPipeline.DesignMark(new ProjectFile(), "ПТ").ShouldBe("ПТ");
     }
 

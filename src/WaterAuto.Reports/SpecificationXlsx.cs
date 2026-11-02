@@ -55,6 +55,7 @@ public static class SpecificationXlsx
         (TakeoffGroup.Hydrants, "Пожарные краны"),
         (TakeoffGroup.Supports, "Крепления трубопроводов"),
         (TakeoffGroup.Materials, "Материалы"),
+        (TakeoffGroup.Alarm, "Оборудование и материалы пожарной сигнализации и СОУЭ"),
     ];
 
     /// <summary>

@@ -523,6 +523,31 @@ public sealed class ProjectPipelineTests : IDisposable
     }
 
     [Fact]
+    public void Design_stage_alarm_volume_has_cover_contents_note_scheme_plans_and_specification()
+    {
+        // Стадия «П» для АПС: том «шифр-ПБ2» — записка, структурная схема (лист 1), планы, спецификация по форме 1.
+        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(RepoPaths.Root, "tests", "Samples", "parking60x30", "sample.waproj")))!;
+        json["title"]!["stage"] = "П";
+        var dir = Path.Combine(_dir, "pd");
+        Directory.CreateDirectory(dir);
+        foreach (var f in Directory.EnumerateFiles(Path.Combine(RepoPaths.Root, "tests", "Samples", "parking60x30")))
+        {
+            File.Copy(f, Path.Combine(dir, Path.GetFileName(f)));
+        }
+
+        File.WriteAllText(Path.Combine(dir, "sample.waproj"), json.ToJsonString());
+        var result = ProjectPipeline.Run(Path.Combine(dir, "sample.waproj"), Path.Combine(dir, "out"), RepoPaths.Norms, RepoPaths.Registry);
+        var manifest = Tome.ReadManifest(Path.Combine(dir, "out", "АПС"))!;
+        var tome = manifest.Tomes.Single();
+        tome.Designation.ShouldEndWith("-ПБ2");
+        tome.Cover.ShouldNotBeNull();
+        tome.Contents!.Select(g => g.Designation).ShouldBe([tome.Designation + ".ПЗ", tome.Designation, tome.Designation, tome.Designation, tome.Designation + ".СО", tome.Designation + ".СО"]);
+        tome.Documents.Select(Path.GetFileName).ShouldBe([ProjectPipeline.AlarmNoteFile, ProjectPipeline.AlarmSchemeFile, "aps_plan_1.dxf", "aps_plan_2.dxf", ProjectPipeline.AlarmSpecDocxFile, ProjectPipeline.AlarmCertificatesFile]);
+        using var note = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(result.Files.Single(f => f.EndsWith(ProjectPipeline.AlarmNoteFile, StringComparison.Ordinal)), false);
+        note.MainDocumentPart!.Document.Body!.InnerText.ShouldContain("подп. п)");
+    }
+
+    [Fact]
     public void Alarm_only_project_without_water_suppression_produces_the_whole_alarm_volume()
     {
         // Объект только с АПС (как садик): на чертеже нет ПТ_ВВОД и не будет трубопроводов; "aupt": false — том АПС целиком,
@@ -759,7 +784,7 @@ public sealed class ProjectPipelineTests : IDisposable
         OutputText.ShouldBeClean(result.Files);
         result.Files.Select(Path.GetFileName).ShouldBe([
             ProjectPipeline.PlanFile, ProjectPipeline.PlanDxfFile, ProjectPipeline.AxonometryFile, ProjectPipeline.PumpSchemeFile,
-            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
+            ProjectPipeline.PumpStationSpecFile, ProjectPipeline.PumpStationSpecXlsxFile, ProjectPipeline.SignalListFile, ProjectPipeline.BatteryFile, ProjectPipeline.AddressTableFile, ProjectPipeline.AlarmSpecFile, ProjectPipeline.AlarmSpecDocxFile, ProjectPipeline.AlarmCertificatesFile, ProjectPipeline.InteractionFile, ProjectPipeline.AlarmNoteFile,
             ProjectPipeline.SpecificationFile, ProjectPipeline.SpecificationDocxFile, ProjectPipeline.NoteFile, ProjectPipeline.GeneralDataFile, ProjectPipeline.ComplianceFile, ProjectPipeline.IssuesFile,
         ]);
         result.Files.ShouldAllBe(f => new FileInfo(f).Length > 0);

@@ -36,7 +36,7 @@ public static class Tome
     /// <summary>Порядок основного комплекта АПС: общие данные, схема, планы, кабельный журнал.</summary>
     public static readonly IReadOnlyList<string> AlarmOrder =
     [
-        ProjectPipeline.AlarmGeneralDataFile, ProjectPipeline.AlarmSchemeFile, "aps_plan*", ProjectPipeline.CableJournalDocxFile,
+        ProjectPipeline.AlarmGeneralDataFile, ProjectPipeline.AlarmSchemeFile, "aps_plan*", ProjectPipeline.CableJournalDocxFile, ProjectPipeline.AlarmSpecDocxFile, ProjectPipeline.AlarmCertificatesFile,
     ];
 
     /// <summary>Документы тома из выпущенных файлов папки — по шаблону порядка («*» — все подходящие по имени, по алфавиту).</summary>
@@ -54,6 +54,13 @@ public static class Tome
         }
 
         return result;
+    }
+
+    /// <summary>Опись томов папки (tome.json); null — описи нет.</summary>
+    public static TomeManifest? ReadManifest(string folder)
+    {
+        var path = Path.Combine(folder, ManifestFile);
+        return File.Exists(path) ? JsonSerializer.Deserialize<TomeManifest>(File.ReadAllText(path), Json) : null;
     }
 
     public static void WriteManifest(string folder, TomeManifest manifest) =>

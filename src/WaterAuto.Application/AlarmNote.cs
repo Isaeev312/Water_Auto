@@ -14,7 +14,7 @@ public static class AlarmNote
 {
     private static readonly CultureInfo Ru = CultureInfo.GetCultureInfo("ru-RU");
 
-    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null, SoueLayout? soue = null, IReadOnlyList<string>? volumeFiles = null, SpeechPlan? speech = null, SpeechAmplifier? amplifier = null)
+    public static NoteDocument Build(NoteTitle title, IReadOnlyList<DetectorZone> zones, DetectorLayout layout, IReadOnlyList<Issue> issues, IReadOnlyList<ControlPoint> points, PowerBudget? budget, INormsProvider norms, AlarmZoningResult? zoning = null, SoueLayout? soue = null, IReadOnlyList<string>? volumeFiles = null, SpeechPlan? speech = null, SpeechAmplifier? amplifier = null, string? designMark = null)
     {
         ArgumentNullException.ThrowIfNull(zones);
         ArgumentNullException.ThrowIfNull(layout);
@@ -29,6 +29,25 @@ public static class AlarmNote
                     [.. zones.Select(z => (IReadOnlyList<string>)[z.RoomName, z.CeilingHeight.Meters.ToString("0.##", Ru), Kind(z.Kind), z.ModelName ?? "не выбрана", z.Algorithm.ToString(), z.Addressable ? "адресные" : "безадресные", z.Beams.Count == 0 ? "нет" : string.Create(Ru, $"{z.Beams.Count} шт., до {z.Beams.Max(b => b.Height.Meters):0.##} м")])]),
             ]),
         };
+
+        if (designMark is not null)
+        {
+            // Стадия «П»: где в томе требования п. 26 ПП РФ № 87 в части АПС и СОУЭ.
+            sections[0] = sections[0] with
+            {
+                Blocks =
+                [
+                    new NoteParagraph($"Часть {designMark} проектной документации выполнена по составу п. 26 Положения о составе разделов проектной документации и требованиях к их содержанию (постановление Правительства РФ от 16.02.2008 № 87) в части пожарной сигнализации и системы оповещения и управления эвакуацией людей при пожаре:"),
+                    new NoteList([
+                        "подп. з) — перечень помещений, оборудуемых автоматической пожарной сигнализацией, — таблица «Защищаемые помещения» настоящего раздела;",
+                        "подп. и) — описание и обоснование пожарной сигнализации и СОУЭ — разделы 2–4, 6" + (soue is null ? "" : " и 7") + ";",
+                        "подп. к) — размещение оборудования, управление и взаимодействие с установкой пожаротушения — разделы 4 и 5;",
+                        "подп. п) — структурная схема пожарной сигнализации — лист 1 графической части; планы расстановки — последующие листы.",
+                    ]),
+                    .. sections[0].Blocks,
+                ],
+            };
+        }
 
         sections.Add(new("2", "Выбор извещателей и алгоритма", Choice(zones, norms)));
         sections.Add(new("3", "Размещение извещателей", Placement(zones, layout, issues, norms)));
@@ -216,6 +235,8 @@ public static class AlarmNote
         "aps_battery.xlsx" => "aps_battery.xlsx — расчёт ёмкости АКБ",
         "aps_cables.xlsx" => "aps_cables.xlsx — кабельный журнал",
         "aps_spec.xlsx" => "aps_spec.xlsx — спецификация оборудования",
+        "aps_spec.docx" => "aps_spec.docx — спецификация оборудования по форме 1 ГОСТ 21.110",
+        "aps_certificates.docx" => "aps_certificates.docx — перечень документов о подтверждении соответствия (сертификатов)",
         "aps_interaction.docx" => "aps_interaction.docx — ТЗ на взаимодействие с АУПТ",
         "aps_pz.docx" => "aps_pz.docx — пояснительная записка (этот документ)",
         var other => other,
