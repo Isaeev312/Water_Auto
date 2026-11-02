@@ -1153,8 +1153,22 @@ public static class ProjectPipeline
             var jStart = design.Jockey?.StartPressureMpa is { } jst ? new Pressure(jst) : (Pressure?)null;
             jockeyTank = JockeyTank.Select(PumpCatalog.Tanks(normsDir), norms, new Pressure(Math.Max(worst.PumpPressure.Mpa, jStop?.Mpa ?? 0)), jStop, jStart);
             issues.AddRange(jockeyTank.Issues);
+
+            // Жокей-насос изготовителя: обозначение — из расхода и уставки отключения проектировщика (В-07) и вместимости бака.
+            var jockeyChoice = PumpCatalog.JockeyPumps(normsDir) is { } jockeySeries
+                && design.Jockey?.FlowLitersPerSecond is { } jFlow && jFlow > 0 && jStop is { } jStopP
+                ? jockeySeries.Choose(new Flow(jFlow), jStopP, jockeyTank.Tank?.VolumeL ?? worst.JockeyTankMinLiters)
+                : null;
+            if (jockeyChoice is not null)
+            {
+                issues.AddRange(jockeyChoice.Issues);
+            }
+
             var stationTokens = new Dictionary<string, string>
             {
+                ["jockeyName"] = jockeyChoice?.Designation ?? "Насос жокей (автоматический водопитатель, п. 6.9.4)",
+                ["jockeyDoc"] = jockeyChoice?.Document ?? "марка — по каталогу",
+                ["jockeyNote"] = jockeyChoice is null ? "расход и уставки — В-07" : jockeyChoice.IncludesTank ? "с мембранной ёмкостью, уставки — по проекту" : "уставки — по проекту",
                 ["tankName"] = jockeyTank.Tank?.Designation ?? $"Бак мембранный вместимостью не менее {worst.JockeyTankMinLiters.ToString("0", ruPs)} л",
                 ["tankDoc"] = jockeyTank.Tank?.Document ?? "по каталогу",
                 ["tankNote"] = jockeyTank.Precharge is { } pre ? $"давление воздуха {pre.Mpa.ToString("0.00", ruPs)} МПа (п. 6.9.4)" : "давление воздуха — по уставкам жокей-насоса",
@@ -1166,7 +1180,7 @@ public static class ProjectPipeline
                 ["tank"] = worst.JockeyTankMinLiters.ToString("0", CultureInfo.InvariantCulture),
                 ["truckDn"] = station.TruckInletDn.ToString(CultureInfo.InvariantCulture),
             };
-            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount, ["ringValves"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount), ["suctionCaps"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount) > 0 ? 0 : 1 };
+            var stationCounts = new Dictionary<string, int> { ["pumps"] = pumpCount, ["truckInlets"] = station.TruckInlets, ["sections"] = sections.Count, ["extraSections"] = sections.Count - 1, ["inlets"] = inletCount, ["ringValves"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount), ["suctionCaps"] = PumpSchemeDxfWriter.RingValves(pumpCount, inletCount) > 0 ? 0 : 1, ["jockeyTanks"] = jockeyChoice?.IncludesTank == true ? 0 : 1 };
             stationTakeoff = stationTakeoff with { Items = [.. EquipmentSet.Items(stationSet, TakeoffGroup.PumpStation, stationTokens, stationCounts, PumpCatalog.Valves(normsDir))] };
 
             // Сигналы АУПТ в АПС (ADR 0012) — по тем же строкам, что ПТ2.СО: строки комплектной установки сигналов не дают,

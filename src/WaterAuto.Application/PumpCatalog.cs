@@ -85,6 +85,27 @@ public static class PumpCatalog
         return new GroovedCatalog(doc.RootElement.GetProperty("toleranceMm").GetDouble(), items);
     }
 
+    /// <summary>Серия жокей-насосов изготовителя (data/catalog/jockey_pumps_*.json, первый по имени); null — каталога нет.</summary>
+    public static JockeyPumpSeries? JockeyPumps(string normsDir)
+    {
+        var file = Directory.EnumerateFiles(Dir(normsDir), "jockey_pumps_*.json").Order(StringComparer.Ordinal).FirstOrDefault();
+        if (file is null)
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(file));
+        var r = doc.RootElement;
+        return new JockeyPumpSeries(
+            r.GetProperty("designation").GetString()!,
+            r.GetProperty("document").GetString()!,
+            new Flow(r.GetProperty("flowLpsMin").GetDouble()),
+            new Flow(r.GetProperty("flowLpsMax").GetDouble()),
+            new Pressure(r.GetProperty("pressureMpaMin").GetDouble()),
+            new Pressure(r.GetProperty("pressureMpaMax").GetDouble()),
+            r.GetProperty("includesTank").GetBoolean());
+    }
+
     /// <summary>Мембранные баки для жокей-насоса (data/catalog/membrane_tanks_*.json).</summary>
     public static IReadOnlyList<MembraneTank> Tanks(string normsDir)
     {

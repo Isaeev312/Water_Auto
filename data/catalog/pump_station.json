@@ -47,19 +47,20 @@
       "note": "с сигнализатором давления"
     },
     {
-      "name": "Насос жокей (автоматический водопитатель, п. 6.9.4)",
-      "designation": "марка — по каталогу",
+      "name": "{jockeyName}",
+      "designation": "{jockeyDoc}",
       "unit": "компл.",
       "per": 1,
       "group": "equipment",
       "role": "jockey",
-      "note": "расход и уставки — В-07"
+      "note": "{jockeyNote}"
     },
     {
       "name": "{tankName}",
       "designation": "{tankDoc}",
       "unit": "шт.",
       "per": 1,
+      "count": "jockeyTanks",
       "group": "equipment",
       "role": "jockeyTank",
       "note": "{tankNote}"
